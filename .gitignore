@@ -3,6 +3,12 @@ LocalConfig.cmake
 src/colmap/util/version.cc
 build/
 install/
+!sqlite3.dll
+!libgmp-10.dll
+!libgmp-10.lib
+!libmpfr-4.dll
+!libmpfr-4.lib
+!Labelme.exe
 # Custom directories
 .idea/
 .vscode
