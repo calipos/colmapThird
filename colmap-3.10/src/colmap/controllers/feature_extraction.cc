@@ -65,11 +65,18 @@ bool readPtsFromLabelMeJson(const std::string& jsonPath,
   const auto rawJsonLength = static_cast<int>(aline.length());
   Json::CharReaderBuilder newBuilder;
   const std::unique_ptr<Json::CharReader> newReader(newBuilder.newCharReader());
+
+  LOG(INFO) << jsonPath;
   if (!newReader->parse(
           aline.c_str(), aline.c_str() + rawJsonLength, &newRoot, &err)) {
     return false;
   }
+  LOG(INFO) << jsonPath;
   auto newMemberNames = newRoot.getMemberNames();
+  LOG(INFO) << newMemberNames.size();
+  for (auto& d : newMemberNames) {
+    LOG(INFO) <<d;
+  }
   auto pathNode = newRoot["imagePath"];
   auto shapeNode = newRoot["shapes"];
   if (pathNode.isNull() || shapeNode.isNull() || !shapeNode.isArray()) {
@@ -103,6 +110,7 @@ bool readPtsFromLabelMeJson(const std::string& jsonPath,
     return false;
   }
   {
+    LOG(INFO) << "labelInfo.size() = " << labelInfo.size();
     int kpIdx = 0;
     int rand_min = 0, rand_max = 128;
     std::random_device seed;     
