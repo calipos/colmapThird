@@ -14,6 +14,25 @@ mkdir build
 mkdir install
 
 
+if not exist %pwd%\install\jsoncpp-1.9.6 (
+    echo  -----------build jsoncpp-1.9.6----------
+    cmake  -B %pwd%\build\jsoncpp-1.9.6  -S %pwd%\jsoncpp-1.9.6 -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install\jsoncpp-1.9.6 
+    -DJSONCPP_WITH_CMAKE_PACKAGE:BOOL="1" ^
+    -DJSONCPP_STATIC_WINDOWS_RUNTIME:BOOL="0" ^
+    -DBUILD_OBJECT_LIBS:BOOL="1" ^
+    -DJSONCPP_WITH_EXAMPLE:BOOL="0" ^
+    -DJSONCPP_WITH_POST_BUILD_UNITTEST:BOOL="1" ^
+    -DJSONCPP_WITH_PKGCONFIG_SUPPORT:BOOL="0" ^
+    -DJSONCPP_WITH_WARNING_AS_ERROR:BOOL="0" ^
+    -DJSONCPP_WITH_TESTS:BOOL="0" ^
+    -DJSONCPP_WITH_STRICT_ISO:BOOL="1" ^
+    -DCMAKE_INSTALL_PREFIX:PATH="D:/repo/colmapThird/install/jsoncpp-1.9.6" ^
+    -DBUILD_STATIC_LIBS:BOOL="1" ^
+    -DCMAKE_BUILD_TYPE="Release" 
+    TIMEOUT /T 1
+    msbuild %pwd%\build\jsoncpp-1.9.6\INSTALL.vcxproj  -t:Rebuild -p:Configuration=Release
+)
+
 if not exist %pwd%\install\GKlib (
     echo  -----------build gklib----------
     cmake  -B %pwd%\build\gklib  -S %pwd%\GKlib -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install 

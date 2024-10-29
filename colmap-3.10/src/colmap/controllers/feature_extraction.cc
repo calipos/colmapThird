@@ -66,17 +66,11 @@ bool readPtsFromLabelMeJson(const std::string& jsonPath,
   Json::CharReaderBuilder newBuilder;
   const std::unique_ptr<Json::CharReader> newReader(newBuilder.newCharReader());
 
-  LOG(INFO) << jsonPath;
   if (!newReader->parse(
           aline.c_str(), aline.c_str() + rawJsonLength, &newRoot, &err)) {
     return false;
   }
-  LOG(INFO) << jsonPath;
   auto newMemberNames = newRoot.getMemberNames();
-  LOG(INFO) << newMemberNames.size();
-  for (auto& d : newMemberNames) {
-    LOG(INFO) <<d;
-  }
   auto pathNode = newRoot["imagePath"];
   auto shapeNode = newRoot["shapes"];
   if (pathNode.isNull() || shapeNode.isNull() || !shapeNode.isArray()) {
@@ -135,11 +129,7 @@ bool readPtsFromLabelMeJson(const std::string& jsonPath,
       }
       kpIdx++;
     }
-
-      LOG(INFO) << descriptorsFloat;
-    *descriptors = FeatureDescriptorsToUnsignedByte(descriptorsFloat);
-      
-    LOG(INFO) << (*descriptors);
+      *descriptors = FeatureDescriptorsToUnsignedByte(descriptorsFloat);
   }
   return true;
 }
@@ -297,22 +287,22 @@ class SiftFeatureExtractorThread : public Thread {
         auto& image_data = input_job.Data();
 
         if (image_data.status == ImageReader::Status::SUCCESS) {
-          if (extractor->Extract(image_data.bitmap,
-                                 &image_data.keypoints,
-                                 &image_data.descriptors)) {
-            ScaleKeypoints(
-                image_data.bitmap, image_data.camera, &image_data.keypoints);
-            if (camera_mask_) {
-              MaskKeypoints(*camera_mask_,
-                            &image_data.keypoints,
-                            &image_data.descriptors);
-            }
-            if (image_data.mask.Data()) {
-              MaskKeypoints(image_data.mask,
-                            &image_data.keypoints,
-                            &image_data.descriptors);
-            }
-          } 
+          //if (extractor->Extract(image_data.bitmap,
+          //                       &image_data.keypoints,
+          //                       &image_data.descriptors)) {
+          //  ScaleKeypoints(
+          //      image_data.bitmap, image_data.camera, &image_data.keypoints);
+          //  if (camera_mask_) {
+          //    MaskKeypoints(*camera_mask_,
+          //                  &image_data.keypoints,
+          //                  &image_data.descriptors);
+          //  }
+          //  if (image_data.mask.Data()) {
+          //    MaskKeypoints(image_data.mask,
+          //                  &image_data.keypoints,
+          //                  &image_data.descriptors);
+          //  }
+          //} 
           
           std::string imageStem;
           std::string imageExt;
