@@ -194,6 +194,7 @@ if not exist %pwd%\install\lz4-1.9.4 (
     TIMEOUT /T 1
     msbuild %pwd%\build\lz4-1.9.4\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
 )
+pause
 rem =======================================================================
 
 if not exist %pwd%\install\zlib-1.2.13 (

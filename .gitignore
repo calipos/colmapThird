@@ -54,3 +54,4 @@ vcpkg_installed/
 !libmpfr-4.lib
 !Labelme.exe
 !glew-2.1.0/build
+!lz4-1.9.4/build
