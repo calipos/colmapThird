@@ -194,7 +194,6 @@ if not exist %pwd%\install\lz4-1.9.4 (
     TIMEOUT /T 1
     msbuild %pwd%\build\lz4-1.9.4\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
 )
-pause
 rem =======================================================================
 
 if not exist %pwd%\install\zlib-1.2.13 (
@@ -375,3 +374,10 @@ if not exist %pwd%\install\colmap-3.10 (
 REM IDXTYPEWIDTH=32 REALTYPEWIDTH=32
 )
 rem =======================================================================
+copy %pwd%\FreeImage3180Win32Win64\x64\FreeImage.dll  %pwd%\install\colmap-3.10\bin
+copy %pwd%\install\jsoncpp-1.9.6\bin\jsoncpp.dll  %pwd%\install\colmap-3.10\bin
+copy %pwd%\install\glog-0.7.1\bin\glog.dll  %pwd%\install\colmap-3.10\bin
+copy %pwd%\install\glew-2.1.0\bin\glew32.dll  %pwd%\install\colmap-3.10\bin
+copy %pwd%\install\sqlite-amalgamation-3460100\sqlite3.dll  %pwd%\install\colmap-3.10\bin
+copy %pwd%\auxiliary\gmp\lib\libgmp-10.dll  %pwd%\install\colmap-3.10\bin
+copy %pwd%\auxiliary\gmp\lib\libmpfr-4.dll  %pwd%\install\colmap-3.10\bin

@@ -30,7 +30,7 @@ def save_image(image, addr, num):
 
 if __name__ == '__main__':
 
-    video_path = 'data/11.mp4'
+    video_path = 'data/4.mp4'
     time_interval = 2
     jsonRoot = 'data/'
 
