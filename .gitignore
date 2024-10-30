@@ -55,3 +55,5 @@ vcpkg_installed/
 !Labelme.exe
 !glew-2.1.0/build
 !lz4-1.9.4/build
+!FreeImage3180Win32Win64/*/*lib
+!FreeImage3180Win32Win64/*/*dll
