@@ -1,0 +1,71 @@
+# Custom files
+LocalConfig.cmake
+src/colmap/util/version.cc
+build/
+install/
+
+# Custom directories
+.idea/
+.vscode
+.vs
+.DS_Store
+build*/
+install-debug/
+install-release/
+data/
+doc/_build
+vcpkg_installed/
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+*.pyc
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+pts.txt
+!sqlite3.dll
+!libgmp-10.dll
+!libgmp-10.lib
+!libmpfr-4.dll
+!libmpfr-4.lib
+!Labelme.exe
+!glew-2.1.0/build
+!lz4-1.9.4/build
+!FreeImage3180Win32Win64/*/*lib
+!FreeImage3180Win32Win64/*/*dll
+*.pyc
+*.pts
+*.txt
+*.obj
+!Deep3d/requirements.txt
+!cgal-5.6.1/AABB_tree/doc/AABB_tree/fig_src/AABB_demo.ppt
+!cgal-5.6.1/Poisson_surface_reconstruction_3/doc/Poisson_surface_reconstruction_3/fig_src/Surface_reconstruction_images.ppt
+!opencv480/doc/tutorials/features2d/akaze_matching/images/res.png
+!opencv480/doc/tutorials/features2d/akaze_matching/images/graf.png
+!zlib-1.2.13/doc/crc-doc.1.0.pdf
+!Deep3d/BFM/std_exp.txt
+*/__pycache__/*
