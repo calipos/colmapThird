@@ -69,3 +69,4 @@ pts.txt
 !zlib-1.2.13/doc/crc-doc.1.0.pdf
 !Deep3d/BFM/std_exp.txt
 */__pycache__/*
+!CMakeLists.txt
