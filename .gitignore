@@ -9,7 +9,8 @@ install/
 .vscode
 .vs
 .DS_Store
-build*/
+models/
+build/
 install-debug/
 install-release/
 data/
