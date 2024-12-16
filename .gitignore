@@ -9,7 +9,6 @@ install/
 .vscode
 .vs
 .DS_Store
-models/
 build/
 install-debug/
 install-release/
