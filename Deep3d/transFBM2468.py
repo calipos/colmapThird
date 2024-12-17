@@ -114,18 +114,19 @@ def optProcess(mediapipeLandmarks, facemodel, out_folder):
     optimizer = torch.optim .RMSprop(
         bfmTo468Net.parameters(),  lr=learning_rate, momentum=momentum)
 
-    train_iter = [{'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 30, 'faceW': 0.1},
-                  {'id_w': True, 'exp_w': True, 'r': True,
-                  't': True, 'b': 40, 'faceW': 0.1},
-                  {'id_w': True, 'exp_w': True, 'r': True,
-                  't': True, 'b': 50, 'faceW': 0.1},
-                  {'id_w': True, 'exp_w': True, 'r': True,
-                  't': True, 'b': 80, 'faceW': 0.1},
-                  {'id_w': True, 'exp_w': True, 'r': True,
-                  't': True, 'b': 80, 'faceW': 0.1},
-                  {'id_w': True, 'exp_w': True, 'r': True,
-                  't': True, 'b': 80, 'faceW': 0.1},
-                  {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 80, 'faceW': 0.1}]
+    train_iter = \
+        [{'id_w': False, 'exp_w': False, 'r': True, 't': True, 'b': 30, 'faceW': 0.1},
+         {'id_w': True, 'exp_w': True, 'r': True,
+             't': True, 'b': 40, 'faceW': 0.1},
+            {'id_w': True, 'exp_w': True, 'r': True,
+                't': True, 'b': 50, 'faceW': 0.1},
+            {'id_w': True, 'exp_w': True, 'r': True,
+                't': True, 'b': 80, 'faceW': 0.1},
+            {'id_w': True, 'exp_w': True, 'r': True,
+                't': True, 'b': 80, 'faceW': 0.1},
+            {'id_w': True, 'exp_w': True, 'r': True,
+                't': True, 'b': 80, 'faceW': 0.1},
+            {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 80, 'faceW': 0.1}]
 
     initS = -1
     for train_idx, iter in enumerate(train_iter):
@@ -136,7 +137,7 @@ def optProcess(mediapipeLandmarks, facemodel, out_folder):
         a = random.sample(
             [i for i in range(sfm468_tmp.shape[1])], sfm468_tmp.shape[1])
         a1 = a[:sfm468_tmp.shape[1]//2]
-        a2 = a[sfm468_tmp.shape[1]//2:]
+        a2 = a[-len(a1)-1:-1]
         s1 = faceScale(bfm468_tmp, a1, a2)
         s2 = faceScale(sfm468_tmp, a1, a2)
         if initS < 0:
@@ -162,7 +163,7 @@ def optProcess(mediapipeLandmarks, facemodel, out_folder):
                 loss = bfmTo468Net(id_base, exp_base, mean_base, target_xyz)
                 loss.backward()
                 optimizer.step()
-                if batch_idx % 100 == 0 and epoch % 32 == 0:
+                if batch_idx % 10 == 0 and epoch % 2 == 0:
                     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\s: {:.6f}'.format(epoch, batch_idx * len(id_base),
                                                                                              len(
                                                                                                  train_loader.dataset),
