@@ -14,16 +14,22 @@ import random
 class BfmTo468Dataset(data.Dataset):
     def __init__(self, mediapipeLandmarks, facemodel,   out_folder='.'):
         facemodel.to('cpu')
+        self.keypoints = facemodel.keypoints
+        self.sfmFacePts = torch.from_numpy(
+            np.array(mediapipeLandmarks, dtype=np.float32))
+        nanRow = torch.where(torch.isnan(self.sfmFacePts))[0]
+        self.keypoints[nanRow] = -1
         id_486part, exp_486part, mean_486part = facemodel.getMediapipe486BfmBase()
         self.id_486part = torch.from_numpy(id_486part).float()
         self.exp_486part = torch.from_numpy(exp_486part).float()
         self.mean_486part = torch.from_numpy(mean_486part).float()
-        self.sfmFacePts = torch.from_numpy(
-            np.array(mediapipeLandmarks, dtype=np.float32))
-        self.keypoints = facemodel.keypoints
-        nanRow = torch.where(torch.isnan(self.sfmFacePts))[0]
-        self.keypoints[nanRow] = -1
         self.sfmFacePts = self.sfmFacePts[self.keypoints >= 0]
+        self.id_486part = self.id_486part.reshape(
+            -1, 3, 80)[self.keypoints >= 0].reshape(-1, 80)
+        self.exp_486part = self.exp_486part.reshape(
+            -1, 3, 64)[self.keypoints >= 0].reshape(-1, 64)
+        self.mean_486part = self.mean_486part.reshape(
+            -1, 3, 1)[self.keypoints >= 0].reshape(-1, 1)
         print("load data done.")
 
     def __getitem__(self, index):
@@ -111,29 +117,23 @@ def optProcess(mediapipeLandmarks, facemodel, out_folder):
     data = BfmTo468Dataset(mediapipeLandmarks, facemodel,
                            out_folder)
     bfmTo468Net = BfmTo468Net()
-    optimizer = torch.optim .RMSprop(
-        bfmTo468Net.parameters(),  lr=learning_rate, momentum=momentum)
+    optimizer = torch.optim .RMSprop(bfmTo468Net.parameters(),  lr=learning_rate, momentum=momentum)
 
     train_iter = \
         [{'id_w': False, 'exp_w': False, 'r': True, 't': True, 'b': 30, 'faceW': 0.1},
-         {'id_w': True, 'exp_w': True, 'r': True,
-             't': True, 'b': 40, 'faceW': 0.1},
-            {'id_w': True, 'exp_w': True, 'r': True,
-                't': True, 'b': 50, 'faceW': 0.1},
-            {'id_w': True, 'exp_w': True, 'r': True,
-                't': True, 'b': 80, 'faceW': 0.1},
-            {'id_w': True, 'exp_w': True, 'r': True,
-                't': True, 'b': 80, 'faceW': 0.1},
-            {'id_w': True, 'exp_w': True, 'r': True,
-                't': True, 'b': 80, 'faceW': 0.1},
-            {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 80, 'faceW': 0.1}]
+         {'id_w': True, 'exp_w': True, 'r': True,'t': True, 'b': 40, 'faceW': 0.1},
+        {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 50, 'faceW': 0.1},
+        {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 80, 'faceW': 0.1},
+        {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 80, 'faceW': 0.1},
+        {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 80, 'faceW': 0.1},
+        {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 80, 'faceW': 0.1}]
 
+    sfm468_tmp = data.sfmFacePts.numpy().transpose()
+    np.savetxt('sfmPts.txt',data.sfmFacePts.numpy())
     initS = -1
-    for train_idx, iter in enumerate(train_iter):
-
-        bfm468_tmp = bfmTo468Net.result(data.id_486part, data.exp_486part, data.mean_486part)[
-            :, data.keypoints >= 0]
-        sfm468_tmp = data.sfmFacePts.numpy().transpose()
+    for train_idx, iter in enumerate(train_iter): 
+        bfm468_tmp = bfmTo468Net.result(data.id_486part, data.exp_486part, data.mean_486part)
+        np.savetxt('bfmPts.txt',bfm468_tmp.transpose())
         a = random.sample(
             [i for i in range(sfm468_tmp.shape[1])], sfm468_tmp.shape[1])
         a1 = a[:sfm468_tmp.shape[1]//2]
@@ -151,7 +151,7 @@ def optProcess(mediapipeLandmarks, facemodel, out_folder):
         bfmTo468Net.s.requires_grad = False
         bfmTo468Net.id_w.requires_grad = iter['id_w']
         bfmTo468Net.exp_w.requires_grad = iter['exp_w']
-        batch_size_train = iter['b']
+        batch_size_train = bfm468_tmp.shape[1] #iter['b']
         train_loader = torch.utils.data.DataLoader(
             data, batch_size=batch_size_train, shuffle=True)
         print('\n------ r:{},t:{},s:{:.6f},id_w:{},exp_w:{},faceWeight:{:.6f}'.format(iter['r'], iter['t'],
@@ -163,7 +163,7 @@ def optProcess(mediapipeLandmarks, facemodel, out_folder):
                 loss = bfmTo468Net(id_base, exp_base, mean_base, target_xyz)
                 loss.backward()
                 optimizer.step()
-                if batch_idx % 10 == 0 and epoch % 2 == 0:
+                if batch_idx % 100 == 0 and epoch % 32 == 0:
                     print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\s: {:.6f}'.format(epoch, batch_idx * len(id_base),
                                                                                              len(
                                                                                                  train_loader.dataset),

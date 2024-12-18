@@ -8,7 +8,7 @@ echo %pwd2%
 echo  ---------------------
 echo  -----------need set QT_QPA_PLATFORM_PLUGIN_PATH----------
 set QT_QPA_PLATFORM_PLUGIN_PATH=C:/Qt/Qt5.14.2/5.14.2/msvc2017_64/plugins/platforms
-set path=%pwd2%lib/llvm-mingw-20240221-msvcrt-x86_64/bin;%path%   
+::set path=%pwd2%lib/llvm-mingw-20240221-msvcrt-x86_64/bin;%path%   
 echo %path% 
 mkdir build
 mkdir install
