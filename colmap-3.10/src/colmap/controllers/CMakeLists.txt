@@ -59,8 +59,10 @@ COLMAP_ADD_LIBRARY(
         Boost::boost
 )
 
-include_directories(D:/repo/colmapThird/install/jsoncpp-1.9.6/include)
-link_directories(D:/repo/colmapThird/install/jsoncpp-1.9.6/lib)
+include_directories(${JSONCPP_INCLUDE_DIRS})
+link_directories(${JSONCPP_LIBRARIES_DIRS})
+message(STATUS "**********      JSONCPP_INCLUDE_DIRS as ${JSONCPP_INCLUDE_DIRS}")
+message(STATUS "**********      JSONCPP_LIBRARIES_DIRS ${JSONCPP_LIBRARIES_DIRS}")
 target_link_libraries(colmap_controllers PRIVATE jsoncpp)
 COLMAP_ADD_TEST(
     NAME hierarchical_mapper_test

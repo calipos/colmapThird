@@ -29,8 +29,8 @@
 
 
 set(FOLDER_NAME "exe")
-
-link_directories(D:/repo/colmapThird/install/jsoncpp-1.9.6/lib)
+include_directories(${JSONCPP_INCLUDE_DIRS})
+link_directories(${JSONCPP_LIBRARIES_DIRS})
 if(IS_MSVC)
     add_compile_options("/bigobj")
 endif()

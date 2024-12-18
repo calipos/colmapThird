@@ -209,7 +209,6 @@ if not exist %pwd%\install\opencv480 (
     TIMEOUT /T 1
     msbuild %pwd%\build\opencv480\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
 )
-pause
 rem =======================================================================
 
 if not exist %pwd%\install\lz4-1.9.4 (
@@ -348,6 +347,8 @@ if not exist %pwd%\install\colmap-3.10 (
     echo  -----------build colmap-3.10----------
     cmake  -B %pwd%\build\colmap-3.10  -S %pwd%\colmap-3.10    ^
     -DSQLite3_INCLUDE_DIR:PATH=%pwd%install/sqlite-amalgamation-3460100   ^
+    -DJSONCPP_LIBRARIES_DIRS:FILEPATH=%pwd%install/jsoncpp-1.9.6/lib   ^
+    -DJSONCPP_INCLUDE_DIRS:PATH=%pwd%install/jsoncpp-1.9.6/include  ^
     -DFREEIMAGE_LIBRARIES:FILEPATH=%pwd%FreeImage3180Win32Win64/x64/FreeImage.lib   ^
     -Dglog_DIR:PATH=%pwd%install/glog-0.7.1/lib/cmake/glog   ^
     -DBoost_DIR:PATH="D:/ucl360/library2019share/boost185/lib/cmake/Boost-1.85.0"   ^
