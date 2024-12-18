@@ -93,6 +93,8 @@ class ParametricFaceModel:
         mean_486part = np.zeros([mediapipe486Len*3, 1])
         for i in range(mediapipe486Len):
             I = int(self.keypoints[i])
+            if I<0:
+                continue
             id_486part[3*i, ...] = self.id_base[3*I, ...]
             id_486part[3*i+1, ...] = self.id_base[3*I+1, ...]
             id_486part[3*i+2, ...] = self.id_base[3*I+2, ...]
