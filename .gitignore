@@ -72,3 +72,7 @@ Deep3d/BFM/BFM_model_front.mat
 !Deep3d/BFM/std_exp.txt
 */__pycache__/*
 !CMakeLists.txt
+
+!license.txt
+!readme.txt
+!COPYING.txt
