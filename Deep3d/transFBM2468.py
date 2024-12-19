@@ -9,6 +9,7 @@ import os
 import numpy as np
 import save
 import random
+import icp
 
 
 class BfmTo468Dataset(data.Dataset):
@@ -48,8 +49,8 @@ class BfmTo468Net(nn.Module):
         super(BfmTo468Net, self).__init__()
         self.id_w = torch.nn.Parameter(torch.rand(80, 1, requires_grad=True))
         self.exp_w = torch.nn.Parameter(torch.rand(64, 1, requires_grad=True))
-        self.r = torch.nn.Parameter(torch.tensor(
-            [3.1415, 0, 0], requires_grad=True))
+        self.R = torch.nn.Parameter(torch.tensor(
+            [1., 0., 0.,0.,1., 0.,0., 0., 1.], requires_grad=True).reshape(3,3))
         self.t = torch.nn.Parameter(torch.tensor(
             [[1e-5], [0], [0]], requires_grad=True))
         self.s = torch.nn.Parameter(torch.tensor([1.], requires_grad=True))
@@ -57,30 +58,26 @@ class BfmTo468Net(nn.Module):
 
     def forward(self, xyz_id_base, xyz_exp_base, xyz_mean, xyz_tar):
         xyz_bfm = xyz_id_base@self.id_w+xyz_exp_base@self.exp_w+xyz_mean
-        R = roma.rotvec_to_rotmat(self.r)
-        xyz_468 = R@(xyz_bfm*self.s)+self.t
-        return torch.sqrt(torch.sum((xyz_468 - xyz_tar)**2))
+        xyz_bfm = xyz_bfm.squeeze()
+        xyz_468 = self.R@(xyz_bfm.T)*self.s+self.t.reshape(3,-1)
+        save.ptsAddIndex(xyz_468.detach().numpy().T,  'x1.txt')
+        save.ptsAddIndex(xyz_tar.reshape(-1, 3).numpy(),  'y1.txt')
+        return torch.sqrt(torch.sum((xyz_468 - xyz_tar.squeeze().T)**2))
         + self.faceWeight*torch.max(torch.abs(self.id_w))
         + self.faceWeight*torch.max(torch.abs(self.exp_w))
 
     def result(self, xyz_id_base, xyz_exp_base, xyz_mean):
         idW_tmp = self.id_w.detach().numpy()
         expW_tmp = self.exp_w.detach().numpy()
-        r_tmp = self.r.detach()
+        R_tmp = self.R.detach()
         t_tmp = self.t.detach()
         s_tmp = self.s.detach()
         xyz_bfm = xyz_id_base@idW_tmp+xyz_exp_base@expW_tmp+xyz_mean
-        R = roma.rotvec_to_rotmat(r_tmp)
-        xyz_468 = R@(xyz_bfm.reshape(-1, 3).transpose(1, 0)*s_tmp)+t_tmp
+        xyz_468 = R_tmp@(xyz_bfm.reshape(-1, 3).transpose(1, 0))*s_tmp+t_tmp.reshape(3,-1)
         return xyz_468.detach().numpy()
 
 
-def faceScale(pts, idx1, idx2):
-    dists = pts[:, idx1]-pts[:, idx2]
-    return np.mean(np.linalg.norm(dists, axis=0))
-
-
-def result(id_base_, exp_base_, mean_, id_w, exp_w, r, t, s):
+def result(id_base_, exp_base_, mean_, id_w, exp_w, R, t, s):
     if isinstance(id_base_, torch.Tensor):
         if id_base_.requires_grad:
             id_base = id_base_.detach().numpy()
@@ -104,8 +101,7 @@ def result(id_base_, exp_base_, mean_, id_w, exp_w, r, t, s):
         mean = mean_
 
     bfm = id_base@id_w+exp_base@exp_w+mean.reshape([-1, 1])
-    R = roma.rotvec_to_rotmat(torch.tensor(r)).numpy()
-    xyz468 = R@(bfm.reshape(-1, 3).transpose(1, 0)*s)+t
+    xyz468 = R@(bfm.reshape(-1, 3).transpose(1, 0))*s+t.reshape(3, -1)
     return xyz468.transpose(1, 0)
 
 
@@ -120,43 +116,51 @@ def optProcess(mediapipeLandmarks, facemodel, out_folder):
     optimizer = torch.optim .RMSprop(bfmTo468Net.parameters(),  lr=learning_rate, momentum=momentum)
 
     train_iter = \
-        [{'id_w': False, 'exp_w': False, 'r': True, 't': True, 'b': 30, 'faceW': 0.1},
-         {'id_w': True, 'exp_w': True, 'r': True,'t': True, 'b': 40, 'faceW': 0.1},
-        {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 50, 'faceW': 0.1},
-        {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 80, 'faceW': 0.1},
-        {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 80, 'faceW': 0.1},
-        {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 80, 'faceW': 0.1},
-        {'id_w': True, 'exp_w': True, 'r': True, 't': True, 'b': 80, 'faceW': 0.1}]
+        [{'id_w': True, 'exp_w': True, 'b': 30, 'faceW': 0.1},
+         {'id_w': True, 'exp_w': True,  'b': 40, 'faceW': 0.1},
+        {'id_w': True, 'exp_w': True,  'b': 50, 'faceW': 0.1},
+        {'id_w': True, 'exp_w': True,  'b': 80, 'faceW': 0.1},
+        {'id_w': True, 'exp_w': True,  'b': 80, 'faceW': 0.1},
+        {'id_w': True, 'exp_w': True,  'b': 80, 'faceW': 0.1},
+        {'id_w': True, 'exp_w': True,  'b': 80, 'faceW': 0.1}]
 
     sfm468_tmp = data.sfmFacePts.numpy().transpose()
     np.savetxt('sfmPts.txt',data.sfmFacePts.numpy())
-    initS = -1
+    R0 = bfmTo468Net.R.detach().numpy()
+    s0 = bfmTo468Net.s.detach().numpy()
+    t0 = bfmTo468Net.t.detach().numpy()
     for train_idx, iter in enumerate(train_iter): 
-        bfm468_tmp = bfmTo468Net.result(data.id_486part, data.exp_486part, data.mean_486part)
-        np.savetxt('bfmPts.txt',bfm468_tmp.transpose())
-        a = random.sample(
-            [i for i in range(sfm468_tmp.shape[1])], sfm468_tmp.shape[1])
-        a1 = a[:sfm468_tmp.shape[1]//2]
-        a2 = a[-len(a1)-1:-1]
-        s1 = faceScale(bfm468_tmp, a1, a2)
-        s2 = faceScale(sfm468_tmp, a1, a2)
-        if initS < 0:
-            initS = s2/s1
-        bfmTo468Net.s = torch.nn.Parameter(torch.tensor(
-            [initS], dtype=torch.float32, requires_grad=False))
+        id_w = bfmTo468Net.id_w.detach().numpy()
+        exp_w = bfmTo468Net.exp_w.detach().numpy()
+        R = bfmTo468Net.R.detach().numpy()
+        t = bfmTo468Net.t.detach().numpy()
+        s = bfmTo468Net.s.detach().numpy()
+        bfm468_tmp = result(data.id_486part.numpy(), data.exp_486part.numpy(
+        ), data.mean_486part.numpy(), id_w, exp_w, R, t, s)
+        # bfm468_tmp = bfmTo468Net.result(data.id_486part, data.exp_486part, data.mean_486part)
+        np.savetxt('bfmPts.txt',bfm468_tmp)
 
+        R, s, t = icp.getRst(sfm468_tmp, bfm468_tmp.T)
+        t = s*(R@t0)+t.reshape(3, 1)
+        R = R@R0
+        s = s*s0
+        R0=R
+        s0=s
+        t0=t
+        print(R, s, t)
+        bfmTo468Net.R = torch.nn.Parameter(torch.tensor(R, dtype=torch.float32, requires_grad=False))
+        bfmTo468Net.s = torch.nn.Parameter(torch.tensor(s, dtype=torch.float32, requires_grad=False))
+        bfmTo468Net.t = torch.nn.Parameter(torch.tensor(t, dtype=torch.float32, requires_grad=False))
         bfmTo468Net.faceWeight = iter['faceW']
-        bfmTo468Net.r.requires_grad = iter['r']
-        bfmTo468Net.t.requires_grad = iter['t']
+        bfmTo468Net.R.requires_grad = False
+        bfmTo468Net.t.requires_grad = False
         bfmTo468Net.s.requires_grad = False
         bfmTo468Net.id_w.requires_grad = iter['id_w']
         bfmTo468Net.exp_w.requires_grad = iter['exp_w']
         batch_size_train = bfm468_tmp.shape[1] #iter['b']
         train_loader = torch.utils.data.DataLoader(
             data, batch_size=batch_size_train, shuffle=True)
-        print('\n------ r:{},t:{},s:{:.6f},id_w:{},exp_w:{},faceWeight:{:.6f}'.format(iter['r'], iter['t'],
-                                                                                      initS, iter['id_w'],
-                                                                                      iter['exp_w'], iter['faceW']))
+        print('\n------ id_w:{},exp_w:{},faceWeight:{:.6f}'.format(iter['id_w'],iter['exp_w'], iter['faceW']))
         for epoch in range(train_epoch):
             for batch_idx, (id_base, exp_base, mean_base, target_xyz) in enumerate(train_loader):
                 optimizer.zero_grad()
@@ -164,22 +168,19 @@ def optProcess(mediapipeLandmarks, facemodel, out_folder):
                 loss.backward()
                 optimizer.step()
                 if batch_idx % 100 == 0 and epoch % 32 == 0:
-                    print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\s: {:.6f}'.format(epoch, batch_idx * len(id_base),
-                                                                                             len(
-                                                                                                 train_loader.dataset),
+                    print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(epoch, batch_idx * len(id_base),
+                                                                                             len(train_loader.dataset),
                                                                                              100. * batch_idx /
-                                                                                             len(
-                                                                                                 train_loader),
-                                                                                             loss.item(),
-                                                                                             bfmTo468Net.s.detach().numpy()[0]))
+                                                                                             len(train_loader),
+                                                                                             loss.item()))
 
         id_w = bfmTo468Net.id_w.detach().numpy()
         exp_w = bfmTo468Net.exp_w.detach().numpy()
-        r = bfmTo468Net.r.detach().numpy()
+        R = bfmTo468Net.R.detach().numpy()
         t = bfmTo468Net.t.detach().numpy()
         s = bfmTo468Net.s.detach().numpy()
         bfm468 = result(facemodel.id_base, facemodel.exp_base,
-                        facemodel.mean_shape, id_w, exp_w, r, t, s)
+                        facemodel.mean_shape, id_w, exp_w, R, t, s)
         save.saveObj(os.path.join(out_folder, "filename" +
                      str(train_idx)+".obj"), bfm468, facemodel.face_tri)
 
@@ -187,9 +188,9 @@ def optProcess(mediapipeLandmarks, facemodel, out_folder):
 
     id_w = bfmTo468Net.id_w.detach().numpy()
     exp_w = bfmTo468Net.exp_w.detach().numpy()
-    r = bfmTo468Net.r.detach().numpy()
+    R = bfmTo468Net.R.detach().numpy()
     t = bfmTo468Net.t.detach().numpy()
     s = bfmTo468Net.s.detach().numpy()
     bfm468 = result(data.id_486part.numpy(), data.exp_486part.numpy(),
-                    data.mean_486part.numpy(), id_w, exp_w, r, t, s)
-    return bfm468, id_w, exp_w, r, t, s
+                    data.mean_486part.numpy(), id_w, exp_w, R, t, s)
+    return bfm468, id_w, exp_w, R, t, s

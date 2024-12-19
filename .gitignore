@@ -46,6 +46,7 @@ vcpkg_installed/
 *.out
 *.app
 
+sqlite-dll-win-x64-3460100/sqlite3.exp
 pts.txt
 !sqlite3.dll
 !libgmp-10.dll

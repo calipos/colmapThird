@@ -15,7 +15,12 @@ def saveFacePts(facePts,path):
         np.savetxt(path, facePtsNp[0], fmt='%.18e', delimiter=' ') #保存为2位小数的浮点数，用逗号分隔
         for i in range(1,headCnt):
             np.savetxt(path+str(i)+'.pts', facePtsNp[i], fmt='%.18e', delimiter=' ') #保存为2位小数的浮点数，用逗号分隔
-
+def ptsAddIndex(facePts,path):    	
+    with open(path, 'w') as f:
+        n=facePts.shape[0]
+        for i in range(n):
+            f.write('{:d} {:.6f} {:.6f} {:.6f}\n'.format(
+                i+1, facePts[i, 0], facePts[i, 1], facePts[i, 2]))
 def saveColorFacePts(facePts,face_texture,path):
     if isinstance(facePts, torch.Tensor):
         facePtsNp = facePts.numpy()
@@ -33,6 +38,7 @@ def saveColorFacePts(facePts,face_texture,path):
         for i in range(1,headCnt):
             np.savetxt(path+str(i)+'.pts', np.concatenate([facePtsNp[i], face_textureNp[i]],axis=1), fmt='%.18e', delimiter=' ') #保存为2位小数的浮点数，用逗号分隔
 
+ 
 
 def saveObj(filepath,verts,faces):
     thefile = open(filepath, 'w')
