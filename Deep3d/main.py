@@ -6,6 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 import save
 import transFBM2468
+import cv2
 
 
 def TRAIN(pts468, bfm_folder='BFM', out_folder='.'):
@@ -163,7 +164,10 @@ def checkBfmVariations(bfm_folder='BFM'):
     save.saveFacePts(facePts, '0.pts')
 
 
-if __name__ == '__main__':
+
+
+
+
     imgesId = readColmapImageTxt('D:/repo/colmapThird/data/images.txt')
     ptsIdToNameS = readPtsIndexInEachImg('D:/repo/colmapThird/data', imgesId)
     pts468 = readFromColmapPointsTxt(
