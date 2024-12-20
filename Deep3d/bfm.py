@@ -324,3 +324,14 @@ class ParametricFaceModel:
         # save.saveColorFacePts(face_shape,face_texture,'face0.pts')
         # save.saveFacePts(landmark,'face.pts')
         return face_vertex, face_texture, face_color, landmark
+
+
+
+if __name__ == '__main__':
+    facemodel = ParametricFaceModel()
+    shape_base = facemodel.id_base.reshape(-1,3,80)
+    expression_base = facemodel.id_base.reshape(-1,3,64)
+    mean_base = facemodel.mean_shape
+    shape_weight = np.zeros([80,1])
+    expression_weight = np.zeros([64,1])
+    print()

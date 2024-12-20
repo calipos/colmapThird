@@ -77,6 +77,7 @@ def get_face_expression_from_h5(file_path):
 
 def saveObj(filepath,faces,shapeMean,shapeBias,shapeWeight,expressionMean,expressionBias,expressionWeight):
     verts=shapeMean+expressionMean+(shapeBias@shapeWeight).reshape(-1,3)+(expressionBias@expressionWeight).reshape(-1,3)
+    # shapeBias@shapeWeight == np.dot(shapeBias, shapeWeight)
     thefile = open(filepath, 'w')
     for item in verts:
         thefile.write("v {0} {1} {2}\n".format(item[0],item[1],item[2])) 
@@ -91,9 +92,9 @@ if __name__ == '__main__':
     # vertices, faces, colors = get_face_color_from_h5('C:/Users/Administrator/Downloads/model2019_bfm.h5')
     # print(vertices.shape, faces.shape, colors.shape)
 
-    # h5file = 'C:/Users/Administrator/Downloads/model2019_bfm.h5'
-    h5file = 'C:/Users/Administrator/Downloads/model2019_fullHead.h5'
-    # h5file = 'C:/Users/Administrator/Downloads/model2019_face12.h5'
+    h5file = 'C:/Users/Administrator/Downloads/model2019_bfm(47439p94464f).h5'
+    # h5file = 'C:/Users/Administrator/Downloads/model2019_fullHead(58203p116160f).h5'
+    # h5file = 'C:/Users/Administrator/Downloads/model2019_face12(27657p55040f).h5'
     vertices_shape, faces_shape, mean_shape, pcaBasis_shape, shapeBasisDim = get_face_shape_from_h5(
         h5file)
     vertices_expression, faces_expression, mean_expression, pcaBasis_expression, expressionBasisDim = get_face_expression_from_h5(
@@ -101,7 +102,7 @@ if __name__ == '__main__':
     
     shapeBias = np.zeros([shapeBasisDim,1])
     expressionBias = np.zeros([expressionBasisDim, 1])
-    saveObj('test2019.obj',faces_shape,mean_shape, pcaBasis_shape,shapeBias,mean_expression, pcaBasis_expression,expressionBias)
+    saveObj('test2019face.obj',faces_shape,mean_shape, pcaBasis_shape,shapeBias,mean_expression, pcaBasis_expression,expressionBias)
     print()
     # review_h5_file('C:/Users/Administrator/Downloads/model2019_bfm.h5')
     # print_first_line('C:/Users/Administrator/Downloads/model2019_bfm.h5','color/representer/colorspace')

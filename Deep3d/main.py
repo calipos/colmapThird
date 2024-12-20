@@ -164,10 +164,7 @@ def checkBfmVariations(bfm_folder='BFM'):
     save.saveFacePts(facePts, '0.pts')
 
 
-
-
-
-
+if __name__ == '__main__':
     imgesId = readColmapImageTxt('D:/repo/colmapThird/data/images.txt')
     ptsIdToNameS = readPtsIndexInEachImg('D:/repo/colmapThird/data', imgesId)
     pts468 = readFromColmapPointsTxt(
