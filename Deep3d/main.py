@@ -165,9 +165,9 @@ def checkBfmVariations(bfm_folder='BFM'):
 
 
 if __name__ == '__main__':
-    imgesId = readColmapImageTxt('D:/repo/colmapThird/data/images.txt')
-    ptsIdToNameS = readPtsIndexInEachImg('D:/repo/colmapThird/data', imgesId)
+    imgesId = readColmapImageTxt('D:/repo/colmap-third/data/images.txt')
+    ptsIdToNameS = readPtsIndexInEachImg('D:/repo/colmap-third/data', imgesId)
     pts468 = readFromColmapPointsTxt(
-        'D:/repo/colmapThird/data/points3D.txt', imgesId, ptsIdToNameS)
+        'D:/repo/colmap-third/data/points3D.txt', imgesId, ptsIdToNameS)
     # checkBfmVariations()
     TRAIN(pts468)

@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 import load_mats
 import save
-
+import save
 
 class SH:
     def __init__(self):
@@ -330,8 +330,11 @@ class ParametricFaceModel:
 if __name__ == '__main__':
     facemodel = ParametricFaceModel()
     shape_base = facemodel.id_base.reshape(-1,3,80)
-    expression_base = facemodel.id_base.reshape(-1,3,64)
-    mean_base = facemodel.mean_shape
+    expression_base = facemodel.exp_base.reshape(-1,3,64)
+    mean_base = facemodel.mean_shape.reshape(-1,3)
     shape_weight = np.zeros([80,1])
     expression_weight = np.zeros([64,1])
+    vts = (shape_base@shape_weight + expression_base@expression_weight).reshape(-1,3)+mean_base
+    vts=vts*100
+    save.saveObj("bfm09.obj",vts,facemodel.face_tri)
     print()
