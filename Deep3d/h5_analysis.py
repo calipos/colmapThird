@@ -131,6 +131,9 @@ def figureBFM2019CorrespondTo2009():
     nearest_dist, nearest_idx = kdtree.query(lm2009,k=1)
     np.savetxt('bfm2019lm.pts',bfm2019pts[nearest_idx])
     np.savetxt('bfm2009lm.pts',lm2009)
+    index_mp468_from_bfm2019=index_mp468_from_bfm2009
+    index_mp468_from_bfm2019[index_mp468_from_bfm2009 >= 0] = nearest_idx
+    np.save('BFM/index_mp468_from_model2019_47439p.npy', index_mp468_from_bfm2019)
     print()
 if __name__ == '__main__': 
 

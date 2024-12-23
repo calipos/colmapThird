@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 import load_mats
 import save
-import save
+import h5py
 
 class SH:
     def __init__(self):
@@ -325,9 +325,77 @@ class ParametricFaceModel:
         # save.saveFacePts(landmark,'face.pts')
         return face_vertex, face_texture, face_color, landmark
 
+class Bfm2019:
+    def __init__(self,
+                 bfm_folder='./BFM',
+                 defaultFaceFile='model2019_bfm(47439p94464f).h5',
+                 defaultHeadFile='model2019_fullHead(58203p116160f).h5',
+                 defaultFaceLmIdxFile='index_mp468_from_model2019_47439p.npy'):
+        faceH5Path = os.path.join(bfm_folder, defaultFaceFile)
+        headH5Path = os.path.join(bfm_folder, defaultHeadFile)
+        faceLmIdxFile = os.path.join(bfm_folder, defaultFaceLmIdxFile)
+        if not os.path.isfile(faceH5Path):
+            print("not exists : ",faceH5Path)
+            return
+        if not os.path.isfile(headH5Path):
+            print("not exists : ",headH5Path)
+            return         
+        if not os.path.isfile(faceLmIdxFile):
+            print("not exists : ", faceLmIdxFile)
+            return            
+        with h5py.File(faceH5Path, 'r') as h5_file:
+            shape_points = h5_file['shape/representer/points'][:]
+            shape_cells = h5_file['shape/representer/cells'][:]
+            shape_mean = h5_file['shape/model/mean'][:]
+            shape_pcaBasis = h5_file['shape/model/pcaBasis'][:]
+            expression_points = h5_file['expression/representer/points'][:]
+            expression_cells = h5_file['expression/representer/cells'][:]
+            expression_mean = h5_file['expression/model/mean'][:]
+            expression_pcaBasis = h5_file['expression/model/pcaBasis'][:]
 
+        # mean face shape. [3*N,1]
+        self.mean_shape = (shape_mean+expression_mean).astype(np.float32)
+        # identity basis. [3*N,80]
+        self.id_base = shape_pcaBasis.astype(np.float32)
+        # expression basis. [3*N,64]
+        self.exp_base = expression_pcaBasis.astype(np.float32) 
+        self.face_tri = np.array(shape_cells.T, dtype=np.int64)
+        # vertex indices for 68 landmarks. starts from 0. [68,1]
+        self.keypoints = np.load(faceLmIdxFile).astype(np.int64)
+        self.device = 'cpu'
+
+    def to(self, device):
+        self.device = device
+        for key, value in self.__dict__.items():
+            if type(value).__module__ == np.__name__:
+                setattr(self, key, torch.tensor(value).to(device))
+
+    def getMediapipe486BfmBase(self,):
+        mediapipe486Len = len(self.keypoints)  # 只有480  里没有6个点的对应
+        id_486part = np.zeros([mediapipe486Len*3, 199])
+        exp_486part = np.zeros([mediapipe486Len*3, 100])
+        mean_486part = np.zeros([mediapipe486Len*3, 1])
+        for i in range(mediapipe486Len):
+            I = int(self.keypoints[i])
+            if I < 0:
+                continue
+            id_486part[3*i, ...] = self.id_base[3*I, ...]
+            id_486part[3*i+1, ...] = self.id_base[3*I+1, ...]
+            id_486part[3*i+2, ...] = self.id_base[3*I+2, ...]
+
+            exp_486part[3*i, ...] = self.exp_base[3*I, ...]
+            exp_486part[3*i+1, ...] = self.exp_base[3*I+1, ...]
+            exp_486part[3*i+2, ...] = self.exp_base[3*I+2, ...]
+
+            mean_486part[3*i, ...] = self.mean_shape[3*I, ...]
+            mean_486part[3*i+1, ...] = self.mean_shape[3*I+1, ...]
+            mean_486part[3*i+2, ...] = self.mean_shape[3*I+2, ...]
+        return id_486part, exp_486part, mean_486part
 
 if __name__ == '__main__':
+
+    facemodel2019 = Bfm2019('Deep3d/BFM')
+
     facemodel = ParametricFaceModel()
     shape_base = facemodel.id_base.reshape(-1,3,80)
     expression_base = facemodel.exp_base.reshape(-1,3,64)

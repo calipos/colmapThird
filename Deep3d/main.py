@@ -29,23 +29,13 @@ def TRAIN(pts468, bfm_folder='BFM', out_folder='.'):
         0, focal, cy,
         0, 0, 1]).reshape([3, 3]).astype(np.float32)
 
-    facemodel = bfm.ParametricFaceModel(bfm_folder,  cameraMatrix=cameraMatrix)
-    # facemodel.to('cpu')
-    # coeff = np.random.rand(257).reshape([1, -1]).astype(np.float32)
-    # coeff = torch.from_numpy(coeff)
-    # id_486part, exp_486part, mean_486part = facemodel.getMediapipe486BfmBase()
-
-    # np.savetxt(os.path.join(out_folder, 'id_486part.txt'),
-    #            id_486part, fmt='%.18e', delimiter=' ')
-    # np.savetxt(os.path.join(out_folder, 'exp_486part.txt'),
-    #            exp_486part, fmt='%.18e', delimiter=' ')
-    # np.savetxt(os.path.join(out_folder, 'mean_486part.txt'),
-    #            mean_486part, fmt='%.18e', delimiter=' ')
+    # facemodel = bfm.ParametricFaceModel(bfm_folder,  cameraMatrix=cameraMatrix)
+    facemodel = bfm.Bfm2019(bfm_folder)
 
     bfm468, id_w, exp_w, r, t, s = transFBM2468.optProcess(
         pts468, facemodel, out_folder)
-    print(id_w.reshape(-1, 8))
-    print(exp_w.reshape(-1, 8))
+    # print(id_w.reshape(-1, 8))
+    # print(exp_w.reshape(-1, 8))
     transBfmPts = transFBM2468.result(
         facemodel.id_base, facemodel.exp_base, facemodel.mean_shape, id_w, exp_w, r, t, s)
     # save.saveFacePts(bfm468, os.path.join(out_folder, 'transBfm468.pts'))
@@ -161,13 +151,12 @@ def checkBfmVariations(bfm_folder='BFM'):
     faceExp = np.float32(np.random.randn(1, 64))
     facePts = facemodel.compute_shape(
         torch.from_numpy(faceId), torch.from_numpy(faceExp))
-    save.saveFacePts(facePts, '0.pts')
+    # save.saveFacePts(facePts, '0.pts')
 
 
 if __name__ == '__main__':
-    imgesId = readColmapImageTxt('D:/repo/colmap-third/data/images.txt')
-    ptsIdToNameS = readPtsIndexInEachImg('D:/repo/colmap-third/data', imgesId)
-    pts468 = readFromColmapPointsTxt(
-        'D:/repo/colmap-third/data/points3D.txt', imgesId, ptsIdToNameS)
+    imgesId = readColmapImageTxt('data/images.txt')
+    ptsIdToNameS = readPtsIndexInEachImg('data', imgesId)
+    pts468 = readFromColmapPointsTxt('data/points3D.txt', imgesId, ptsIdToNameS)
     # checkBfmVariations()
-    TRAIN(pts468)
+    TRAIN(pts468, 'Deep3d/BFM', 'data')

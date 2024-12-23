@@ -30,9 +30,9 @@ def save_image(image, addr, num):
 
 if __name__ == '__main__':
 
-    video_path = '../data/a.mp4'
-    time_interval = 8
-    jsonRoot = '../data/'
+    video_path = 'data/a.mp4'
+    time_interval = 4
+    jsonRoot = 'data/'
 
     ######
     #time_interval = 5 #时间间隔

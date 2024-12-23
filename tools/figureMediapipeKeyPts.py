@@ -273,8 +273,8 @@ def writeLabelmeJson(imgDir, imgPath, jsonPath, frontLandmarks3d, faces_):
 
 
 if __name__ == '__main__':
-    imgPathList = listImages('../data')
-    paramPath = '../models/face_landmarker_v2_with_blendshapes.task'
+    imgPathList = listImages('data')
+    paramPath = 'models/face_landmarker_v2_with_blendshapes.task'
 
     # video_path = 'D:/BaiduNetdiskWorkspace/mvs_mvg_bat/mp4/11.mp4'
     # time_interval=2

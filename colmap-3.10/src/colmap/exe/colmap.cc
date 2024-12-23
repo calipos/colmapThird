@@ -87,6 +87,7 @@ int ShowHelp(
 }  // namespace
 
 int main(int argc, char** argv) {
+  std::cout << 123<< std::endl;
   colmap::InitializeGlog(argv);
 #if defined(COLMAP_GUI_ENABLED)
   Q_INIT_RESOURCE(resources);
@@ -140,10 +141,11 @@ int main(int argc, char** argv) {
   commands.emplace_back("vocab_tree_retriever", &colmap::RunVocabTreeRetriever);
 
   if (argc == 1) {
-    return ShowHelp(commands);
+    //return ShowHelp(commands);
   }
 
-  const std::string command = argv[1];
+  //const std::string command = argv[1];
+  const std::string command = "gui";
   if (command == "help" || command == "-h" || command == "--help") {
     return ShowHelp(commands);
   } else {
