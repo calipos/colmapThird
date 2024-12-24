@@ -62,8 +62,7 @@ pts.txt
 *.pts
 *.txt
 *.obj
-Deep3d/BFM/01_MorphableModel.mat
-Deep3d/BFM/BFM_model_front.mat
+Deep3d/BFM/*
 !Deep3d/requirements.txt
 !cgal-5.6.1/AABB_tree/doc/AABB_tree/fig_src/AABB_demo.ppt
 !cgal-5.6.1/Poisson_surface_reconstruction_3/doc/Poisson_surface_reconstruction_3/fig_src/Surface_reconstruction_images.ppt
