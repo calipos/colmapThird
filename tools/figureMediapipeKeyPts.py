@@ -21,13 +21,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def listImages(imgRoot):
-    imgList = []
-    for entry in os.listdir(imgRoot):
-        if entry.endswith('jpg') or entry.endswith('bmp') or entry.endswith('jpeg') and not os.path.isdir(entry):
-            full_path = os.path.join(imgRoot, entry)
-            imgList.append(full_path)
-    return imgList
+
 
 
 def deletFile(folder, tail):
@@ -89,8 +83,7 @@ def getTriIdx(edges):
     return IrisesIdx
 
 
-constFaces = generTriplet(FACEMESH_TESSELATION)
-constFacesIdx = getTriIdx(FACEMESH_TESSELATION)
+
 
 
 def ndArrayToList(data):
@@ -123,11 +116,10 @@ def save_image(image, addr, num):
     imwrite(address, image)
 
 
-def landmark2d(img, detection_result):
+def landmark2d(img, constFacesIdx,detection_result):
     face_landmarks_list = detection_result.face_landmarks
     if len(face_landmarks_list) != 1:
-        #print("len(face_landmarks_list)!=1")
-        return None, None
+        return None
     face_landmarks = face_landmarks_list[0]
     landmark3dList = np.zeros((len(constFacesIdx), 3))
     I = 0
@@ -139,7 +131,7 @@ def landmark2d(img, detection_result):
 
     xyz = np.array([[img.shape[1], img.shape[0], img.shape[1]]])
     landmark3d = landmark3dList*xyz
-    return ndArrayToList(landmark3d), constFaces
+    return ndArrayToList(landmark3d)
 
 
 def draw_landmarks_on_image(rgb_image, detection_result):
@@ -148,7 +140,6 @@ def draw_landmarks_on_image(rgb_image, detection_result):
   # Loop through the detected faces to visualize.
   for idx in range(len(face_landmarks_list)):
     face_landmarks = face_landmarks_list[idx]
-    print(len(face_landmarks))
     face_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
     face_landmarks_proto.landmark.extend([
         landmark_pb2.NormalizedLandmark(x=landmark.x, y=landmark.y, z=landmark.z) for landmark in face_landmarks
@@ -188,7 +179,7 @@ def figureVisualAttr2(pts, faces):
     for f in range(len(faces)):
         planes[f] = figurePlane(np.array(pts[faces[f][0]]), np.array(
             pts[faces[f][1]]), np.array(pts[faces[f][2]]))
-    visible = np.ones(len(frontLandmarks3d))
+    visible = np.ones(len(pts))
 
     for pi, (px, py, pz) in enumerate(pts):
         for fi, [fa, fb, fc] in enumerate(faces):
@@ -272,41 +263,30 @@ def writeLabelmeJson(imgDir, imgPath, jsonPath, frontLandmarks3d, faces_):
           time1_end - time1_start, '; emplace:', time2_end - time2_start)
 
 
-if __name__ == '__main__':
-    imgPathList = listImages('../data')
-    paramPath = '../models/face_landmarker_v2_with_blendshapes.task'
-
-    # video_path = 'D:/BaiduNetdiskWorkspace/mvs_mvg_bat/mp4/11.mp4'
-    # time_interval=2
-    # jsonRoot='D:/BaiduNetdiskWorkspace/mvs_mvg_bat/workSpace/imgs'
-    # imgOut_dir = 'D:/BaiduNetdiskWorkspace/mvs_mvg_bat/workSpace/landmarks'
-
-    base_options = python.BaseOptions(model_asset_path=paramPath)
-    options = vision.FaceLandmarkerOptions(base_options=base_options,
-                                           output_face_blendshapes=True,
-                                           output_facial_transformation_matrixes=True,
-                                           num_faces=1)
-    detector = vision.FaceLandmarker.create_from_options(options)
-
-    for imgPath in imgPathList:
+class MediapipeFinder:
+    def __init__(self,paramPath):
+        self.paramPath=paramPath
+        self.base_options = python.BaseOptions(model_asset_path=self.paramPath)
+        self.options = vision.FaceLandmarkerOptions(base_options=self.base_options,
+                                            output_face_blendshapes=True,
+                                            output_facial_transformation_matrixes=True,
+                                            num_faces=1)
+        self.detector = vision.FaceLandmarker.create_from_options(self.options)
+        self.constFaces = generTriplet(FACEMESH_TESSELATION)
+        self.constFacesIdx = getTriIdx(FACEMESH_TESSELATION)
+    def proc(self,imgPath):
         cv_mat = cv2.imread(imgPath)
         image = mp.Image(
             image_format=mp.ImageFormat.SRGB, data=cv_mat)
-        detection_result = detector.detect(image)
+        detection_result = self.detector.detect(image)
         annotated_image = draw_landmarks_on_image(
             image.numpy_view(), detection_result)
         annotated_image = cv2.cvtColor(annotated_image,  cv2.COLOR_BGR2RGB)
-        frontLandmarks3d, faces = landmark2d(
-            image.numpy_view(), detection_result)
+        frontLandmarks3d = landmark2d(
+            image.numpy_view(),self.constFacesIdx,detection_result)
         if not frontLandmarks3d is None:
-            # frontLandmarks3d, faces = figureLandmarkExclusion(frontLandmarks3d, faces)
             imgDir, imgPath = os.path.split(imgPath)
             base = os.path.splitext(imgPath)[0]
             jsonPath = f"{base}.{'json'}"
             writeLabelmeJson(imgDir, imgPath, jsonPath,
-                             frontLandmarks3d, faces)
-            # annotated_image = draw_landmarks_on_image(image.numpy_view(), detection_result)
-            # cv2.imwrite(showPath, annotated_image)
-        else:
-            #print(imgPath,index_,'/',len(imgNames),' (0')
-            continue
+                             frontLandmarks3d, self.constFaces)
