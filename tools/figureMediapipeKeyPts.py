@@ -265,6 +265,9 @@ def writeLabelmeJson(imgDir, imgPath, jsonPath, frontLandmarks3d, faces_):
 
 class MediapipeFinder:
     def __init__(self,paramPath):
+        if not os.path.exists(paramPath):
+            print("not found ", paramPath)
+            return None 
         self.paramPath=paramPath
         self.base_options = python.BaseOptions(model_asset_path=self.paramPath)
         self.options = vision.FaceLandmarkerOptions(base_options=self.base_options,
