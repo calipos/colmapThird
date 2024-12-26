@@ -5,35 +5,146 @@ import numpy as np
 import cv2
 import onnx
 import onnxruntime
-import datetime
 import pickle
-# from insightface.data import get_image as ins_get_image
-# -*- coding: utf-8 -*-
-# @Organization  : insightface.ai
-# @Author        : Jia Guo
-# @Time          : 2021-05-04
-# @Function      :
+from skimage import transform as trans
+import writeLabelme
 
-
-# from __future__ import division
-
-import glob
 import os.path as osp
 
 import numpy as np
 import onnxruntime
 from numpy.linalg import norm
 
+def cropImg(img,factor):
+    maxSize = factor*25
+    height = img.shape[0]
+    width = img.shape[1]
+    minSize = np.min([height, width])
+    scale=1
+    if minSize > maxSize:
+        scale = maxSize/minSize
+        img = cv2.resize(img, (0, 0), fx=scale, fy=scale)
+    height = img.shape[0]
+    width = img.shape[1]
+    fixedHeight = height//factor*factor
+    fixedWidth = width//factor*factor
+    if fixedHeight == height and fixedWidth == width:
+        return img,1
+    else:
+        return img[:fixedHeight, :fixedWidth, :], scale
+
+def distance2bbox(points, distance, max_shape=None):
+    """Decode distance prediction to bounding box.
+
+    Args:
+        points (Tensor): Shape (n, 2), [x, y].
+        distance (Tensor): Distance from the given point to 4
+            boundaries (left, top, right, bottom).
+        max_shape (tuple): Shape of the image.
+
+    Returns:
+        Tensor: Decoded bboxes.
+    """
+    x1 = points[:, 0] - distance[:, 0]
+    y1 = points[:, 1] - distance[:, 1]
+    x2 = points[:, 0] + distance[:, 2]
+    y2 = points[:, 1] + distance[:, 3]
+    if max_shape is not None:
+        x1 = x1.clamp(min=0, max=max_shape[1])
+        y1 = y1.clamp(min=0, max=max_shape[0])
+        x2 = x2.clamp(min=0, max=max_shape[1])
+        y2 = y2.clamp(min=0, max=max_shape[0])
+    return np.stack([x1, y1, x2, y2], axis=-1)
+
+
+def distance2kps(points, distance, max_shape=None):
+    """Decode distance prediction to bounding box.
+
+    Args:
+        points (Tensor): Shape (n, 2), [x, y].
+        distance (Tensor): Distance from the given point to 4
+            boundaries (left, top, right, bottom).
+        max_shape (tuple): Shape of the image.
+
+    Returns:
+        Tensor: Decoded bboxes.
+    """
+    preds = []
+    for i in range(0, distance.shape[1], 2):
+        px = points[:, i % 2] + distance[:, i]
+        py = points[:, i % 2+1] + distance[:, i+1]
+        if max_shape is not None:
+            px = px.clamp(min=0, max=max_shape[1])
+            py = py.clamp(min=0, max=max_shape[0])
+        preds.append(px)
+        preds.append(py)
+    return np.stack(preds, axis=-1)
+
+def transform(data, center, output_size, scale, rotation):
+    scale_ratio = scale
+    rot = float(rotation) * np.pi / 180.0
+    # translation = (output_size/2-center[0]*scale_ratio, output_size/2-center[1]*scale_ratio)
+    t1 = trans.SimilarityTransform(scale=scale_ratio)
+    cx = center[0] * scale_ratio
+    cy = center[1] * scale_ratio
+    t2 = trans.SimilarityTransform(translation=(-1 * cx, -1 * cy))
+    t3 = trans.SimilarityTransform(rotation=rot)
+    t4 = trans.SimilarityTransform(translation=(output_size / 2,
+                                                output_size / 2))
+    t = t1 + t2 + t3 + t4
+    M = t.params[0:2]
+    cropped = cv2.warpAffine(data,
+                                M, (output_size, output_size),
+                                borderValue=0.0)
+    return cropped, M
+
+
+def trans_points2d(pts, M):
+    new_pts = np.zeros(shape=pts.shape, dtype=np.float32)
+    for i in range(pts.shape[0]):
+        pt = pts[i]
+        new_pt = np.array([pt[0], pt[1], 1.], dtype=np.float32)
+        new_pt = np.dot(M, new_pt)
+        # print('new_pt', new_pt.shape, new_pt)
+        new_pts[i] = new_pt[0:2]
+
+    return new_pts
+
+
+def trans_points3d(pts, M):
+    scale = np.sqrt(M[0][0] * M[0][0] + M[0][1] * M[0][1])
+    # print(scale)
+    new_pts = np.zeros(shape=pts.shape, dtype=np.float32)
+    for i in range(pts.shape[0]):
+        pt = pts[i]
+        new_pt = np.array([pt[0], pt[1], 1.], dtype=np.float32)
+        new_pt = np.dot(M, new_pt)
+        # print('new_pt', new_pt.shape, new_pt)
+        new_pts[i][0:2] = new_pt[0:2]
+        new_pts[i][2] = pts[i][2] * scale
+
+    return new_pts
+
+
+def trans_points(pts, M):
+    if pts.shape[1] == 2:
+        return trans_points2d(pts, M)
+    else:
+        return trans_points3d(pts, M)
+
+
 
 
 class FacialDetect:
-    def __init__(self, model_file=None, session=None):
+    def __init__(self, model_file=None, det_thresh=0.5, nms_thresh=0.4,session=None):
         assert model_file is not None
         self.model_file = model_file
         self.session = session 
         self.model = onnx.load(self.model_file)
         if self.session is None:
             self.session = onnxruntime.InferenceSession(self.model_file, None)
+        self.det_thresh = det_thresh 
+        self.nms_thresh = nms_thresh
         input_cfg = self.session.get_inputs()[0]
         input_shape = input_cfg.shape
         input_name = input_cfg.name
@@ -46,315 +157,154 @@ class FacialDetect:
         self.input_name = input_name
         self.output_names = output_names
         print(len(self.output_names))
-        self.pixel_means = [103.52, 116.28, 123.675]
-        self.pixel_stds = [57.375, 57.12, 58.395]
-    def detect(self, img, threshold=0.5, scales=[1.0], do_flip=False):
-        #print('in_detect', threshold, scales, do_flip, do_nms)
-        proposals_list = []
+        if len(outputs) == 6:
+            self.fmc = 3
+            self._feat_stride_fpn = [8, 16, 32]
+            self._num_anchors = 2
+        elif len(outputs)==9:
+            self.fmc = 3
+            self._feat_stride_fpn = [8, 16, 32]
+            self._num_anchors = 2
+            self.use_kps = True
+        elif len(outputs)==10:
+            self.fmc = 5
+            self._feat_stride_fpn = [8, 16, 32, 64, 128]
+            self._num_anchors = 1
+        elif len(outputs)==15:
+            self.fmc = 5
+            self._feat_stride_fpn = [8, 16, 32, 64, 128]
+            self._num_anchors = 1
+            self.use_kps = True
+
+
+        self.input_mean = 127.5
+        self.input_std = 128.0
+
+    def forward(self, img, threshold=0.5):
         scores_list = []
-        landmarks_list = []
-        strides_list = []
-        timea = datetime.datetime.now()
-        flips = [0]
-        if do_flip:
-            flips = [0, 1]
+        bboxes_list = []
+        kpss_list = []
+        input_size = tuple(img.shape[0:2][::-1])
+        blob = cv2.dnn.blobFromImage(img, 1.0/self.input_std, input_size,
+                                     (self.input_mean, self.input_mean, self.input_mean), swapRB=True)          
+        pred = self.session.run(self.output_names, {self.input_name: blob})
+        input_height = blob.shape[2]
+        input_width = blob.shape[3]
+        fmc = self.fmc
 
-        imgs = [img]
-        if isinstance(img, list):
-            imgs = img
-        for img in imgs:
-            for im_scale in scales:
-                for flip in flips:
-                    if im_scale != 1.0:
-                        im = cv2.resize(img,
-                                        None,
-                                        None,
-                                        fx=im_scale,
-                                        fy=im_scale,
-                                        interpolation=cv2.INTER_LINEAR)
-                    else:
-                        im = img.copy()
-                    if flip:
-                        im = im[:, ::-1, :]
-                    im = im.astype(np.float32) 
-                    for i in range(3):
-                        im[:, :, 2 - i] = (
-                            im[:, :, 2 - i]   -
-                            self.pixel_means[2 - i]) / self.pixel_stds[2 - i]
-                    blob = cv2.dnn.blobFromImage(im,1.,  [im.shape[1],im.shape[0]], swapRB=True)
-                    pred = self.session.run(self.output_names, {self.input_name: blob})
 
-                    #post_nms_topN = self._rpn_post_nms_top_n
-                    #min_size_dict = self._rpn_min_size_fpn
+        for idx, stride in enumerate(self._feat_stride_fpn):
+            scores = pred[idx]
+            bbox_preds = pred[idx+fmc]
+            bbox_preds = bbox_preds * stride
+            if self.use_kps:
+                kps_preds = pred[idx+fmc*2] * stride
+            height = input_height // stride
+            width = input_width // stride
+            if height==0 or width==0:
+                break
+            K = height * width
+            key = (height, width, stride)
 
-                    sym_idx = 0
+            anchor_centers = np.stack(
+                np.mgrid[:height, :width][::-1], axis=-1).astype(np.float32)
+            # print(anchor_centers.shape)
 
-                    for _idx, s in enumerate(self._feat_stride_fpn):
-                        #if len(scales)>1 and s==32 and im_scale==scales[-1]:
-                        #  continue
-                        _key = 'stride%s' % s
-                        stride = int(s)
-                        is_cascade = False
-                        if self.cascade:
-                            is_cascade = True
-                        #if self.vote and stride==4 and len(scales)>2 and (im_scale==scales[0]):
-                        #  continue
-                        #print('getting', im_scale, stride, idx, len(net_out), data.shape, file=sys.stderr)
-                        scores = net_out[sym_idx].asnumpy()
-                        if self.debug:
-                            timeb = datetime.datetime.now()
-                            diff = timeb - timea
-                            print('A uses', diff.total_seconds(), 'seconds')
-                        #print(scores.shape)
-                        #print('scores',stride, scores.shape, file=sys.stderr)
-                        scores = scores[:, self._num_anchors['stride%s' %
-                                                             s]:, :, :]
+            anchor_centers = (anchor_centers * stride).reshape((-1, 2))
+            if self._num_anchors > 1:
+                anchor_centers = np.stack(
+                    [anchor_centers]*self._num_anchors, axis=1).reshape((-1, 2))
 
-                        bbox_deltas = net_out[sym_idx + 1].asnumpy()
+            pos_inds = np.where(scores >= threshold)[0]
+            bboxes = distance2bbox(anchor_centers, bbox_preds)
+            pos_scores = scores[pos_inds]
+            pos_bboxes = bboxes[pos_inds]
+            scores_list.append(pos_scores)
+            bboxes_list.append(pos_bboxes)
+            if self.use_kps:
+                kpss = distance2kps(anchor_centers, kps_preds)
+                # kpss = kps_preds
+                kpss = kpss.reshape((kpss.shape[0], -1, 2))
+                pos_kpss = kpss[pos_inds]
+                kpss_list.append(pos_kpss)
+        return scores_list, bboxes_list, kpss_list
 
-                        #if DEBUG:
-                        #    print 'im_size: ({}, {})'.format(im_info[0], im_info[1])
-                        #    print 'scale: {}'.format(im_info[2])
+    def nms(self, dets):
+        thresh = self.nms_thresh
+        x1 = dets[:, 0]
+        y1 = dets[:, 1]
+        x2 = dets[:, 2]
+        y2 = dets[:, 3]
+        scores = dets[:, 4]
 
-                        #_height, _width = int(im_info[0] / stride), int(im_info[1] / stride)
-                        height, width = bbox_deltas.shape[
-                            2], bbox_deltas.shape[3]
+        areas = (x2 - x1 + 1) * (y2 - y1 + 1)
+        order = scores.argsort()[::-1]
 
-                        A = self._num_anchors['stride%s' % s]
-                        K = height * width
-                        anchors_fpn = self._anchors_fpn['stride%s' % s]
-                        anchors = anchors_plane(height, width, stride,
-                                                anchors_fpn)
-                        #print((height, width), (_height, _width), anchors.shape, bbox_deltas.shape, scores.shape, file=sys.stderr)
-                        anchors = anchors.reshape((K * A, 4))
-                        #print('num_anchors', self._num_anchors['stride%s'%s], file=sys.stderr)
-                        #print('HW', (height, width), file=sys.stderr)
-                        #print('anchors_fpn', anchors_fpn.shape, file=sys.stderr)
-                        #print('anchors', anchors.shape, file=sys.stderr)
-                        #print('bbox_deltas', bbox_deltas.shape, file=sys.stderr)
-                        #print('scores', scores.shape, file=sys.stderr)
+        keep = []
+        while order.size > 0:
+            i = order[0]
+            keep.append(i)
+            xx1 = np.maximum(x1[i], x1[order[1:]])
+            yy1 = np.maximum(y1[i], y1[order[1:]])
+            xx2 = np.minimum(x2[i], x2[order[1:]])
+            yy2 = np.minimum(y2[i], y2[order[1:]])
 
-                        #scores = self._clip_pad(scores, (height, width))
-                        scores = scores.transpose((0, 2, 3, 1)).reshape(
-                            (-1, 1))
+            w = np.maximum(0.0, xx2 - xx1 + 1)
+            h = np.maximum(0.0, yy2 - yy1 + 1)
+            inter = w * h
+            ovr = inter / (areas[i] + areas[order[1:]] - inter)
 
-                        #print('pre', bbox_deltas.shape, height, width)
-                        #bbox_deltas = self._clip_pad(bbox_deltas, (height, width))
-                        #print('after', bbox_deltas.shape, height, width)
-                        bbox_deltas = bbox_deltas.transpose((0, 2, 3, 1))
-                        bbox_pred_len = bbox_deltas.shape[3] // A
-                        #print(bbox_deltas.shape)
-                        bbox_deltas = bbox_deltas.reshape((-1, bbox_pred_len))
-                        bbox_deltas[:,
-                                    0::4] = bbox_deltas[:, 0::
-                                                        4] * self.bbox_stds[0]
-                        bbox_deltas[:,
-                                    1::4] = bbox_deltas[:, 1::
-                                                        4] * self.bbox_stds[1]
-                        bbox_deltas[:,
-                                    2::4] = bbox_deltas[:, 2::
-                                                        4] * self.bbox_stds[2]
-                        bbox_deltas[:,
-                                    3::4] = bbox_deltas[:, 3::
-                                                        4] * self.bbox_stds[3]
-                        proposals = self.bbox_pred(anchors, bbox_deltas)
+            inds = np.where(ovr <= thresh)[0]
+            order = order[inds + 1]
 
-                        #print(anchors.shape, bbox_deltas.shape, A, K, file=sys.stderr)
-                        if is_cascade:
-                            cascade_sym_num = 0
-                            cls_cascade = False
-                            bbox_cascade = False
-                            __idx = [3, 4]
-                            if not self.use_landmarks:
-                                __idx = [2, 3]
-                            for diff_idx in __idx:
-                                if sym_idx + diff_idx >= len(net_out):
-                                    break
-                                body = net_out[sym_idx + diff_idx].asnumpy()
-                                if body.shape[1] // A == 2:  #cls branch
-                                    if cls_cascade or bbox_cascade:
-                                        break
-                                    else:
-                                        cascade_scores = body[:, self.
-                                                              _num_anchors[
-                                                                  'stride%s' %
-                                                                  s]:, :, :]
-                                        cascade_scores = cascade_scores.transpose(
-                                            (0, 2, 3, 1)).reshape((-1, 1))
-                                        #scores = (scores+cascade_scores)/2.0
-                                        scores = cascade_scores  #TODO?
-                                        cascade_sym_num += 1
-                                        cls_cascade = True
-                                        #print('find cascade cls at stride', stride)
-                                elif body.shape[1] // A == 4:  #bbox branch
-                                    cascade_deltas = body.transpose(
-                                        (0, 2, 3, 1)).reshape(
-                                            (-1, bbox_pred_len))
-                                    cascade_deltas[:, 0::
-                                                   4] = cascade_deltas[:, 0::
-                                                                       4] * self.bbox_stds[
-                                                                           0]
-                                    cascade_deltas[:, 1::
-                                                   4] = cascade_deltas[:, 1::
-                                                                       4] * self.bbox_stds[
-                                                                           1]
-                                    cascade_deltas[:, 2::
-                                                   4] = cascade_deltas[:, 2::
-                                                                       4] * self.bbox_stds[
-                                                                           2]
-                                    cascade_deltas[:, 3::
-                                                   4] = cascade_deltas[:, 3::
-                                                                       4] * self.bbox_stds[
-                                                                           3]
-                                    proposals = self.bbox_pred(
-                                        proposals, cascade_deltas)
-                                    cascade_sym_num += 1
-                                    bbox_cascade = True
-                                    #print('find cascade bbox at stride', stride)
+        return keep
+    def detect(self, img, max_num=0, metric='max'):
+        scores_list, bboxes_list, kpss_list = self.forward(
+            img, self.det_thresh)
 
-                        proposals = clip_boxes(proposals, im_info[:2])
-
-                        #if self.vote:
-                        #  if im_scale>1.0:
-                        #    keep = self._filter_boxes2(proposals, 160*im_scale, -1)
-                        #  else:
-                        #    keep = self._filter_boxes2(proposals, -1, 100*im_scale)
-                        #  if stride==4:
-                        #    keep = self._filter_boxes2(proposals, 12*im_scale, -1)
-                        #    proposals = proposals[keep, :]
-                        #    scores = scores[keep]
-
-                        #keep = self._filter_boxes(proposals, min_size_dict['stride%s'%s] * im_info[2])
-                        #proposals = proposals[keep, :]
-                        #scores = scores[keep]
-                        #print('333', proposals.shape)
-                        if stride == 4 and self.decay4 < 1.0:
-                            scores *= self.decay4
-
-                        scores_ravel = scores.ravel()
-                        #print('__shapes', proposals.shape, scores_ravel.shape)
-                        #print('max score', np.max(scores_ravel))
-                        order = np.where(scores_ravel >= threshold)[0]
-                        #_scores = scores_ravel[order]
-                        #_order = _scores.argsort()[::-1]
-                        #order = order[_order]
-                        proposals = proposals[order, :]
-                        scores = scores[order]
-                        if flip:
-                            oldx1 = proposals[:, 0].copy()
-                            oldx2 = proposals[:, 2].copy()
-                            proposals[:, 0] = im.shape[1] - oldx2 - 1
-                            proposals[:, 2] = im.shape[1] - oldx1 - 1
-
-                        proposals[:, 0:4] /= im_scale
-
-                        proposals_list.append(proposals)
-                        scores_list.append(scores)
-                        if self.nms_threshold < 0.0:
-                            _strides = np.empty(shape=(scores.shape),
-                                                dtype=np.float32)
-                            _strides.fill(stride)
-                            strides_list.append(_strides)
-
-                        if not self.vote and self.use_landmarks:
-                            landmark_deltas = net_out[sym_idx + 2].asnumpy()
-                            #landmark_deltas = self._clip_pad(landmark_deltas, (height, width))
-                            landmark_pred_len = landmark_deltas.shape[1] // A
-                            landmark_deltas = landmark_deltas.transpose(
-                                (0, 2, 3, 1)).reshape(
-                                    (-1, 5, landmark_pred_len // 5))
-                            landmark_deltas *= self.landmark_std
-                            #print(landmark_deltas.shape, landmark_deltas)
-                            landmarks = self.landmark_pred(
-                                anchors, landmark_deltas)
-                            landmarks = landmarks[order, :]
-
-                            if flip:
-                                landmarks[:, :,
-                                          0] = im.shape[1] - landmarks[:, :,
-                                                                       0] - 1
-                                #for a in range(5):
-                                #  oldx1 = landmarks[:, a].copy()
-                                #  landmarks[:,a] = im.shape[1] - oldx1 - 1
-                                order = [1, 0, 2, 4, 3]
-                                flandmarks = landmarks.copy()
-                                for idx, a in enumerate(order):
-                                    flandmarks[:, idx, :] = landmarks[:, a, :]
-                                    #flandmarks[:, idx*2] = landmarks[:,a*2]
-                                    #flandmarks[:, idx*2+1] = landmarks[:,a*2+1]
-                                landmarks = flandmarks
-                            landmarks[:, :, 0:2] /= im_scale
-                            #landmarks /= im_scale
-                            #landmarks = landmarks.reshape( (-1, landmark_pred_len) )
-                            landmarks_list.append(landmarks)
-                            #proposals = np.hstack((proposals, landmarks))
-                        if self.use_landmarks:
-                            sym_idx += 3
-                        else:
-                            sym_idx += 2
-                        if is_cascade:
-                            sym_idx += cascade_sym_num
-
-        if self.debug:
-            timeb = datetime.datetime.now()
-            diff = timeb - timea
-            print('B uses', diff.total_seconds(), 'seconds')
-        proposals = np.vstack(proposals_list)
-        landmarks = None
-        if proposals.shape[0] == 0:
-            if self.use_landmarks:
-                landmarks = np.zeros((0, 5, 2))
-            if self.nms_threshold < 0.0:
-                return np.zeros((0, 6)), landmarks
-            else:
-                return np.zeros((0, 5)), landmarks
         scores = np.vstack(scores_list)
-        #print('shapes', proposals.shape, scores.shape)
         scores_ravel = scores.ravel()
         order = scores_ravel.argsort()[::-1]
-        #if config.TEST.SCORE_THRESH>0.0:
-        #  _count = np.sum(scores_ravel>config.TEST.SCORE_THRESH)
-        #  order = order[:_count]
-        proposals = proposals[order, :]
-        scores = scores[order]
-        if self.nms_threshold < 0.0:
-            strides = np.vstack(strides_list)
-            strides = strides[order]
-        if not self.vote and self.use_landmarks:
-            landmarks = np.vstack(landmarks_list)
-            landmarks = landmarks[order].astype(np.float32, copy=False)
-
-        if self.nms_threshold > 0.0:
-            pre_det = np.hstack((proposals[:, 0:4], scores)).astype(np.float32,
-                                                                    copy=False)
-            if not self.vote:
-                keep = self.nms(pre_det)
-                det = np.hstack((pre_det, proposals[:, 4:]))
-                det = det[keep, :]
-                if self.use_landmarks:
-                    landmarks = landmarks[keep]
-            else:
-                det = np.hstack((pre_det, proposals[:, 4:]))
-                det = self.bbox_vote(det)
-        elif self.nms_threshold < 0.0:
-            det = np.hstack(
-                (proposals[:, 0:4], scores, strides)).astype(np.float32,
-                                                             copy=False)
+        bboxes = np.vstack(bboxes_list)
+        if self.use_kps:
+            kpss = np.vstack(kpss_list) 
+        pre_det = np.hstack((bboxes, scores)).astype(np.float32, copy=False)
+        pre_det = pre_det[order, :]
+        keep = self.nms(pre_det)
+        det = pre_det[keep, :]
+        if self.use_kps:
+            kpss = kpss[order, :, :]
+            kpss = kpss[keep, :, :]
         else:
-            det = np.hstack((proposals[:, 0:4], scores)).astype(np.float32,
-                                                                copy=False)
-
-        if self.debug:
-            timeb = datetime.datetime.now()
-            diff = timeb - timea
-            print('C uses', diff.total_seconds(), 'seconds')
-        return det, landmarks
+            kpss = None
+        if max_num > 0 and det.shape[0] > max_num:
+            area = (det[:, 2] - det[:, 0]) * (det[:, 3] -
+                                              det[:, 1])
+            img_center = img.shape[0] // 2, img.shape[1] // 2
+            offsets = np.vstack([
+                (det[:, 0] + det[:, 2]) / 2 - img_center[1],
+                (det[:, 1] + det[:, 3]) / 2 - img_center[0]
+            ])
+            offset_dist_squared = np.sum(np.power(offsets, 2.0), 0)
+            if metric == 'max':
+                values = area
+            else:
+                values = area - offset_dist_squared * 2.0  # some extra weight on the centering
+            bindex = np.argsort(
+                values)[::-1]  # some extra weight on the centering
+            bindex = bindex[0:max_num]
+            det = det[bindex, :]
+            if kpss is not None:
+                kpss = kpss[bindex, :]
+        return det, kpss
 
 class Landmark:
     def __init__(self, model_file=None, session=None):
         assert model_file is not None
         self.model_file = model_file
         self.session = session
+        #92==88  34==38
+        self.eyeAndNoseIdx = [33]+[x for x in range(35,38)]+[x for x in range(39,52)]+[x for x in range(72,88)]+[x for x in range(89,92)]+[x for x in range(93,106)]
         find_sub = False
         find_mul = False
         model = onnx.load(self.model_file)
@@ -407,18 +357,14 @@ class Landmark:
         self.taskname = 'landmark_%dd_%d' % (self.lmk_dim, self.lmk_num)
         print(self.taskname)
 
-    def prepare(self, ctx_id, **kwargs):
-        if ctx_id < 0:
-            self.session.set_providers(['CPUExecutionProvider'])
-
     def get(self, img, face):
-        bbox = face.bbox
+        bbox = face['bbox']
         w, h = (bbox[2] - bbox[0]), (bbox[3] - bbox[1])
         center = (bbox[2] + bbox[0]) / 2, (bbox[3] + bbox[1]) / 2
         rotate = 0
         _scale = self.input_size[0] / (max(w, h)*1.5)
         # print('param:', img.shape, bbox, center, self.input_size, _scale, rotate)
-        aimg, M = face_align.transform(
+        aimg, M = transform(
             img, center, self.input_size[0], _scale, rotate)
         input_size = tuple(aimg.shape[0:2][::-1])
         # assert input_size==self.input_size
@@ -438,7 +384,7 @@ class Landmark:
             pred[:, 2] *= (self.input_size[0] // 2)
 
         IM = cv2.invertAffineTransform(M)
-        pred = face_align.trans_points(pred, IM)
+        pred = trans_points(pred, IM)
         face[self.taskname] = pred
         if self.require_pose:
             P = transform.estimate_affine_matrix_3d23d(self.mean_lmk, pred)
@@ -448,101 +394,60 @@ class Landmark:
             face['pose'] = pose  # pitch, yaw, roll
         return pred
 
-  
-class FaceAnalysis:
-    def __init__(self): 
-        # onnx_file = 'C:/Users/Administrator/.insightface/models/buffalo_l/1k3d68.onnx'
-        self.landmarkParam = 'models/buffalo_l/2d106det.onnx'
-        self.detectParam = 'models/buffalo_l/det_10g.onnx'
-        # onnx_file = 'C:/Users/Administrator/.insightface/models/buffalo_l/det_10g.onnx'
-        # onnx_file = 'C:/Users/Administrator/.insightface/models/buffalo_l/genderage.onnx'
-        # onnx_file = 'C:/Users/Administrator/.insightface/models/buffalo_l/w600k_r50.onnx'
-        detectModel = Landmark(self.detectParam)
-        landmarkModel = Landmark(self.landmarkParam)
- 
 
-    def prepare(self, ctx_id, det_thresh=0.5, det_size=(640, 640)):
-        self.det_thresh = det_thresh
-        assert det_size is not None
-        print('set det-size:', det_size)
-        self.det_size = det_size
-        for taskname, model in self.models.items():
-            if taskname == 'detection':
-                model.prepare(ctx_id, input_size=det_size,
-                              det_thresh=det_thresh)
-            else:
-                model.prepare(ctx_id)
+class InsightFaceFinder:
+    def __init__(self, faceParamPath, landmarkParamPath):
+        onnxruntime.set_default_logger_severity(3)
+        if not os.path.exists(faceParamPath):
+            print("not found ", faceParamPath)
+            return None
+        if not os.path.exists(landmarkParamPath):
+            print("not found ", landmarkParamPath)
+            return None
+        self.faceParamPath = faceParamPath
+        self.landmarkParamPath = landmarkParamPath
+        self.detector = FacialDetect(faceParamPath)
+        self.landmarkFinder = Landmark(landmarkParamPath)
 
-    def get(self, img, max_num=0):
-        bboxes, kpss = self.det_model.detect(img,
-                                             max_num=max_num,
-                                             metric='default')
-        if bboxes.shape[0] == 0:
-            return []
-        ret = []
-        for i in range(bboxes.shape[0]):
-            bbox = bboxes[i, 0:4]
-            det_score = bboxes[i, 4]
-            kps = None
-            if kpss is not None:
-                kps = kpss[i]
-            face = Face(bbox=bbox, kps=kps, det_score=det_score)
-            for taskname, model in self.models.items():
-                if taskname == 'detection':
-                    continue
-                model.get(img, face)
-            ret.append(face)
-        return ret
-
-    def draw_on(self, img, faces):
-        import cv2
-        dimg = img.copy()
-        for i in range(len(faces)):
-            face = faces[i]
-            box = face.bbox.astype(np.int)
-            color = (0, 0, 255)
-            cv2.rectangle(dimg, (box[0], box[1]), (box[2], box[3]), color, 2)
-            if face.kps is not None:
-                kps = face.kps.astype(np.int)
-                # print(landmark.shape)
-                for l in range(kps.shape[0]):
-                    color = (0, 0, 255)
-                    if l == 0 or l == 3:
-                        color = (0, 255, 0)
-                    cv2.circle(dimg, (kps[l][0], kps[l][1]), 1, color,
-                               2)
-            if face.gender is not None and face.age is not None:
-                cv2.putText(dimg, '%s,%d' % (face.sex, face.age),
-                            (box[0]-1, box[1]-4), cv2.FONT_HERSHEY_COMPLEX, 0.7, (0, 255, 0), 1)
-
-            # for key, value in face.items():
-            #    if key.startswith('landmark_3d'):
-            #        print(key, value.shape)
-            #        print(value[0:10,:])
-            #        lmk = np.round(value).astype(np.int)
-            #        for l in range(lmk.shape[0]):
-            #            color = (255, 0, 0)
-            #            cv2.circle(dimg, (lmk[l][0], lmk[l][1]), 1, color,
-            #                       2)
-        return dimg
-
+    def proc(self, imgPath):
+        imgOri = cv2.imread(imgPath)
+        img, scale = cropImg(imgOri, self.detector._feat_stride_fpn[-1])
+        det, kpss = self.detector.detect(img, 1)
+        if len(det)==0:
+            return None
+        landmark = self.landmarkFinder.get(
+            img, {'bbox': det[0], 'kps': kpss[0]})
+        frontLandmarks2d = landmark/scale
+        frontLandmarks2d = frontLandmarks2d[self.landmarkFinder.eyeAndNoseIdx]
+        imgDir, imgPath = os.path.split(imgPath)
+        base = os.path.splitext(imgPath)[0]
+        jsonPath = f"{base}.{'json'}"
+        writeLabelme.writeLabelmeJson(imgDir, imgPath, jsonPath,
+                         frontLandmarks2d,'insightface')
 
 if __name__ == '__main__':
     print(os.getcwd())
-    img = cv2.imread('data/00050.jpg')
     detector = FacialDetect('models/buffalo_l/det_10g.onnx')
-    detector.detect(img)
+    landmarkFinder = Landmark('models/buffalo_l/2d106det.onnx')
+    imgOri = cv2.imread('data/c.jpg')
+    img, scale = cropImg(imgOri, detector._feat_stride_fpn[-1])
+    det, kpss = detector.detect(img, 1)
+    # if len(det)==0:
+    #     return None
+    landmark = landmarkFinder.get(img, {'bbox': det[0], 'kps': kpss[0]})
+    landmark = landmark/scale
+   
+    fontFace = cv2.FONT_HERSHEY_SIMPLEX
+    fontScale = 0.25
+    textColor = (0, 0, 0)  # 蓝色文本
+    thickness = 1
 
-    app = FaceAnalysis()
-    app.prepare(ctx_id=0, det_size=(544, 960))
-    faces = app.get(img)
-    # assert len(faces)==6
-    tim = img.copy()
+    tim = imgOri.copy()
     color = (200, 160, 75)
-    for face in faces:
-        lmk = face.landmark_2d_106
-        lmk = np.round(lmk).astype(np.int32)
-        for i in range(lmk.shape[0]):
-            p = tuple(lmk[i])
-            cv2.circle(tim, p, 1, color, 1, cv2.LINE_AA)
-    cv2.imwrite('00094.jpg', tim)
+    lmk = np.round(landmark).astype(np.int32)
+    for i in landmarkFinder.eyeAndNoseIdx:
+        cv2.circle(tim, lmk[i], 1, color, 1, cv2.LINE_AA)
+        text = str(i)
+        cv2.putText(tim, text, lmk[i], fontFace,
+                    fontScale, textColor, thickness)
+    cv2.imwrite('c.jpg', tim)

@@ -1,6 +1,7 @@
 import os
 import figureMediapipeKeyPts
 import dlibLandMark
+import insightFaceLandmark
 import cv2
 def listImages(imgRoot):
     imgList = []
@@ -13,17 +14,28 @@ def listImages(imgRoot):
 if __name__ == '__main__':
     imgPathList = listImages('data')
     landmarkFinder=None
-    landmarkType = 'mediapipe'
-    if landmarkType=='mediapipe':
+    landmarkType = 'insightface'
+
+    if landmarkType=='dlib':
         faceParamPath = 'models/mmod_human_face_detector.dat'
         landmarkParamPath = 'models/shape_predictor_68_face_landmarks.dat'
         landmarkFinder = dlibLandMark.DlibFinder(
             faceParamPath, landmarkParamPath)
+
     if landmarkType == 'mediapipe':
         paramPath = 'models/face_landmarker_v2_with_blendshapes.task'
-        landmarkFinder = figureMediapipeKeyPts.MediapipeFinder(paramPath) 
+        landmarkFinder = figureMediapipeKeyPts.MediapipeFinder(paramPath)
+
+    if landmarkType == 'insightface':
+        faceParamPath = 'models/buffalo_l/det_10g.onnx'
+        landmarkParamPath = 'models/buffalo_l/2d106det.onnx'
+        landmarkFinder = insightFaceLandmark.InsightFaceFinder(
+            faceParamPath, landmarkParamPath)
+
     if landmarkFinder == None:
         print('landmarkFinder == None')
         exit(-1)
     for imgPath in imgPathList:
         landmarkFinder.proc(imgPath)
+
+ 
