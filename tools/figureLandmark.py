@@ -11,8 +11,17 @@ def listImages(imgRoot):
             imgList.append(full_path)
     return imgList
 
+
+def walk_folder(root_path):
+    imgList = []
+    for root, dirs, files in os.walk(root_path):
+        for file in files:
+            if file.endswith('jpg') or file.endswith('bmp') or file.endswith('jpeg') and not os.path.isdir(file):
+                # full_path = os.path.join(imgRoot, entry)
+                imgList.append(os.path.join(root, file))
+    return imgList
 if __name__ == '__main__':
-    imgPathList = listImages('data')
+    imgPathList = walk_folder('data')
     landmarkFinder=None
     landmarkType = 'insightface'
 

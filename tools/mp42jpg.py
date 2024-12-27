@@ -22,25 +22,33 @@ def ndArrayToList(data):
 
 
 def save_image(image, addr, num):
-    address = addr + str(num).zfill(5) + '.jpg'
+    address = os.path.join(addr, str(num).zfill(5) + '.jpg')
     #img_90 = cv2.flip(cv2.transpose(image), 1)
     #imwrite(address, img_90)
     imwrite(address, image)
 
 
-if __name__ == '__main__':
+def deleteDirFiles(dirRoot):
+    imgList = []
+    for entry in os.listdir(dirRoot):
+        if os.path.isdir(os.path.join(dirRoot, entry)):
+            deleteDirFiles(os.path.join(dirRoot, entry))
+        else:
+            full_path = os.path.join(dirRoot, entry)
+            os.remove(full_path)
 
-    video_path = 'data/a.mp4'
-    time_interval = 4
-    jsonRoot = 'data/'
+def capture(video_path, time_interval):
 
-    ######
-    #time_interval = 5 #时间间隔
-
-    # 读取视频文件
+    videoDir, imgPath = os.path.split(video_path)
+    shortName, ext = os.path.splitext(imgPath)
+    imgDir = os.path.join(videoDir, shortName)
+    if not os.path.exists(imgDir):
+        os.mkdir(imgDir)
+    else:
+        deleteDirFiles(imgDir)
+    jsonRoot = imgDir
+ 
     videoCapture = VideoCapture(video_path)
-
-    # 读帧
     success, frame = videoCapture.read()
     print(success)
 
@@ -54,3 +62,10 @@ if __name__ == '__main__':
             save_image(frame, jsonRoot, j+0)
             j = j + 1
         success, frame = videoCapture.read()
+
+
+if __name__ == '__main__':
+    video_path = ['data/a.mp4', 'data/b.mp4'] 
+    time_interval = 4
+    for path in video_path:
+        capture(path, time_interval)

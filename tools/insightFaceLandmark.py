@@ -413,7 +413,7 @@ class InsightFaceFinder:
         imgOri = cv2.imread(imgPath)
         img, scale = cropImg(imgOri, self.detector._feat_stride_fpn[-1])
         det, kpss = self.detector.detect(img, 1)
-        if len(det)==0:
+        if len(det) == 0:
             return None
         landmark = self.landmarkFinder.get(
             img, {'bbox': det[0], 'kps': kpss[0]})
@@ -423,7 +423,31 @@ class InsightFaceFinder:
         base = os.path.splitext(imgPath)[0]
         jsonPath = f"{base}.{'json'}"
         writeLabelme.writeLabelmeJson(imgDir, imgPath, jsonPath,
-                         frontLandmarks2d,'insightface')
+                                      frontLandmarks2d, 'insightface')
+
+    def figureIdrMask(self, imgPath,idrDir):
+        outImgDir = os.path.join(idrDir, 'image')
+        outMaskDir = os.path.join(idrDir, 'mask')
+        if not os.path.exists(outImgDir):
+            os.mkdir(outImgDir)
+        if not os.path.exists(outMaskDir):
+            os.mkdir(outMaskDir)
+        imgOri = cv2.imread(imgPath)
+        img, scale = cropImg(imgOri, self.detector._feat_stride_fpn[-1])
+        det, kpss = self.detector.detect(img, 1)
+        if len(det) == 0:
+            return None
+        landmark = self.landmarkFinder.get(
+            img, {'bbox': det[0], 'kps': kpss[0]})
+        frontLandmarks2d = landmark/scale
+        imgDir, imgPath = os.path.split(imgPath)
+        shortName,ext = os.path.splitext(imgPath)
+        cv2.imwrite(os.path.join(outImgDir, shortName+'.png'), imgOri)
+        mask = np.zeros(imgOri.shape)
+        hull = cv2.convexHull(frontLandmarks2d)
+        hull = np.round(hull).astype(np.int32)
+        cv2.fillPoly(mask, [hull],   (255,255,255) )
+        cv2.imwrite(os.path.join(outMaskDir, shortName+'.png'), mask)
 
 if __name__ == '__main__':
     print(os.getcwd())
