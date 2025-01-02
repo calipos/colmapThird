@@ -10,8 +10,10 @@ install/
 .vs
 .DS_Store
 build/
+buildmingw/
 install-debug/
 install-release/
+installmingw/
 data/
 doc/_build
 vcpkg_installed/
