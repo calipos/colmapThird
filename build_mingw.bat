@@ -1,9 +1,6 @@
 @echo off
 set pwd=%~dp0
 echo %pwd%
-set pwd2=D:/BaiduSyncdisk/
-set "pwd2=%pwd2:/=/%"
-echo %pwd2%
 
  
 echo %path% 
@@ -14,7 +11,7 @@ mkdir installmingw
 
 if not exist %pwd%\installmingw\jsoncpp-1.9.6 (
     echo  -----------build jsoncpp-1.9.6----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\jsoncpp-1.9.6  -S %pwd%\jsoncpp-1.9.6 -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw\jsoncpp-1.9.6 ^
+    cmake -G Ninja -DCMAKE_C_COMPILER=clang  -DCMAKE_CXX_COMPILER=clang++  -B %pwd%\buildmingw\jsoncpp-1.9.6  -S %pwd%\jsoncpp-1.9.6 -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw\jsoncpp-1.9.6 ^
     -DJSONCPP_WITH_CMAKE_PACKAGE:BOOL="1" ^
     -DJSONCPP_STATIC_WINDOWS_RUNTIME:BOOL="0" ^
     -DBUILD_OBJECT_LIBS:BOOL="1" ^
@@ -36,7 +33,7 @@ if not exist %pwd%\installmingw\jsoncpp-1.9.6 (
 
 if not exist %pwd%\installmingw\GKlib (
     echo  -----------build gklib----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\gklib  -S %pwd%\GKlib -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw ^
+    cmake -G Ninja -DCMAKE_C_COMPILER=clang  -DCMAKE_CXX_COMPILER=clang++  -B %pwd%\buildmingw\gklib  -S %pwd%\GKlib -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw ^
     -DGKREGEX:BOOL="1" -DGKRAND:BOOL="1" ^
     -DBUILD_SHARED_LIBS:BOOL="0" ^
     -DBUILD_TESTING:BOOL="0" ^
@@ -50,7 +47,7 @@ if not exist %pwd%\installmingw\GKlib (
 
 if not exist %pwd%\installmingw\glog-0.7.1 (
     echo  -----------build glog-0.7.1----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\glog-0.7.1  -S %pwd%\glog-0.7.1 ^
+    cmake -G Ninja -DCMAKE_C_COMPILER=clang  -DCMAKE_CXX_COMPILER=clang++  -B %pwd%\buildmingw\glog-0.7.1  -S %pwd%\glog-0.7.1 ^
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw/glog-0.7.1  ^
     -DBUILD_TESTING:BOOL="0" ^
     -DWITH_GFLAGS:BOOL="0"  ^
@@ -66,20 +63,20 @@ rem =======================================================================
 
 if not exist %pwd%\installmingw\eigen-3.4.0 (
     echo  -----------build eigen-3.4.0----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\eigen-3.4.0  -S %pwd%\eigen-3.4.0     ^
-    -DEIGEN_TEST_AVX:BOOL="0"  ^
-    -DEIGEN_TEST_SSSE3:BOOL="1"  ^
-    -DEIGEN_TEST_SSE3:BOOL="1"  ^
-    -DEIGEN_TEST_AVX2:BOOL="0"  ^
-    -DCUDA_PROPAGATE_HOST_FLAGS:BOOL="0"  ^
-    -DEIGEN_TEST_SSE4_1:BOOL="1"  ^
+    cmake -G Ninja -DCMAKE_C_COMPILER=clang  -DCMAKE_CXX_COMPILER=clang++  -B %pwd%\buildmingw\eigen-3.4.0  -S %pwd%\eigen-3.4.0     ^
+	-DEIGEN_TEST_SSE3:BOOL="0"  ^
+    -DEIGEN_TEST_SSE4_1:BOOL="0"  ^
+    -DEIGEN_TEST_SSE4_2:BOOL="0"  ^
     -DEIGEN_TEST_AVX512:BOOL="0"  ^
-    -DCUDA_ATTACH_VS_BUILD_RULE_TO_CUDA_FILE:BOOL="0"  ^
     -DEIGEN_TEST_AVX512DQ:BOOL="0"  ^
+    -DEIGEN_TEST_AVX:BOOL="0"  ^
+    -DEIGEN_TEST_AVX2:BOOL="0"  ^
+    -DEIGEN_TEST_SSSE3:BOOL="0"  ^
+    -DEIGEN_TEST_SSE2:BOOL="0"  ^
+    -DCUDA_PROPAGATE_HOST_FLAGS:BOOL="0"  ^
+    -DCUDA_ATTACH_VS_BUILD_RULE_TO_CUDA_FILE:BOOL="0"  ^
     -DEIGEN_TEST_OPENMP:BOOL="1"  ^
-    -DEIGEN_TEST_SSE4_2:BOOL="1"  ^
     -DCUDA_HOST_COMPILATION_CPP:BOOL="0"  ^
-    -DEIGEN_TEST_SSE2:BOOL="1" ^
 	-DCUDA_VERSION:STRING="11.7"  ^
 	-DCUDA_BUILD_CUBIN:BOOL="0"  ^
 	-DBUILD_TESTING:BOOL="0"  ^
@@ -97,7 +94,7 @@ rem =======================================================================
 
 if not exist %pwd%\installmingw\cgal-5.6.1 (
     echo  -----------build cgal-5.6.1----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\cgal-5.6.1  -S %pwd%\cgal-5.6.1     ^
+    cmake -G Ninja -DCMAKE_C_COMPILER=clang  -DCMAKE_CXX_COMPILER=clang++  -B %pwd%\buildmingw\cgal-5.6.1  -S %pwd%\cgal-5.6.1     ^
     -DBUILD_DOC:BOOL="0" ^
     -DCGAL_REPORT_DUPLICATE_FILES:BOOL="0" ^
     -DCMAKE_SKIP_INSTALL_RPATH:BOOL="0" ^
@@ -122,12 +119,15 @@ rem =======================================================================
 
 if not exist %pwd%\installmingw\opencv480 (
     echo  -----------build opencv480----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\opencv480  -S %pwd%\opencv480     ^
+    cmake -G Ninja -DCMAKE_C_COMPILER=clang  -DCMAKE_CXX_COMPILER=clang++  -B %pwd%\buildmingw\opencv480  -S %pwd%\opencv480     ^
+    -DWITH_OBSENSOR=OFF  ^
     -DBUILD_opencv_apps:BOOL="0" ^
     -DBUILD_WITH_DEBUG_INFO:BOOL="0" ^
     -DBUILD_opencv_flann:BOOL="1" ^
     -DBUILD_opencv_world:BOOL="1" ^
     -DBUILD_opencv_gapi:BOOL="1" ^
+    -DCPU_BASELINE:STRING="SSSE3" ^
+    -DCPU_DISPATCH:STRING="SSSE3" ^
     -DINSTALL_PDB:BOOL="0" ^
     -DBUILD_opencv_features2d:BOOL="1" ^
     -DBUILD_DOCS:BOOL="0"              ^
@@ -174,16 +174,17 @@ if not exist %pwd%\installmingw\opencv480 (
     -DBUILD_FAT_JAVA_LIB:BOOL="0"     ^
     -DBUILD_opencv_dnn:BOOL="1"       ^
     -DCMAKE_BUILD_TYPE="Release" ^
+	-DEigen3_DIR:PATH="%pwd%installmingw/eigen-3.4.0/share/eigen3/cmake"  ^
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw/opencv480 
     cd  %pwd%\buildmingw\opencv480
-    ninja install -j16
+    ninja install -j12
     cd %pwd%
 )
 rem =======================================================================
 
 if not exist %pwd%\installmingw\lz4-1.9.4 (
     echo  -----------build lz4-1.9.4----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\lz4-1.9.4  -S %pwd%\lz4-1.9.4\build\cmake     ^
+    cmake -G Ninja -DCMAKE_C_COMPILER=clang  -DCMAKE_CXX_COMPILER=clang++  -B %pwd%\buildmingw\lz4-1.9.4  -S %pwd%\lz4-1.9.4\build\cmake     ^
     -DBUILD_SHARED_LIBS:BOOL="0" ^
     -DBUILD_STATIC_LIBS:BOOL="1" ^
 	-DBUILD_TESTS:BOOL="0"  ^
@@ -198,7 +199,7 @@ rem =======================================================================
 
 if not exist %pwd%\installmingw\zlib-1.2.13 (
     echo  -----------build zlib-1.2.13----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\zlib-1.2.13  -S %pwd%\zlib-1.2.13     ^
+    cmake -G Ninja -DCMAKE_C_COMPILER=clang  -DCMAKE_CXX_COMPILER=clang++  -B %pwd%\buildmingw\zlib-1.2.13  -S %pwd%\zlib-1.2.13     ^
 	-DBUILD_TESTS:BOOL="0"  ^
 	-DBUILD_EXAMPLES:BOOL="0"   ^
     -DBUILD_PYTHON_BINDINGS:BOOL="0" ^
@@ -213,7 +214,7 @@ rem =======================================================================
 
 if not exist %pwd%\installmingw\hdf5-hdf5-1_14_3 (
     echo  -----------build hdf5-hdf5-1_14_3----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\hdf5-hdf5-1_14_3  -S %pwd%\hdf5-hdf5-1_14_3    ^
+    cmake -G Ninja -DCMAKE_C_COMPILER=clang  -DCMAKE_CXX_COMPILER=clang++  -B %pwd%\buildmingw\hdf5-hdf5-1_14_3  -S %pwd%\hdf5-hdf5-1_14_3    ^
     -DZLIB_LIBRARY_RELEASE:FILEPATH=%pwd%/installmingw/zlib-1.2.13/lib/zlibstatic.lib  ^
     -DHDF5_USE_FILE_LOCKING:BOOL="1"  ^
     -DCMAKE_CXX_STANDARD=17 ^
@@ -244,7 +245,7 @@ if not exist %pwd%\installmingw\hdf5-hdf5-1_14_3 (
 
 if not exist %pwd%\installmingw\ceres-solver-2.2.0 (
     echo  -----------build ceres-solver-2.2.0----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\ceres-solver-2.2.0  -S %pwd%\ceres-solver-2.2.0    ^
+    cmake -G Ninja -DCMAKE_C_COMPILER=clang  -DCMAKE_CXX_COMPILER=clang++  -B %pwd%\buildmingw\ceres-solver-2.2.0  -S %pwd%\ceres-solver-2.2.0    ^
     -DEigen3_DIR:PATH=%pwd%installmingw/eigen-3.4.0/share/eigen3/cmake ^
     -DCMAKE_CXX_STANDARD=17 ^
     -DUSE_CUDA:BOOL="0"  ^
@@ -269,10 +270,10 @@ rem =======================================================================
 
 if not exist %pwd%\installmingw\flann-1.9.2 (
     echo  -----------build flann-1.9.2----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\flann-1.9.2  -S %pwd%\flann-1.9.2    ^
+    cmake -G Ninja -DCMAKE_C_COMPILER=clang  -DCMAKE_CXX_COMPILER=clang++  -B %pwd%\buildmingw\flann-1.9.2  -S %pwd%\flann-1.9.2    ^
     -DHDF5_DIR:PATH=%pwd%/installmingw/hdf5-hdf5-1_14_3/cmake ^
     -DLZ4_INCLUDE_DIRS:PATH=%pwd%/installmingw/lz4-1.9.4/include ^
-    -DLZ4_LINK_LIBRARIES:FILEPATH=%pwd%/installmingw/lz4-1.9.4/lib/lz4.lib  ^
+    -DLZ4_LINK_LIBRARIES:FILEPATH=%pwd%/installmingw/lz4-1.9.4/lib/liblz4.a  ^
     -DBUILD_TESTS:BOOL="0" ^
     -DBUILD_DOC:BOOL="0" ^
     -DBUILD_PYTHON_BINDINGS:BOOL="0" ^
@@ -289,10 +290,10 @@ rem =======================================================================
 
 if not exist %pwd%\installmingw\glew-2.1.0 (
     echo  -----------build glew-2.1.0----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\glew-2.1.0  -S %pwd%\glew-2.1.0\build\cmake    ^
+    cmake -G Ninja -DCMAKE_C_COMPILER=clang  -DCMAKE_CXX_COMPILER=clang++  -B %pwd%\buildmingw\glew-2.1.0  -S %pwd%\glew-2.1.0\build\cmake    ^
     -DHDF5_DIR:PATH=%pwd%/installmingw/hdf5-hdf5-1_14_3/cmake ^
     -DLZ4_INCLUDE_DIRS:PATH=%pwd%/installmingw/lz4-1.9.4/include ^
-    -DLZ4_LINK_LIBRARIES:FILEPATH=%pwd%/installmingw/lz4-1.9.4/lib/lz4.lib  ^
+    -DLZ4_LINK_LIBRARIES:FILEPATH=%pwd%/installmingw/lz4-1.9.4/lib/lz4.a  ^
     -DBUILD_TESTS:BOOL="0" ^
     -DBUILD_DOC:BOOL="0" ^
     -DBUILD_PYTHON_BINDINGS:BOOL="0" ^
