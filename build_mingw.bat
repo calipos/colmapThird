@@ -328,3 +328,42 @@ if not exist %pwd%\installmingw\spdlog-1.15.0 (
     ninja install -j16
     cd %pwd%
 ) 
+
+
+
+
+if not exist %pwd%\installmingw\libigl-2.5.0 (
+    echo  -----------build libigl-2.5.0----------
+    cmake  -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++    -B %pwd%\buildmingw\libigl-2.5.0  -S %pwd%\libigl-2.5.0    ^
+    -DEMBREE_STATIC_LIB:BOOL="0"   ^
+    -DLIBIGL_BUILD_TUTORIALS:BOOL="0"   ^
+    -DLIBIGL_COPYLEFT_CORE:BOOL="0"   ^
+    -DEMBREE_RAY_PACKETS:BOOL="0"   ^
+    -DLIBIGL_OPENGL:BOOL="0"   ^
+    -DUSE_MSVC_RUNTIME_LIBRARY_DLL:BOOL="0"   ^
+    -DLIBIGL_STB:BOOL="0"   ^
+    -DBUILD_TESTING:BOOL="0"   ^
+    -DLIBIGL_BUILD_TESTS:BOOL="0"   ^
+    -DLIBIGL_EMBREE:BOOL="0"   ^
+    -DLIBIGL_USE_STATIC_LIBRARY:BOOL="0"   ^
+    -DLIBIGL_GLFW:BOOL="0"   ^
+    -DLIBIGL_XML:BOOL="0"   ^
+    -DFETCHCONTENT_SOURCE_DIR_EIGEN:PATH="D:/repo/colmapThird/installmingw/eigen-3.4.0/include/eigen3"   ^
+    -DLIBIGL_GLFW_TESTS:BOOL="0"   ^
+    -DCATCH_INSTALL_DOCS:BOOL="0"   ^
+    -DLIBIGL_INSTALL:BOOL="1"   ^
+    -DLIBIGL_IMGUI:BOOL="0"   ^
+    -DLIBIGL_COPYLEFT_TETGEN:BOOL="0"   ^
+    -DLIBIGL_PREDICATES:BOOL="0"   ^
+    -DLIBIGL_SPECTRA:BOOL="0"   ^
+    -DLIBIGL_COPYLEFT_CGAL:BOOL="0"   ^
+    -DBUILD_SHARED_LIBS:BOOL="1"   ^
+    -DCATCH_BUILD_TESTING:BOOL="0"   ^
+    -DLIBIGL_RESTRICTED_TRIANGLE:BOOL="0"   ^
+    -DLIBIGL_COPYLEFT_COMISO:BOOL="0" ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw/libigl-2.5.0
+
+    cd  %pwd%\buildmingw\libigl-2.5.0
+    ninja install -j16
+    cd %pwd%
+) 
