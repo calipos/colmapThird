@@ -403,7 +403,27 @@ if not exist %pwd%\install\colmap-3.10 (
 )  
 cd ../..
 
+rem =======================================================================
 
+if not exist %pwd%\install\spdlog-1.15.0 (
+    echo  -----------build spdlog-1.15.0----------
+    cmake -G Ninja  -B %pwd%\build\spdlog-1.15.0  -S %pwd%\spdlog-1.15.0    ^
+    -DSPDLOG_BUILD_EXAMPLE_HO:BOOL="0"  ^
+    -DSPDLOG_BUILD_WARNINGS:BOOL="0"  ^
+    -DCMAKE_EXPORT_BUILD_DATABASE:BOOL="0"  ^
+    -DSPDLOG_BUILD_EXAMPLE:BOOL="0"  ^
+    -DSPDLOG_BUILD_SHARED:BOOL="0"  ^
+    -DSPDLOG_BUILD_ALL:BOOL="0"  ^
+    -DSPDLOG_BUILD_TESTS_HO:BOOL="0"  ^
+    -DSPDLOG_BUILD_TESTS:BOOL="0"  ^
+    -DSPDLOG_BUILD_PIC:BOOL="0"  ^
+    -DSPDLOG_BUILD_BENCH:BOOL="0" ^
+    -DSPDLOG_BUILD_SHARED:BOOL="1" ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/spdlog-1.15.0 
+    cd  %pwd%\build\spdlog-1.15.0 
+    ninja install -j16
+    cd %pwd%
+) 
 
 rem  -DFREEIMAGE_LIBRARIES:FILEPATH="D:/repo/colmapThird/FreeImage3180Win32Win64/x64/FreeImage.lib" 
 rem  -DCeres_DIR:PATH="D:\repo\colmapThird\install\ceres-solver-2.2.0\lib\cmake\Ceres" 

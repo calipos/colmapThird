@@ -307,3 +307,24 @@ if not exist %pwd%\installmingw\glew-2.1.0 (
     ninja install -j16
     cd %pwd%
 ) 
+rem =======================================================================
+
+if not exist %pwd%\installmingw\spdlog-1.15.0 (
+    echo  -----------build spdlog-1.15.0----------
+    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\spdlog-1.15.0  -S %pwd%\spdlog-1.15.0    ^
+    -DSPDLOG_BUILD_EXAMPLE_HO:BOOL="0"  ^
+    -DSPDLOG_BUILD_WARNINGS:BOOL="0"  ^
+    -DCMAKE_EXPORT_BUILD_DATABASE:BOOL="0"  ^
+    -DSPDLOG_BUILD_EXAMPLE:BOOL="0"  ^
+    -DSPDLOG_BUILD_SHARED:BOOL="0"  ^
+    -DSPDLOG_BUILD_ALL:BOOL="0"  ^
+    -DSPDLOG_BUILD_TESTS_HO:BOOL="0"  ^
+    -DSPDLOG_BUILD_TESTS:BOOL="0"  ^
+    -DSPDLOG_BUILD_PIC:BOOL="0"  ^
+    -DSPDLOG_BUILD_BENCH:BOOL="0" ^
+    -DSPDLOG_BUILD_SHARED:BOOL="1" ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw/spdlog-1.15.0 
+    cd  %pwd%\buildmingw\spdlog-1.15.0 
+    ninja install -j16
+    cd %pwd%
+) 

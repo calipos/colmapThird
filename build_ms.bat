@@ -431,3 +431,26 @@ if not exist %pwd%\install\test (
     msbuild %pwd%\build\test\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
      
 )
+
+rem =======================================================================
+
+if not exist %pwd%\install\spdlog-1.15.0 (
+    echo  -----------build spdlog-1.15.0----------
+    cmake  -G "Visual Studio 16 2019"    -B %pwd%\build\spdlog-1.15.0  -S %pwd%\spdlog-1.15.0    ^
+    -DSPDLOG_BUILD_EXAMPLE_HO:BOOL="0"  ^
+    -DSPDLOG_BUILD_WARNINGS:BOOL="0"  ^
+    -DCMAKE_EXPORT_BUILD_DATABASE:BOOL="0"  ^
+    -DSPDLOG_BUILD_EXAMPLE:BOOL="0"  ^
+    -DSPDLOG_BUILD_SHARED:BOOL="0"  ^
+    -DSPDLOG_BUILD_ALL:BOOL="0"  ^
+    -DSPDLOG_BUILD_TESTS_HO:BOOL="0"  ^
+    -DSPDLOG_BUILD_TESTS:BOOL="0"  ^
+    -DSPDLOG_BUILD_PIC:BOOL="0"  ^
+    -DSPDLOG_BUILD_BENCH:BOOL="0" ^
+    -DSPDLOG_BUILD_SHARED:BOOL="1" ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/spdlog-1.15.0 
+
+    TIMEOUT /T 1
+    msbuild %pwd%\build\spdlog-1.15.0\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
+    cd %pwd%
+) 
