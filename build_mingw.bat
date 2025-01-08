@@ -250,6 +250,7 @@ if not exist %pwd%\installmingw\ceres-solver-2.2.0 (
     -DEigen3_DIR:PATH=%pwd%installmingw/eigen-3.4.0/share/eigen3/cmake ^
     -DCMAKE_CXX_STANDARD=17 ^
     -DUSE_CUDA:BOOL="0"  ^
+    -DBUILD_SHARED_LIBS:BOOL="1" ^
     -DMINIGLOG_MAX_LOG_LEVEL:STRING="2"  ^
     -DLAPACK:BOOL="1"  ^
 	-DBUILD_TESTING:BOOL="0"  ^
@@ -381,3 +382,37 @@ if not exist %pwd%\installmingw\flatbuffers-24.12.23 (
     ninja install -j16
     cd %pwd%
 ) 
+
+
+if not exist %pwd%\installmingw\cereal-1.3.2 (
+    echo  -----------build cereal-1.3.2----------
+    cmake  -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++    -B %pwd%\buildmingw\cereal-1.3.2  -S %pwd%\cereal-1.3.2    ^
+    -DBUILD_SANDBOX:BOOL="0" ^
+    -DBoost_SERIALIZATION_LIBRARY_RELEASE:FILEPATH="D:/ucl360/libraries-mgw/boost_1.85.0/lib/libboost_serialization-mgw14-mt-s-x64-1_85.a" ^
+    -DBoost_INCLUDE_DIR:PATH="D:/ucl360/libraries-mgw/boost_1.85.0/include/boost-1_85" ^
+    -DBoost_SERIALIZATION_LIBRARY_DEBUG:FILEPATH="D:/ucl360/libraries-mgw/boost_1.85.0/lib/libboost_serialization-mgw14-mt-sd-x64-1_85.a"  ^
+    -DBUILD_TESTS:BOOL="0"  ^
+    -DBUILD_DOC:BOOL="0" ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw/cereal-1.3.2
+    cd  %pwd%\buildmingw\cereal-1.3.2
+    ninja install -j16
+    cd %pwd%
+) 
+
+
+if not exist %pwd%\installmingw\protobuf-3.20.0-rc3 (
+    echo  -----------build protobuf-3.20.0-rc3----------
+    cmake  -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++    -B %pwd%\buildmingw\protobuf-3.20.0-rc3  -S %pwd%\protobuf-3.20.0-rc3\cmake    ^
+    -Dprotobuf_BUILD_TESTS:BOOL="0"    ^
+    -DZLIB_LIBRARY_RELEASE:FILEPATH=%pwd%/installmingw/zlib-1.2.13/lib/libzlib.dll.a  ^
+    -DZLIB_INCLUDE_DIR:PATH=%pwd%/installmingw/zlib-1.2.13/include  ^
+    -DZLIB_LIBRARY_DEBUG:FILEPATH=%pwd%/installmingw/zlib-1.2.13/lib/libzlib.dll.a  ^
+    -Dprotobuf_BUILD_SHARED_LIBS:BOOL="1"   ^
+    -Dprotobuf_WITH_ZLIB:BOOL="1" ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw/protobuf-3.20.0-rc3
+    cd  %pwd%\buildmingw\protobuf-3.20.0-rc3
+    ninja install -j16
+    cd %pwd%
+) 
+
+
