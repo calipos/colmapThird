@@ -491,3 +491,16 @@ if not exist %pwd%\install\libigl-2.5.0 (
     msbuild %pwd%\build\libigl-2.5.0\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
     cd %pwd%
 ) 
+
+
+if not exist %pwd%\install\flatbuffers-24.12.23 (
+    echo  -----------build flatbuffers-24.12.23----------
+    cmake  -G "Visual Studio 16 2019"    -B %pwd%\build\flatbuffers-24.12.23  -S %pwd%\flatbuffers-24.12.23    ^
+    -DFLATBUFFERS_BUILD_TESTS:BOOL="0"  ^
+    -DFLATBUFFERS_BUILD_SHAREDLIB:BOOL="1" ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/flatbuffers-24.12.23
+
+    TIMEOUT /T 1
+    msbuild %pwd%\build\flatbuffers-24.12.23\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
+    cd %pwd%
+) 

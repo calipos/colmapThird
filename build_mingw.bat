@@ -367,3 +367,17 @@ if not exist %pwd%\installmingw\libigl-2.5.0 (
     ninja install -j16
     cd %pwd%
 ) 
+
+
+
+
+if not exist %pwd%\installmingw\flatbuffers-24.12.23 (
+    echo  -----------build flatbuffers-24.12.23----------
+    cmake  -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++    -B %pwd%\buildmingw\flatbuffers-24.12.23  -S %pwd%\flatbuffers-24.12.23    ^
+    -DFLATBUFFERS_BUILD_TESTS:BOOL="0"  ^
+    -DFLATBUFFERS_BUILD_SHAREDLIB:BOOL="1" ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw/flatbuffers-24.12.23
+    cd  %pwd%\buildmingw\flatbuffers-24.12.23
+    ninja install -j16
+    cd %pwd%
+) 
