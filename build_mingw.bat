@@ -248,7 +248,7 @@ if not exist %pwd%\installmingw\ceres-solver-2.2.0 (
     echo  -----------build ceres-solver-2.2.0----------
     cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\ceres-solver-2.2.0  -S %pwd%\ceres-solver-2.2.0    ^
     -DEigen3_DIR:PATH=%pwd%installmingw/eigen-3.4.0/share/eigen3/cmake ^
-    -DCMAKE_CXX_STANDARD=17 ^
+    -DCMAKE_CXX_FLAGS:STRING="-std=gnu++17" ^
     -DUSE_CUDA:BOOL="0"  ^
     -DBUILD_SHARED_LIBS:BOOL="1" ^
     -DMINIGLOG_MAX_LOG_LEVEL:STRING="2"  ^
@@ -265,7 +265,7 @@ if not exist %pwd%\installmingw\ceres-solver-2.2.0 (
     -DCMAKE_BUILD_TYPE="Release" ^
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw/ceres-solver-2.2.0
     cd  %pwd%\buildmingw\ceres-solver-2.2.0
-    ninja install -j16
+    ninja install -j16 -v
     cd %pwd%
 )
 rem =======================================================================
@@ -319,6 +319,7 @@ if not exist %pwd%\installmingw\spdlog-1.15.0 (
     -DSPDLOG_BUILD_EXAMPLE:BOOL="0"  ^
     -DSPDLOG_BUILD_SHARED:BOOL="0"  ^
     -DSPDLOG_BUILD_ALL:BOOL="0"  ^
+    -DSPDLOG_MSVC_UTF8:BOOL="0"  ^
     -DSPDLOG_BUILD_TESTS_HO:BOOL="0"  ^
     -DSPDLOG_BUILD_TESTS:BOOL="0"  ^
     -DSPDLOG_BUILD_PIC:BOOL="0"  ^
