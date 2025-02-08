@@ -10,19 +10,19 @@ import torch
 import utils.general as utils
 import utils.plots as plt
 import scene_dataset
-
+from pyhocon import ConfigFactory
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 class IDRTrainRunner():
-    def __init__(self, config, train_config,gpu_index):
+    def __init__(self, config, train_config):
         torch.set_default_dtype(torch.float32)
         torch.set_num_threads(1)
 
-        # self.conf = ConfigFactory.parse_file(kwargs['conf'])
+        self.conf = ConfigFactory.from_dict(train_config)
+        # self.conf = train_config
         self.batch_size = config['batch_size']
         self.nepochs = config['nepoch']
         self.exps_folder_name = config['out_folder_name']
-        self.GPU_INDEX = gpu_index
         self.train_cameras = config['train_cameras']
-
         self.expname = 'expname'
 
         if config['is_continue'] and config['timestamp'] == 'latest':
@@ -77,8 +77,10 @@ class IDRTrainRunner():
 
 
         print('Loading data ...')
-        self.train_dataset = scene_dataset.SceneDataset(config,train_config, img_res=[100, 100])
-
+        # self.train_dataset = scene_dataset.SceneDataset(config,train_config, img_res=[100, 100])
+        dataset_conf = self.conf.get_config('dataset')
+        self.train_dataset = utils.get_class(self.conf.get_string(
+            'train.dataset_class'))(self.train_cameras, dataset_conf['data_dir'], dataset_conf['img_res'])
         print('Finish loading data ...')
 
         self.train_dataloader = torch.utils.data.DataLoader(self.train_dataset,
@@ -87,14 +89,13 @@ class IDRTrainRunner():
                                                             collate_fn=self.train_dataset.collate_fn
                                                             )
         self.plot_dataloader = torch.utils.data.DataLoader(self.train_dataset,
-                                                           batch_size=self.conf.get_int(
-                                                               'plot.plot_nimgs'),
+                                                           batch_size=1,
                                                            shuffle=True,
                                                            collate_fn=self.train_dataset.collate_fn
                                                            )
 
         self.model = utils.get_class(self.conf.get_string(
-            'train.model_class'))(conf=self.conf.get_config('model'))
+            'train.model_class'))(conf=self.conf.get_config('model'), device=device)
 
         # sampledata = torch.rand(1, 3, 4, 4)
         # out = self.model(sampledata)
@@ -106,8 +107,7 @@ class IDRTrainRunner():
         # g = make_dot(out)
         # g.render('modelviz', view=False)  # 这种方式会生成一个pdf文
 
-        if torch.cuda.is_available():
-            self.model.cuda()
+        self.model.to(device)
 
         self.loss = utils.get_class(self.conf.get_string(
             'train.loss_class'))(**self.conf.get_config('loss'))
@@ -125,7 +125,7 @@ class IDRTrainRunner():
         if self.train_cameras:
             num_images = len(self.train_dataset)
             self.pose_vecs = torch.nn.Embedding(
-                num_images, 7, sparse=True).cuda()
+                num_images, 7, sparse=True).to(device)
             self.pose_vecs.weight.data.copy_(
                 self.train_dataset.get_pose_init())
 
@@ -175,13 +175,153 @@ class IDRTrainRunner():
             if self.start_epoch > acc:
                 self.loss.alpha = self.loss.alpha * self.alpha_factor
 
+    def save_checkpoints(self, epoch):
+        torch.save(
+            {"epoch": epoch, "model_state_dict": self.model.state_dict()},
+            os.path.join(self.checkpoints_path, self.model_params_subdir, str(epoch) + ".pth"))
+        torch.save(
+            {"epoch": epoch, "model_state_dict": self.model.state_dict()},
+            os.path.join(self.checkpoints_path, self.model_params_subdir, "latest.pth"))
+
+        torch.save(
+            {"epoch": epoch, "optimizer_state_dict": self.optimizer.state_dict()},
+            os.path.join(self.checkpoints_path, self.optimizer_params_subdir, str(epoch) + ".pth"))
+        torch.save(
+            {"epoch": epoch, "optimizer_state_dict": self.optimizer.state_dict()},
+            os.path.join(self.checkpoints_path, self.optimizer_params_subdir, "latest.pth"))
+
+        torch.save(
+            {"epoch": epoch, "scheduler_state_dict": self.scheduler.state_dict()},
+            os.path.join(self.checkpoints_path, self.scheduler_params_subdir, str(epoch) + ".pth"))
+        torch.save(
+            {"epoch": epoch, "scheduler_state_dict": self.scheduler.state_dict()},
+            os.path.join(self.checkpoints_path, self.scheduler_params_subdir, "latest.pth"))
+
+        if self.train_cameras:
+            torch.save(
+                {"epoch": epoch, "optimizer_cam_state_dict": self.optimizer_cam.state_dict()},
+                os.path.join(self.checkpoints_path, self.optimizer_cam_params_subdir, str(epoch) + ".pth"))
+            torch.save(
+                {"epoch": epoch, "optimizer_cam_state_dict": self.optimizer_cam.state_dict()},
+                os.path.join(self.checkpoints_path, self.optimizer_cam_params_subdir, "latest.pth"))
+
+            torch.save(
+                {"epoch": epoch, "pose_vecs_state_dict": self.pose_vecs.state_dict()},
+                os.path.join(self.checkpoints_path, self.cam_params_subdir, str(epoch) + ".pth"))
+            torch.save(
+                {"epoch": epoch, "pose_vecs_state_dict": self.pose_vecs.state_dict()},
+                os.path.join(self.checkpoints_path, self.cam_params_subdir, "latest.pth"))
+
+    def run(self):
+        print("training...")
+
+        for epoch in range(self.start_epoch, self.nepochs + 1):
+
+            if epoch in self.alpha_milestones:
+                self.loss.alpha = self.loss.alpha * self.alpha_factor
+
+            if epoch % 100 == 0:
+                self.save_checkpoints(epoch)
+
+            if epoch % self.plot_freq == 0:
+                self.model.eval()
+                if self.train_cameras:
+                    self.pose_vecs.eval()
+                self.train_dataset.change_sampling_idx(-1)
+                indices, model_input, ground_truth = next(
+                    iter(self.plot_dataloader))
+
+                model_input["intrinsics"] = model_input["intrinsics"].to(device)
+                model_input["uv"] = model_input["uv"].to(device)
+                model_input["object_mask"] = model_input["object_mask"].to(device)
+
+                if self.train_cameras:
+                    pose_input = self.pose_vecs(indices.to(device))
+                    model_input['pose'] = pose_input
+                else:
+                    model_input['pose'] = model_input['pose'].to(device)
+
+                split = utils.split_input(
+                    model_input, self.total_pixels, device)
+                res = []
+                for s in split:
+                    out = self.model(s)
+                    # print(out)
+                    # g = make_dot(out)
+                    # g.render('modelviz', view=False)
+                    res.append({
+                        'points': out['points'].detach(),
+                        'rgb_values': out['rgb_values'].detach(),
+                        'network_object_mask': out['network_object_mask'].detach(),
+                        'object_mask': out['object_mask'].detach()
+                    })
+
+                batch_size = ground_truth['rgb'].shape[0]
+                model_outputs = utils.merge_output(
+                    res, self.total_pixels, batch_size)
+
+                plt.plot(self.model,
+                         indices,
+                         model_outputs,
+                         model_input['pose'],
+                         ground_truth['rgb'],
+                         self.plots_dir,
+                         epoch,
+                         self.img_res,
+                         **self.plot_conf,
+                         device=device
+                         )
+
+                self.model.train()
+                if self.train_cameras:
+                    self.pose_vecs.train()
+
+            self.train_dataset.change_sampling_idx(self.num_pixels)
+
+            for data_index, (indices, model_input, ground_truth) in enumerate(self.train_dataloader):
+
+                model_input["intrinsics"] = model_input["intrinsics"].to(device)
+                model_input["uv"] = model_input["uv"].to(device)
+                model_input["object_mask"] = model_input["object_mask"].to(device)
+
+                if self.train_cameras:
+                    pose_input = self.pose_vecs(indices.to(device))
+                    model_input['pose'] = pose_input
+                else:
+                    model_input['pose'] = model_input['pose'].to(device)
+
+                model_outputs = self.model(model_input)
+                loss_output = self.loss(model_outputs, ground_truth)
+
+                loss = loss_output['loss']
+
+                self.optimizer.zero_grad()
+                if self.train_cameras:
+                    self.optimizer_cam.zero_grad()
+
+                loss.backward()
+
+                self.optimizer.step()
+                if self.train_cameras:
+                    self.optimizer_cam.step()
+
+                print(
+                    '{0} [{1}] ({2}/{3}): loss = {4}, rgb_loss = {5}, eikonal_loss = {6}, mask_loss = {7}, alpha = {8}, lr = {9}'
+                    .format(self.expname, epoch, data_index, self.n_batches, loss.item(),
+                            loss_output['rgb_loss'].item(),
+                            loss_output['eikonal_loss'].item(),
+                            loss_output['mask_loss'].item(),
+                            self.loss.alpha,
+                            self.scheduler.get_lr()[0]))
+
+            self.scheduler.step()
+
 if __name__ == '__main__':
     config = {'batch_size': 2, \
             'nepoch': 2000, \
             'gpu': 'auto', \
               'is_continue': False,
               'train_cameras': False,
-              'data_dir': 'data/idr',
             'out_folder_name':'exp',\
             'timestamp': 'latest',\
               'train_config_path': 'dtu_fixed_cameras.json'}
@@ -193,11 +333,5 @@ if __name__ == '__main__':
     with open(train_config_path, "r") as read_file:
         train_config = json.load(read_file)
 
-    if config['gpu'] == "auto":
-        deviceIDs = GPUtil.getAvailable(
-            order='memory', limit=1, maxLoad=0.5, maxMemory=0.5, includeNan=False, excludeID=[], excludeUUID=[])
-        gpu = deviceIDs[0]
-    else:
-        gpu = -1
-    gpu = -1 #use cpu
-    IDRTrainRunner(config, train_config,gpu_index=gpu)
+    trainrunner = IDRTrainRunner(config, train_config)
+    trainrunner.run()

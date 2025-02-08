@@ -8,7 +8,7 @@ from skimage import measure
 from PIL import Image
 from utils import rend_util
 
-def plot(model, indices, model_outputs ,pose, rgb_gt, path, epoch, img_res, plot_nimgs, max_depth, resolution):
+def plot(model, indices, model_outputs ,pose, rgb_gt, path, epoch, img_res, plot_nimgs, max_depth, resolution,device):
     # arrange data to plot
     batch_size, num_samples, _ = rgb_gt.shape
 
@@ -17,7 +17,7 @@ def plot(model, indices, model_outputs ,pose, rgb_gt, path, epoch, img_res, plot
     rgb_eval = model_outputs['rgb_values']
     rgb_eval = rgb_eval.reshape(batch_size, num_samples, 3)
 
-    depth = torch.ones(batch_size * num_samples).cuda().float() * max_depth
+    depth = torch.ones(batch_size * num_samples).to(device).float() * max_depth
     depth[network_object_mask] = rend_util.get_depth(points, pose).reshape(-1)[network_object_mask]
     depth = depth.reshape(batch_size, num_samples, 1)
     network_object_mask = network_object_mask.reshape(batch_size,-1)

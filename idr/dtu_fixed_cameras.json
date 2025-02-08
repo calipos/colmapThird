@@ -1,7 +1,7 @@
 {
 	"train":{
     "expname":"dtu_fixed_cameras",
-    "dataset_class":"datasets.scene_dataset.SceneDataset",
+    "dataset_class":"scene_dataset.SceneDataset",
     "model_class":"model.implicit_differentiable_renderer.IDRNetwork",
     "loss_class":"model.loss.IDRLoss",
     "learning_rate":1.0e-4,
@@ -23,7 +23,7 @@
     "alpha":50.0
 },
 "dataset":{
-    "data_dir":"DTU",
+    "data_dir":"data/DTU/scan40",
     "img_res":[1200, 1600],
     "scan_id":65
 },

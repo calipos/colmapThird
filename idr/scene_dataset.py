@@ -5,18 +5,18 @@ import numpy as np
 import utils.general as utils
 from utils import rend_util
 
+
 class SceneDataset(torch.utils.data.Dataset):
     """Dataset for a class of objects, where each datapoint is a SceneInstanceDataset."""
 
     def __init__(self,
-                 config,
-                 train_config,
+                 train_cameras,
+                 data_dir,
                  img_res,
-                 scan_id=0,
                  cam_file=None
                  ):
 
-        self.instance_dir = config['data_dir']
+        self.instance_dir = data_dir
 
         self.total_pixels = img_res[0] * img_res[1]
         self.img_res = img_res
@@ -24,7 +24,7 @@ class SceneDataset(torch.utils.data.Dataset):
         assert os.path.exists(self.instance_dir), "Data directory is empty"
 
         self.sampling_idx = None
-        self.train_cameras = config['train_cameras']
+        self.train_cameras = train_cameras
 
         image_dir = '{0}/image'.format(self.instance_dir)
         image_paths = sorted(utils.glob_imgs(image_dir))
@@ -38,8 +38,10 @@ class SceneDataset(torch.utils.data.Dataset):
             self.cam_file = '{0}/{1}'.format(self.instance_dir, cam_file)
 
         camera_dict = np.load(self.cam_file)
-        scale_mats = [camera_dict['scale_mat_%d' % idx].astype(np.float32) for idx in range(self.n_images)]
-        world_mats = [camera_dict['world_mat_%d' % idx].astype(np.float32) for idx in range(self.n_images)]
+        scale_mats = [camera_dict['scale_mat_%d' % idx].astype(
+            np.float32) for idx in range(self.n_images)]
+        world_mats = [camera_dict['world_mat_%d' % idx].astype(
+            np.float32) for idx in range(self.n_images)]
 
         self.intrinsics_all = []
         self.pose_all = []
@@ -111,7 +113,8 @@ class SceneDataset(torch.utils.data.Dataset):
         if sampling_size == -1:
             self.sampling_idx = None
         else:
-            self.sampling_idx = torch.randperm(self.total_pixels)[:sampling_size]
+            self.sampling_idx = torch.randperm(
+                self.total_pixels)[:sampling_size]
 
     def get_scale_mat(self):
         return np.load(self.cam_file)['scale_mat_0']
@@ -119,8 +122,10 @@ class SceneDataset(torch.utils.data.Dataset):
     def get_gt_pose(self, scaled=False):
         # Load gt pose without normalization to unit sphere
         camera_dict = np.load(self.cam_file)
-        world_mats = [camera_dict['world_mat_%d' % idx].astype(np.float32) for idx in range(self.n_images)]
-        scale_mats = [camera_dict['scale_mat_%d' % idx].astype(np.float32) for idx in range(self.n_images)]
+        world_mats = [camera_dict['world_mat_%d' % idx].astype(
+            np.float32) for idx in range(self.n_images)]
+        scale_mats = [camera_dict['scale_mat_%d' % idx].astype(
+            np.float32) for idx in range(self.n_images)]
 
         pose_all = []
         for scale_mat, world_mat in zip(scale_mats, world_mats):
@@ -137,8 +142,10 @@ class SceneDataset(torch.utils.data.Dataset):
         # get noisy initializations obtained with the linear method
         cam_file = '{0}/cameras_linear_init.npz'.format(self.instance_dir)
         camera_dict = np.load(cam_file)
-        scale_mats = [camera_dict['scale_mat_%d' % idx].astype(np.float32) for idx in range(self.n_images)]
-        world_mats = [camera_dict['world_mat_%d' % idx].astype(np.float32) for idx in range(self.n_images)]
+        scale_mats = [camera_dict['scale_mat_%d' % idx].astype(
+            np.float32) for idx in range(self.n_images)]
+        world_mats = [camera_dict['world_mat_%d' % idx].astype(
+            np.float32) for idx in range(self.n_images)]
 
         init_pose = []
         for scale_mat, world_mat in zip(scale_mats, world_mats):
@@ -146,7 +153,8 @@ class SceneDataset(torch.utils.data.Dataset):
             P = P[:3, :4]
             _, pose = rend_util.load_K_Rt_from_P(None, P)
             init_pose.append(pose)
-        init_pose = torch.cat([torch.Tensor(pose).float().unsqueeze(0) for pose in init_pose], 0).cuda()
+        init_pose = torch.cat([torch.Tensor(pose).float().unsqueeze(0)
+                              for pose in init_pose], 0).cuda()
         init_quat = rend_util.rot_to_quat(init_pose[:, :3, :3])
         init_quat = torch.cat([init_quat, init_pose[:, :3, 3]], 1)
 

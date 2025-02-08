@@ -3,7 +3,9 @@ LocalConfig.cmake
 src/colmap/util/version.cc
 build/
 install/
-
+__pycache__/
+*.py[cod]
+*$py.class
 # Custom directories
 .idea/
 .vscode
@@ -16,7 +18,11 @@ install-release/
 installmingw/
 cameraCali/data/
 cameraCali/out/
+cameraCali/imgui.ini
 data/
+idr/exp/
+idr/data/
+
 doc/_build
 vcpkg_installed/
 
@@ -80,3 +86,4 @@ Deep3d/BFM/*
 !license.txt
 !readme.txt
 !COPYING.txt
+!idr/data/DTU/scan40/*
