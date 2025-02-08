@@ -86,4 +86,7 @@ Deep3d/BFM/*
 !license.txt
 !readme.txt
 !COPYING.txt
-!idr/data/DTU/scan40/*
+!idr/data/DTU/scan40/image/*.*
+!idr/data/DTU/scan40/mask/*.*
+!idr/data/DTU/scan40/cameras.npz
+!idr/data/DTU/scan40/cameras_linear_init.npz
