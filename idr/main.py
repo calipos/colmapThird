@@ -110,7 +110,7 @@ class IDRTrainRunner():
         self.model.to(device)
 
         self.loss = utils.get_class(self.conf.get_string(
-            'train.loss_class'))(**self.conf.get_config('loss'))
+            'train.loss_class'))(**self.conf.get_config('loss'),device=device)
 
         self.lr = self.conf.get_float('train.learning_rate')
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
@@ -324,7 +324,7 @@ if __name__ == '__main__':
               'train_cameras': False,
             'out_folder_name':'exp',\
             'timestamp': 'latest',\
-              'train_config_path': 'dtu_fixed_cameras.json'}
+              'train_config_path': 'dtu_fixed_cameras_use_mask.json'}
     projectDir = os.path.dirname(os.path.abspath(__file__))
     train_config_path = os.path.join(projectDir, config['train_config_path'])
     if not os.path.exists(train_config_path):

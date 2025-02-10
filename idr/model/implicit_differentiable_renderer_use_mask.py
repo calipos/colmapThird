@@ -237,8 +237,9 @@ class IDRNetwork(nn.Module):
         view = -ray_dirs[surface_mask]
 
         rgb_values = torch.ones_like(points).float().to(self.device)
-        if differentiable_surface_points.shape[0] > 0:
-            rgb_values[surface_mask] = self.get_rbg_value(differentiable_surface_points, view)
+        # if differentiable_surface_points.shape[0] > 0:
+        #     rgb_values[surface_mask] = self.get_rbg_value(
+        #         differentiable_surface_points, view)
 
         output = {
             'points': points,
