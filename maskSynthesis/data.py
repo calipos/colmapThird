@@ -112,7 +112,7 @@ class SpaceMap:
                 self.imgHeight = object_mask.shape[0]
             if self.imgWidth < 0:
                 self.imgWidth = object_mask.shape[1]
-            # object_mask = object_mask.reshape(-1)
+            object_mask = object_mask.reshape(-1)
             self.object_masks.append(object_mask.astype(bool))
 
         for picIdx in range(self.n_images):
@@ -131,16 +131,27 @@ class SpaceMap:
 
             xyz[0, :] = xyz[0, :]*fx+cx
             xyz[1, :] = xyz[1, :]*fy+cy
+            xyz = np.round(xyz).astype(np.int32)
             xyminFlag = np.logical_and(xyz[0, :] > 0, xyz[1, :] > 0)
             xymaxFlag = np.logical_and(
                 xyz[0, :] < self.imgWidth, xyz[1, :] < self.imgHeight)
             imgRectFlag = np.logical_and(zPositive, xyminFlag)
             imgRectFlag = np.logical_and(imgRectFlag, xymaxFlag)
-            x = np.round(xyz[0, :][imgRectFlag]).astype(np.int32)
-            y = np.round(xyz[1, :][imgRectFlag]).astype(np.int32)
-            xy = np.vstack([x,y])
-            print()
-
+            x = np.round(xyz[0, :][imgRectFlag])
+            y = self.imgWidth*np.round(xyz[1, :][imgRectFlag])
+            xy = x+y
+            a = np.where(self.object_masks[picIdx][xy]==False)[0]
+            viewedPos = np.where(imgRectFlag==True)[0]
+            self.gridFlag[viewedPos][a]=False
+            self.getCloud()
+    def getCloud(self):
+        a=np.where(self.gridFlag==True)
+        x = a%self.resolutionX
+        yz = a//self.resolutionX
+        y = yz%self.resolutionY
+        z = yz//self.resolutionY
+        a=self.gridFlag.reshape([self.resolutionZ,self.resolutionY,self.resolutionX])
+        print()
 
 class SceneDataset:
     def __init__(self,
