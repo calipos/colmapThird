@@ -61,7 +61,7 @@ class SpaceMap:
             self.regionEndX = self.xSize+self.regionStartX
             self.regionEndY = self.ySize+self.regionStartY
             self.regionEndZ = self.zSize+self.regionStartZ
-        self.gridFlag = np.ones(self.resolutionX*self.resolutionY*self.resolutionZ).astype(bool)
+        self.gridFlag = np.ones(self.resolutionX*self.resolutionY*self.resolutionZ).astype(np.int16)
         self.gridCenter = np.mgrid[0:self.resolutionX,
                                    0:self.resolutionY, 0:self.resolutionZ].astype(np.float32).reshape(3, -1)+np.array([[0.5], [0.5], [0.5]]).astype(np.float32)
         self.gridCenter = self.gridCenter*self.unit + \
@@ -107,6 +107,7 @@ class SpaceMap:
 
         self.object_masks = []
         for path in mask_paths:
+            print(path)
             object_mask = utils.load_mask(path)
             if self.imgHeight < 0:
                 self.imgHeight = object_mask.shape[0]
@@ -118,15 +119,19 @@ class SpaceMap:
         for picIdx in range(self.n_images):
             intrinsics = self.intrinsics_all[picIdx]
             pose = self.pose_all[picIdx]
+            mask = self.object_masks[picIdx]
             fx = intrinsics[0, 0]
             fy = intrinsics[1, 1]
             cx = intrinsics[0, 2]
             cy = intrinsics[1, 2]
             sk = intrinsics[0, 1]
             fxfy = np.array([fx, fy]).reshape(2, -1)
-            validPos = self.gridFlag==True
-            xyz = pose.T@self.gridCenter[:, validPos]
-            zPositive = xyz[2, :]>0.01
+            validPos = np.where(self.gridFlag > 0)[0]
+            print(picIdx, '/', self.n_images, ':valid:', len(validPos))
+            pickedGridFlag = self.gridFlag[validPos]
+            xyz = np.linalg.inv(pose)@self.gridCenter[:, validPos]
+            # xyz = pose@self.gridCenter[:, validPos]
+            zPositive = xyz[2, :]>0.1
             xyz = xyz/xyz[2,:]
 
             xyz[0, :] = xyz[0, :]*fx+cx
@@ -137,21 +142,46 @@ class SpaceMap:
                 xyz[0, :] < self.imgWidth, xyz[1, :] < self.imgHeight)
             imgRectFlag = np.logical_and(zPositive, xyminFlag)
             imgRectFlag = np.logical_and(imgRectFlag, xymaxFlag)
-            x = np.round(xyz[0, :][imgRectFlag])
-            y = self.imgWidth*np.round(xyz[1, :][imgRectFlag])
+
+            if False: #out of picture
+                pickedGridFlag[imgRectFlag] = pickedGridFlag[imgRectFlag]*2
+                pickedGridFlag[pickedGridFlag > 4] = 4
+                self.gridFlag[validPos] = pickedGridFlag
+                self.getCloud(picIdx)
+                continue
+
+            x = xyz[0, :][imgRectFlag]
+            y = self.imgWidth*xyz[1, :][imgRectFlag]
             xy = x+y
-            a = np.where(self.object_masks[picIdx][xy]==False)[0]
-            viewedPos = np.where(imgRectFlag==True)[0]
-            self.gridFlag[viewedPos][a]=False
-            self.getCloud()
-    def getCloud(self):
-        a=np.where(self.gridFlag==True)
+            maskFalse  = np.where(mask[xy] == False)[0]
+            maskTrue = np.where(mask[xy] == True)[0]
+            pickedGridFlag2 = pickedGridFlag[imgRectFlag]
+            pickedGridFlag2[maskTrue] = pickedGridFlag2[maskTrue]*2
+            pickedGridFlag2[pickedGridFlag2 > 4] = 4
+            pickedGridFlag2[maskFalse] = pickedGridFlag2[maskFalse]-10
+            pickedGridFlag2[pickedGridFlag2 < -4] = -4
+
+            pickedGridFlag[imgRectFlag] = pickedGridFlag2
+            self.gridFlag[validPos] = pickedGridFlag
+        self.getCloud(100)
+    def getCloud(self,idx=0):
+        a=np.where(self.gridFlag>1)
+        xyz = self.gridCenter[0:3,a].reshape(3,-1)
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(xyz.T) 
+        o3d.io.write_point_cloud("a"+str(idx)+".pcd", pcd)
+        return 1
         x = a%self.resolutionX
         yz = a//self.resolutionX
         y = yz%self.resolutionY
         z = yz//self.resolutionY
-        a=self.gridFlag.reshape([self.resolutionZ,self.resolutionY,self.resolutionX])
-        print()
+        x = x*self.unit+self.regionStartX
+        y = y*self.unit+self.regionStartY
+        z = z*self.unit+self.regionStartZ
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(np.vstack([x,y,z]).T)
+        o3d.io.write_point_cloud("a"+str(idx)+".pcd", pcd)
+        # exit(-1)
 
 class SceneDataset:
     def __init__(self,
