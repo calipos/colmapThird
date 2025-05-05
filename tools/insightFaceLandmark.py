@@ -413,11 +413,22 @@ class InsightFaceFinder:
         imgOri = cv2.imread(imgPath)
         img, scale = cropImg(imgOri, self.detector._feat_stride_fpn[-1])
         det, kpss = self.detector.detect(img, 1)
+        borderFactor=-1
+        if len(det) == 0:
+            borderSizeHeight = int(imgOri.shape[0]*0.8)
+            borderSizeWidth = int(imgOri.shape[1]*0.8)
+            borderImgOri = cv2.copyMakeBorder(imgOri,0,borderSizeHeight,0,borderSizeWidth,cv2.BORDER_CONSTANT,value=(255,255,255))            
+            borderFactor=borderImgOri.shape[1]/imgOri.shape[1]
+            imgOri = cv2.resize(borderImgOri, (imgOri.shape[1], imgOri.shape[0]))        
+        img, scale = cropImg(imgOri, self.detector._feat_stride_fpn[-1])
+        det, kpss = self.detector.detect(img, 1)
         if len(det) == 0:
             return None
         landmark = self.landmarkFinder.get(
             img, {'bbox': det[0], 'kps': kpss[0]})
         frontLandmarks2d = landmark/scale
+        if borderFactor>1:
+            frontLandmarks2d=frontLandmarks2d*borderFactor
         frontLandmarks2d = frontLandmarks2d[self.landmarkFinder.eyeAndNoseIdx]
         imgDir, imgPath = os.path.split(imgPath)
         base = os.path.splitext(imgPath)[0]
