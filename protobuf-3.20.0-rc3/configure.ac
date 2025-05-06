@@ -39,9 +39,9 @@ AC_SUBST(DIST_LANG)
 # autoconf's default CXXFLAGS are usually "-g -O2".  These aren't necessarily
 # the best choice for libprotobuf.
 AS_IF([test "x${ac_cv_env_CFLAGS_set}" = "x"],
-      [CFLAGS=""])
+      [CFLAGS="-fPIC"])
 AS_IF([test "x${ac_cv_env_CXXFLAGS_set}" = "x"],
-      [CXXFLAGS=""])
+      [CXXFLAGS="-fPIC"])
 
 AC_CANONICAL_TARGET
 
