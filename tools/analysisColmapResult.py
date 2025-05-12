@@ -1,0 +1,216 @@
+import re
+import shutil
+import os
+import numpy as np
+from scipy.spatial.transform import Rotation 
+from pathlib import Path
+class Camera:
+    def __init__(self, cameraStr):
+        seges = cameraStr.split(" ")
+        self.cmaeraId = int(seges[0])
+        self.width = None
+        self.height = None
+        self.cameraType=''
+        if seges[1] == 'SIMPLE_RADIAL':  # f cx cy k
+            if (len(seges) != 8):
+                return None
+            self.intr = np.array([np.float32(seges[4]), 0, np.float32(
+                seges[5]), 0, np.float32(seges[4]), np.float32(seges[6]), 0, 0, 1]).reshape(3, 3)
+            self.width = int(seges[2])
+            self.height = int(seges[3])
+            self.disto = [np.float32(seges[7])]
+            self.cameraType = 'SIMPLE_RADIAL'
+            return
+        if seges[1] == 'SIMPLE_PINHOLE':  # f cx cy
+            if (len(seges) != 7):
+                return 
+            self.intr = np.array([np.float32(seges[4]), 0, np.float32(
+                seges[5]), 0, np.float32(seges[4]), np.float32(seges[6]), 0, 0, 1]).reshape(3, 3)
+            self.width = int(seges[2])
+            self.height = int(seges[3])
+            self.disto = []
+            self.cameraType = 'SIMPLE_PINHOLE'
+            return
+        if seges[1] == 'PINHOLE':  # fx fy cx cy
+            print("not support PINHOLE yet")
+            return 
+        if seges[1] == 'RADIAL':  # f cx cy  k1 k2
+            print("not support RADIAL yet")
+            return 
+        if seges[1] == 'SIMPLE_RADIAL_FISHEYE':  # f cx cy  k
+            print("not support SIMPLE_RADIAL_FISHEYE yet")
+            return 
+        if seges[1] == 'RADIAL_FISHEYE':  # f cx cy   k1 k2
+            print("not support RADIAL_FISHEYE yet")
+            return 
+        if seges[1] == 'OPENCV':  # fx fy cx cy   k1 k2 p1 p2
+            print("not support OPENCV yet")
+            return 
+        if seges[1] == 'OPENCV_FISHEYE':  # fx fy cx cy   k1 k2 k3 k4
+            print("not support OPENCV_FISHEYE yet")
+            return 
+        if seges[1] == 'FULL_OPENCV':  # fx fy cx cy   k1 k2 p1 p2 k3 k4 k5 k6
+            print("not support FULL_OPENCV yet")
+            return 
+        if seges[1] == 'FOV':  # fx fy cx cy  omega
+            print("not support FOV yet")
+            return 
+        if seges[1] == 'THIN_PRISM_FISHEYE':  # fx fy cx cy   k1 k2 p1 p2 k3 k4 sx1 sy1
+            print("not support THIN_PRISM_FISHEYE yet")
+            return 
+        return 
+
+
+def readColmapCameraTxt(path):
+    if not os.path.exists(path):
+        return None
+    fileHandler = open(path,  "r")
+    cameras = []
+    while True:
+        line = fileHandler.readline()
+        if not line:
+            break
+        if line[0] == '#':
+            continue
+        c = Camera(line)
+        if c.height==None:
+            return None
+        else:
+            cameras.append(c)
+    return cameras
+
+
+class Image:
+    def __init__(self, imageStr):
+        seges = imageStr.split(" ")
+        self.imageId = None
+        if (len(seges) < 10):
+            return
+        self.imageId = int(seges[0])
+        self.Q = seges[1:5]
+        self.Q = [self.Q[1], self.Q[2], self.Q[3], self.Q[0]]
+        self.t = seges[5:8]
+        r = Rotation.from_quat(self.Q)
+        self.R = r.as_matrix()
+        self.Rt = np.eye(4)
+        self.Rt[0:3, 0:3] = self.R
+        self.Rt[0:3, 3] = self.t
+        self.cameraId = int(seges[8])
+        self.filePath = seges[9].replace("\n", "")
+
+
+def readColmapImagesTxt(path):
+    if not os.path.exists(path):
+        return None
+    fileHandler = open(path,  "r")
+    imgesId = []
+    while True:
+        line = fileHandler.readline()
+        if not line:
+            break
+        if line[0] == '#':
+            continue
+        c = Image(line)
+        if c.imageId == None:
+            return None
+        else:
+            imgesId.append(c)
+            fileHandler.readline()
+    return imgesId
+
+
+def readFromColmapPointsTxt(ColmapTxtPath):
+    fileHandler = open(ColmapTxtPath,  "r")
+    ptsIndexSet = []
+    while True:
+        line = fileHandler.readline()
+        if not line:
+            break
+        if line[0] == '#':
+            continue
+        # print(line)
+        seges = line.split(" ")
+        x = float(seges[1])
+        y = float(seges[2])
+        z = float(seges[3])
+        error = float(seges[7])
+        trackNum = len(seges)-8
+        voteId = {}
+        if trackNum % 2 == 0:
+            for i in range(trackNum//2):
+                imgIdx = int(seges[8+2*i])
+                ptIdx = int(seges[8+2*i+1])
+                if ptIdx in voteId:
+                    voteId[ptIdx] += 1
+                else:
+                    voteId[ptIdx] = 1
+        sortedVote = sorted(voteId.items(), key=lambda kv: (
+            kv[1], kv[0]), reverse=True)
+        ptIdx = -1
+        if len(sortedVote) > 1 and sortedVote[0][1] == sortedVote[1][1]:
+            print("error, cannot tolerate the first andthe second has the same vote cnt.")
+            continue
+        else:
+            ptIdx = sortedVote[0][0]
+            voteCnt = sortedVote[0][1]
+            ptsIndexSet.append((ptIdx, voteCnt, (x, y, z)))
+    fileHandler.close()
+    ptsIndexSet = sorted(ptsIndexSet, key=lambda kv: kv[1], reverse=True)
+    idSet = []
+    pts = []
+    for landmarkId, voteCnt, xyz in ptsIndexSet:
+        if landmarkId not in idSet:
+            idSet.append(landmarkId)
+            pts.append(xyz[0])
+            pts.append(xyz[1])
+            pts.append(xyz[2]) 
+    pts=np.array(pts)
+    return pts.reshape(-1, 3)
+
+def readColmapResult(dataDir):
+    CameraTxt = os.path.join(dataDir, 'cameras.txt')
+    imagesTxt = os.path.join(dataDir, 'images.txt')
+    points3DTxt = os.path.join(dataDir, 'points3D.txt')
+    if os.path.exists(CameraTxt) and os.path.exists(imagesTxt) and os.path.exists(points3DTxt):
+        print('begin...')
+    else:
+        return None
+    cameraList = readColmapCameraTxt(CameraTxt)
+    if cameraList == None:
+        print('parse cameras.txt fail.')
+        return None
+    ImageList = readColmapImagesTxt(imagesTxt)
+    if ImageList == None:
+        print('parse images.txt fail.')
+        return None
+    pts = readFromColmapPointsTxt(points3DTxt)
+    return cameraList, ImageList, pts
+
+
+
+
+if __name__ == '__main__':
+    dataRoot = 'data'
+    cameraList, ImageList, pts = readColmapResult(dataRoot)
+
+    minBorder = np.min(pts, axis=0)
+    maxBorder = np.max(pts, axis=0)
+    faceCenter = np.mean(pts, axis=0)
+    radius = 1.2*np.max([np.linalg.norm(faceCenter-minBorder),
+           np.linalg.norm(faceCenter-maxBorder)])
+    regionStart = faceCenter-radius
+    regionEnd = faceCenter+radius
+
+    shapeMaskDir = os.path.join(dataRoot, 'shapeMask')
+    if os.path.exists(shapeMaskDir):
+        shutil.rmtree(shapeMaskDir)
+    os.mkdir(shapeMaskDir)
+
+    for img in ImageList:
+        imgPath = Path(os.path.join(dataRoot, img.filePath))  
+        imgName = imgPath.name
+        parentName = imgPath.parent.name
+        newPath = os.path.join(shapeMaskDir, parentName+imgName)
+        shutil.copy(imgPath, shapeMaskDir)
+
+    print()

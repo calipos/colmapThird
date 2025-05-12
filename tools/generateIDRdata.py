@@ -76,6 +76,7 @@ def readColmapCameraTxt(path):
         Camera(line)
     return imgesId
 
+
 if __name__ == '__main__':
     dataRoot = 'data'
     idrDate = os.path.join(dataRoot, 'idr')
