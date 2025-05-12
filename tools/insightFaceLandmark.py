@@ -409,7 +409,7 @@ class InsightFaceFinder:
         self.detector = FacialDetect(faceParamPath)
         self.landmarkFinder = Landmark(landmarkParamPath)
 
-    def proc(self, imgPath):
+    def proc(self, imgPath,landmarkType=writeLabelme.LandmarkType.EyeAndNoise):
         imgOri = cv2.imread(imgPath)
         img, scale = cropImg(imgOri, self.detector._feat_stride_fpn[-1])
         det, kpss = self.detector.detect(img, 1)
@@ -429,7 +429,10 @@ class InsightFaceFinder:
         frontLandmarks2d = landmark/scale
         if borderFactor>1:
             frontLandmarks2d=frontLandmarks2d*borderFactor
-        frontLandmarks2d = frontLandmarks2d[self.landmarkFinder.eyeAndNoseIdx]
+        if landmarkType == writeLabelme.LandmarkType.EyeAndNoise:
+            frontLandmarks2d = frontLandmarks2d[self.landmarkFinder.eyeAndNoseIdx]
+        else:
+            frontLandmarks2d = frontLandmarks2d
         imgDir, imgPath = os.path.split(imgPath)
         base = os.path.splitext(imgPath)[0]
         jsonPath = f"{base}.{'json'}"

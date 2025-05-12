@@ -4,6 +4,11 @@ import os
 import cv2
 import numpy as np
 import time
+from enum import Enum
+
+class LandmarkType(Enum):
+    All = 1
+    EyeAndNoise = 2 
 def encodeImgToBase64(cv_mat, fmt):
     image = cv2.imencode(
         fmt, cv_mat, [cv2.IMWRITE_JPEG_QUALITY, 75])[1]

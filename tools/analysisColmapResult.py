@@ -4,6 +4,10 @@ import os
 import numpy as np
 from scipy.spatial.transform import Rotation 
 from pathlib import Path
+import figureMediapipeKeyPts
+import dlibLandMark
+import insightFaceLandmark
+import cv2
 class Camera:
     def __init__(self, cameraStr):
         seges = cameraStr.split(" ")
@@ -206,11 +210,41 @@ if __name__ == '__main__':
         shutil.rmtree(shapeMaskDir)
     os.mkdir(shapeMaskDir)
 
+ 
+    landmarkFinder=None
+    landmarkType = 'insightface'
+
+    if landmarkType=='dlib':
+        faceParamPath = 'models/mmod_human_face_detector.dat'
+        landmarkParamPath = 'models/shape_predictor_68_face_landmarks.dat'
+        landmarkFinder = dlibLandMark.DlibFinder(
+            faceParamPath, landmarkParamPath)
+
+    if landmarkType == 'mediapipe':
+        paramPath = 'models/face_landmarker_v2_with_blendshapes.task'
+        landmarkFinder = figureMediapipeKeyPts.MediapipeFinder(paramPath)
+
+    if landmarkType == 'insightface':
+        faceParamPath = 'models/buffalo_l/det_10g.onnx'
+        landmarkParamPath = 'models/buffalo_l/2d106det.onnx'
+        landmarkFinder = insightFaceLandmark.InsightFaceFinder(
+            faceParamPath, landmarkParamPath)
+
+    if landmarkFinder == None:
+        print('landmarkFinder == None')
+        exit(-1) 
+
     for img in ImageList:
-        imgPath = Path(os.path.join(dataRoot, img.filePath))  
+        imgPath = os.path.join(dataRoot, img.filePath)
+        landmarkFinder.proc(imgPath)
+        
+        imgPath = Path(imgPath)  
         imgName = imgPath.name
         parentName = imgPath.parent.name
         newPath = os.path.join(shapeMaskDir, parentName+imgName)
-        shutil.copy(imgPath, shapeMaskDir)
+
+
+        
+        shutil.copy(imgPath, newPath)
 
     print()
