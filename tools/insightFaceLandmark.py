@@ -7,8 +7,8 @@ import onnx
 import onnxruntime
 import pickle
 from skimage import transform as trans
+import landmarkShapeType
 import writeLabelme
-
 import os.path as osp
 
 import numpy as np
@@ -304,7 +304,9 @@ class Landmark:
         self.model_file = model_file
         self.session = session
         #92==88  34==38
+        self.allMarkIdx = [x for x in range(106)]
         self.eyeAndNoseIdx = [33]+[x for x in range(35,38)]+[x for x in range(39,52)]+[x for x in range(72,88)]+[x for x in range(89,92)]+[x for x in range(93,106)]
+        self.faceContourIdx = [33]+[x for x in range(35,38)]+[x for x in range(39,52)]+[x for x in range(72,88)]+[x for x in range(89,92)]+[x for x in range(93,106)]
         find_sub = False
         find_mul = False
         model = onnx.load(self.model_file)
@@ -409,7 +411,7 @@ class InsightFaceFinder:
         self.detector = FacialDetect(faceParamPath)
         self.landmarkFinder = Landmark(landmarkParamPath)
 
-    def proc(self, imgPath,landmarkType=writeLabelme.LandmarkType.EyeAndNoise):
+    def proc(self, imgPath, landmarkShapeType_=landmarkShapeType.LandmarkShapeType.EyeAndNoise):
         imgOri = cv2.imread(imgPath)
         img, scale = cropImg(imgOri, self.detector._feat_stride_fpn[-1])
         det, kpss = self.detector.detect(img, 1)
@@ -423,22 +425,29 @@ class InsightFaceFinder:
         img, scale = cropImg(imgOri, self.detector._feat_stride_fpn[-1])
         det, kpss = self.detector.detect(img, 1)
         if len(det) == 0:
-            return None
+            return -1
         landmark = self.landmarkFinder.get(
             img, {'bbox': det[0], 'kps': kpss[0]})
         frontLandmarks2d = landmark/scale
         if borderFactor>1:
             frontLandmarks2d=frontLandmarks2d*borderFactor
-        if landmarkType == writeLabelme.LandmarkType.EyeAndNoise:
+        if landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.EyeAndNoise:
             frontLandmarks2d = frontLandmarks2d[self.landmarkFinder.eyeAndNoseIdx]
+        elif landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.Contour:
+            hull = cv2.convexHull(frontLandmarks2d)
+            frontLandmarks2d = hull.squeeze()
         else:
             frontLandmarks2d = frontLandmarks2d
         imgDir, imgPath = os.path.split(imgPath)
         base = os.path.splitext(imgPath)[0]
         jsonPath = f"{base}.{'json'}"
-        writeLabelme.writeLabelmeJson(imgDir, imgPath, jsonPath,
-                                      frontLandmarks2d, 'insightface')
-
+        if landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.EyeAndNoise:
+            writeLabelme.writeLabelmeJson(imgDir, imgPath, jsonPath,
+                                          frontLandmarks2d, 'insightface')
+        elif landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.Contour:
+            writeLabelme.writeLabelmeJson(imgDir, imgPath, jsonPath,
+                                          frontLandmarks2d, 'insightface', writeLabelme.LabelmeShapeType.HULL)
+        return 0
     def figureIdrMask(self, imgPath,idrDir):
         outImgDir = os.path.join(idrDir, 'image')
         outMaskDir = os.path.join(idrDir, 'mask')
@@ -465,27 +474,46 @@ class InsightFaceFinder:
 
 if __name__ == '__main__':
     print(os.getcwd())
-    detector = FacialDetect('models/buffalo_l/det_10g.onnx')
-    landmarkFinder = Landmark('models/buffalo_l/2d106det.onnx')
+
+    faceParamPath = 'models/buffalo_l/det_10g.onnx'
+    landmarkParamPath = 'models/buffalo_l/2d106det.onnx'
+    landmarkFinder = InsightFaceFinder(faceParamPath, landmarkParamPath)
+
     imgOri = cv2.imread('data/c.jpg')
-    img, scale = cropImg(imgOri, detector._feat_stride_fpn[-1])
-    det, kpss = detector.detect(img, 1)
-    # if len(det)==0:
-    #     return None
-    landmark = landmarkFinder.get(img, {'bbox': det[0], 'kps': kpss[0]})
-    landmark = landmark/scale
+    imgCopy = cv2.imread('data/c.jpg')
+    imgCopy = np.ones(imgOri.shape, np.uint8)*255
+    img, scale = cropImg(imgOri, landmarkFinder.detector._feat_stride_fpn[-1])
+    det, kpss = landmarkFinder.detector.detect(img, 1)
+    borderFactor = -1
+    if len(det) == 0:
+        borderSizeHeight = int(imgOri.shape[0]*0.8)
+        borderSizeWidth = int(imgOri.shape[1]*0.8)
+        borderImgOri = cv2.copyMakeBorder(
+            imgOri, 0, borderSizeHeight, 0, borderSizeWidth, cv2.BORDER_CONSTANT, value=(255, 255, 255))
+        borderFactor = borderImgOri.shape[1]/imgOri.shape[1]
+        imgOri = cv2.resize(
+            borderImgOri, (imgOri.shape[1], imgOri.shape[0]))
+    img, scale = cropImg(imgOri, landmarkFinder.detector._feat_stride_fpn[-1])
+    det, kpss = landmarkFinder.detector.detect(img, 1)
+    if len(det) == 0:
+        exit(0)  
+    landmark = landmarkFinder.landmarkFinder.get(
+        img, {'bbox': det[0], 'kps': kpss[0]})
+    frontLandmarks2d = landmark/scale
+    if borderFactor > 1:
+        frontLandmarks2d = frontLandmarks2d*borderFactor
+    
    
     fontFace = cv2.FONT_HERSHEY_SIMPLEX
     fontScale = 0.25
     textColor = (0, 0, 0)  # 蓝色文本
     thickness = 1
-
-    tim = imgOri.copy()
+ 
     color = (200, 160, 75)
-    lmk = np.round(landmark).astype(np.int32)
-    for i in landmarkFinder.eyeAndNoseIdx:
-        cv2.circle(tim, lmk[i], 1, color, 1, cv2.LINE_AA)
+    lmk = np.round(frontLandmarks2d).astype(np.int32)
+    for i in landmarkFinder.landmarkFinder.allMarkIdx:
+        cv2.circle(imgCopy, lmk[i], 1, color, 1, cv2.LINE_AA)
         text = str(i)
-        cv2.putText(tim, text, lmk[i], fontFace,
+        cv2.putText(imgCopy, text, lmk[i], fontFace,
                     fontScale, textColor, thickness)
-    cv2.imwrite('c.jpg', tim)
+    cv2.imwrite('c.jpg', imgCopy)

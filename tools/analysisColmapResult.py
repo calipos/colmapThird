@@ -6,12 +6,13 @@ from scipy.spatial.transform import Rotation
 from pathlib import Path
 import figureMediapipeKeyPts
 import dlibLandMark
+import landmarkShapeType
 import insightFaceLandmark
 import cv2
 class Camera:
     def __init__(self, cameraStr):
         seges = cameraStr.split(" ")
-        self.cmaeraId = int(seges[0])
+        self.cameraId = int(seges[0])
         self.width = None
         self.height = None
         self.cameraType=''
@@ -69,7 +70,7 @@ def readColmapCameraTxt(path):
     if not os.path.exists(path):
         return None
     fileHandler = open(path,  "r")
-    cameras = []
+    cameras = {}
     while True:
         line = fileHandler.readline()
         if not line:
@@ -80,7 +81,7 @@ def readColmapCameraTxt(path):
         if c.height==None:
             return None
         else:
-            cameras.append(c)
+            cameras[c.cameraId] = c
     return cameras
 
 
@@ -179,8 +180,8 @@ def readColmapResult(dataDir):
         print('begin...')
     else:
         return None
-    cameraList = readColmapCameraTxt(CameraTxt)
-    if cameraList == None:
+    cameraDict = readColmapCameraTxt(CameraTxt)
+    if cameraDict == None:
         print('parse cameras.txt fail.')
         return None
     ImageList = readColmapImagesTxt(imagesTxt)
@@ -188,14 +189,14 @@ def readColmapResult(dataDir):
         print('parse images.txt fail.')
         return None
     pts = readFromColmapPointsTxt(points3DTxt)
-    return cameraList, ImageList, pts
+    return cameraDict, ImageList, pts
 
 
 
 
 if __name__ == '__main__':
     dataRoot = 'data'
-    cameraList, ImageList, pts = readColmapResult(dataRoot)
+    cameraDict, ImageList, pts = readColmapResult(dataRoot)
 
     minBorder = np.min(pts, axis=0)
     maxBorder = np.max(pts, axis=0)
@@ -234,17 +235,25 @@ if __name__ == '__main__':
         print('landmarkFinder == None')
         exit(-1) 
 
+    cam_file = {}
+    cam_file['regionStart'] = regionStart
+    cam_file['regionEnd'] = regionEnd
     for img in ImageList:
         imgPath = os.path.join(dataRoot, img.filePath)
-        landmarkFinder.proc(imgPath)
-        
         imgPath = Path(imgPath)  
         imgName = imgPath.name
         parentName = imgPath.parent.name
         newPath = os.path.join(shapeMaskDir, parentName+imgName)
-
-
-        
         shutil.copy(imgPath, newPath)
-
+        findFaceHullRet = landmarkFinder.proc(
+            newPath, landmarkShapeType.LandmarkShapeType.Contour)
+        if findFaceHullRet<0:
+            print("nit find the face hull,delete -> ", newPath)
+            os.remove(newPath)
+        else:
+            cam_file[parentName+imgName+"@Rt"] = img.Rt
+            cam_file[parentName+imgName +
+                    "@intr"] = cameraDict[img.cameraId].intr
+    np.save(os.path.join(shapeMaskDir, 'cam_file.npy'),
+             cam_file)
     print()

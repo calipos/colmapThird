@@ -1,10 +1,12 @@
+import sys
+sys.path.insert(0, sys.path[0]+"/../tools")
+import readLabelme
 import os
 import torch
 import numpy as np
 import os
 import utils
 import open3d as o3d
-
 
 class SpaceMap:
     def __init__(self, unit, regionStart=None, regionEnd=None):
@@ -42,7 +44,7 @@ class SpaceMap:
                 regionEnd-regionStart) > 0., "Data directory is empty"
             self.xSize = regionEnd[0]-regionStart[0]
             self.ySize = regionEnd[1]-regionStart[1]
-            self.zSize = regionEnd[2]-regionStart[1]
+            self.zSize = regionEnd[2]-regionStart[2]
             self.maxUint64 = np.iinfo(np.uint64).max
             resolution = np.uint64(
                 np.power(self.maxUint64/self.zSize/self.zSize*self.xSize*self.ySize, 0.333))
@@ -69,6 +71,96 @@ class SpaceMap:
                      self.regionStartY], [self.regionStartZ]])
         self.gridCenter = np.vstack(
             [self.gridCenter, np.ones([1, self.gridCenter.shape[1]]).astype(np.float32)])
+
+    def inputData2(self, data_dir, cam_file):
+        self.instance_dir = data_dir
+        assert os.path.exists(self.instance_dir), "Data directory is empty"
+        assert os.path.exists(cam_file), "cam_file is empty"
+        self.camera_dict = np.load(cam_file, allow_pickle=True).item()
+
+        Rts = {}
+        intrs = {}
+        jsonPaths = {}
+        imgPaths = {}
+        for id in self.camera_dict.keys():
+            if id.find('@')>0:
+                imgName, Data = id.split('@')
+                jsonPath = os.path.join(
+                    data_dir, imgName[0:imgName.rfind('.')]+'.json')
+                imgPath = os.path.join(data_dir, imgName)
+                assert os.path.exists(jsonPath), "jsonPath is empty"
+                assert os.path.exists(imgPath), "imgPath is empty"
+                jsonPaths[imgName] = jsonPath
+                imgPaths[imgName] = imgPath
+                if Data == 'Rt':
+                    Rts[imgName] = self.camera_dict[id]
+                if Data == 'intr':
+                    intrs[imgName] = self.camera_dict[id]
+        assert len(Rts) == len(intrs) and len(Rts) == len(
+            jsonPaths) and len(Rts) == len(
+            imgPaths) and len(Rts) > 0, "npy broke"
+
+        self.n_images = len(Rts)
+
+  
+
+
+        rgb_images = []
+        picIdx=0
+        for k in imgPaths.keys():
+            rgb = utils.load_rgb(imgPaths[k])
+            rgb = rgb.reshape(3, -1).transpose(1, 0)
+            rgb_images.append(rgb.astype(np.float32))
+            object_mask = readLabelme.readLabelmeMask(jsonPaths[k])
+            mask = object_mask.astype(bool)
+        
+            intrinsics = intrs[k]
+            pose = Rts[k]
+            fx = intrinsics[0, 0]
+            fy = intrinsics[1, 1]
+            cx = intrinsics[0, 2]
+            cy = intrinsics[1, 2]
+            sk = intrinsics[0, 1]
+            fxfy = np.array([fx, fy]).reshape(2, -1)
+            validPos = np.where(self.gridFlag > 0)[0]
+            print(picIdx, '/', self.n_images, ':valid:', len(validPos))
+            picIdx+=1
+            pickedGridFlag = self.gridFlag[validPos]
+            xyz = np.linalg.inv(pose)@self.gridCenter[:, validPos]
+            # xyz = pose@self.gridCenter[:, validPos]
+            zPositive = xyz[2, :] > 0.1
+            xyz = xyz/xyz[2, :]
+
+            xyz[0, :] = xyz[0, :]*fx+cx
+            xyz[1, :] = xyz[1, :]*fy+cy
+            xyz = np.round(xyz).astype(np.int32)
+            xyminFlag = np.logical_and(xyz[0, :] > 0, xyz[1, :] > 0)
+            xymaxFlag = np.logical_and(
+                xyz[0, :] < self.imgWidth, xyz[1, :] < self.imgHeight)
+            imgRectFlag = np.logical_and(zPositive, xyminFlag)
+            imgRectFlag = np.logical_and(imgRectFlag, xymaxFlag)
+
+            if False:  # out of picture
+                pickedGridFlag[imgRectFlag] = pickedGridFlag[imgRectFlag]*2
+                pickedGridFlag[pickedGridFlag > 4] = 4
+                self.gridFlag[validPos] = pickedGridFlag
+                self.getCloud(picIdx)
+                continue
+
+            x = xyz[0, :][imgRectFlag]
+            y = self.imgWidth*xyz[1, :][imgRectFlag]
+            xy = x+y
+            maskFalse = np.where(mask[xy] == False)[0]
+            maskTrue = np.where(mask[xy] == True)[0]
+            pickedGridFlag2 = pickedGridFlag[imgRectFlag]
+            pickedGridFlag2[maskTrue] = pickedGridFlag2[maskTrue]*2
+            pickedGridFlag2[pickedGridFlag2 > 4] = 4
+            pickedGridFlag2[maskFalse] = pickedGridFlag2[maskFalse]-10
+            pickedGridFlag2[pickedGridFlag2 < -4] = -4
+
+            pickedGridFlag[imgRectFlag] = pickedGridFlag2
+            self.gridFlag[validPos] = pickedGridFlag
+        self.getCloud(100)
     def inputData(self, data_dir, cam_file=None):
         self.instance_dir = data_dir
         assert os.path.exists(self.instance_dir), "Data directory is empty"

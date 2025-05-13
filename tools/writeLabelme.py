@@ -6,16 +6,19 @@ import numpy as np
 import time
 from enum import Enum
 
-class LandmarkType(Enum):
-    All = 1
-    EyeAndNoise = 2 
+
+class LabelmeShapeType(Enum):
+    POINT = 1
+    HULL = 2
+
+
 def encodeImgToBase64(cv_mat, fmt):
     image = cv2.imencode(
         fmt, cv_mat, [cv2.IMWRITE_JPEG_QUALITY, 75])[1]
     return base64.b64encode(image)
 
 
-def writeLabelmeJson(imgDir, imgPath, jsonPath, frontLandmarks2d,keyType):
+def writeLabelmeJson(imgDir, imgPath, jsonPath, frontLandmarks2d, keyType, shapeType=LabelmeShapeType.POINT):
     time0_start = time.time()
     pts = np.array(frontLandmarks2d)
     time0_end = time.time()
@@ -28,11 +31,21 @@ def writeLabelmeJson(imgDir, imgPath, jsonPath, frontLandmarks2d,keyType):
 
     time2_start = time.time()
     shapes = []
-    for i, pt in enumerate(pts):
-        ptSerialize = np.array([[pt[0], pt[1]]])
-        ptSerialize = ptSerialize.tolist()
-        shape = {"label": keyType+'_' + str(i), "points": ptSerialize, "group_id": "",
-                 "description": "", "shape_type": "point", "flags": {}, "mask": ""}
+    if shapeType == LabelmeShapeType.POINT:
+        for i, pt in enumerate(pts):
+            ptSerialize = np.array([[pt[0], pt[1]]])
+            ptSerialize = ptSerialize.tolist()
+            shape = {"label": keyType+'_' + str(i), "points": ptSerialize, "group_id": "",
+                    "description": "", "shape_type": "point", "flags": {}, "mask": ""}
+            shapes.append(shape)
+    elif shapeType == LabelmeShapeType.HULL:
+        points = []
+        for i, pt in enumerate(pts):
+            ptSerialize = np.array([pt[0], pt[1]])
+            ptSerialize = ptSerialize.tolist()
+            points.append(ptSerialize)
+        shape = {"label": keyType, "points": points, "group_id": "",
+                    "description": "", "shape_type": "point", "flags": {}, "mask": ""}
         shapes.append(shape)
     data = {'version': '5.4.1', "flags": {}, "imagePath": imgPath, "imageData": str(base64_data, encoding="ascii"),
             'imageHeight': cv_mat .shape[0], 'imageWidth': cv_mat .shape[1], "shapes": shapes}
