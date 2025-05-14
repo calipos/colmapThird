@@ -411,7 +411,7 @@ class InsightFaceFinder:
         self.detector = FacialDetect(faceParamPath)
         self.landmarkFinder = Landmark(landmarkParamPath)
 
-    def proc(self, imgPath, landmarkShapeType_=landmarkShapeType.LandmarkShapeType.EyeAndNoise):
+    def proc(self, imgPath, landmarkShapeType_=landmarkShapeType.LandmarkShapeType.EyeAndNoise,writeJson=True):
         imgOri = cv2.imread(imgPath)
         img, scale = cropImg(imgOri, self.detector._feat_stride_fpn[-1])
         det, kpss = self.detector.detect(img, 1)
@@ -425,7 +425,7 @@ class InsightFaceFinder:
         img, scale = cropImg(imgOri, self.detector._feat_stride_fpn[-1])
         det, kpss = self.detector.detect(img, 1)
         if len(det) == 0:
-            return -1
+            return None
         landmark = self.landmarkFinder.get(
             img, {'bbox': det[0], 'kps': kpss[0]})
         frontLandmarks2d = landmark/scale
@@ -440,14 +440,15 @@ class InsightFaceFinder:
             frontLandmarks2d = frontLandmarks2d
         imgDir, imgPath = os.path.split(imgPath)
         base = os.path.splitext(imgPath)[0]
-        jsonPath = f"{base}.{'json'}"
-        if landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.EyeAndNoise:
-            writeLabelme.writeLabelmeJson(imgDir, imgPath, jsonPath,
-                                          frontLandmarks2d, 'insightface')
-        elif landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.Contour:
-            writeLabelme.writeLabelmeJson(imgDir, imgPath, jsonPath,
-                                          frontLandmarks2d, 'insightface', writeLabelme.LabelmeShapeType.HULL)
-        return 0
+        if writeJson==True:
+            jsonPath = f"{base}.{'json'}"
+            if landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.EyeAndNoise:
+                writeLabelme.writeLabelmeJson(imgDir, imgPath, jsonPath,
+                                            frontLandmarks2d, 'insightface')
+            elif landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.Contour:
+                writeLabelme.writeLabelmeJson(imgDir, imgPath, jsonPath,
+                                            frontLandmarks2d, 'insightface', writeLabelme.LabelmeShapeType.HULL)
+        return frontLandmarks2d
     def figureIdrMask(self, imgPath,idrDir):
         outImgDir = os.path.join(idrDir, 'image')
         outMaskDir = os.path.join(idrDir, 'mask')

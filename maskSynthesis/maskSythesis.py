@@ -14,5 +14,4 @@ if __name__=='__main__':
     cam_info = np.load(cam_file, allow_pickle=True).item()
     a = data.SpaceMap(0.005, cam_info['regionStart'], cam_info['regionEnd'])
     a.inputData2('data/shapeMask', cam_file)
-    a.getCloud()
     exit(-1)

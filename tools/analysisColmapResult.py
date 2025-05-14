@@ -246,11 +246,8 @@ if __name__ == '__main__':
         newPath = os.path.join(shapeMaskDir, parentName+imgName)
         shutil.copy(imgPath, newPath)
         findFaceHullRet = landmarkFinder.proc(
-            newPath, landmarkShapeType.LandmarkShapeType.Contour)
-        if findFaceHullRet<0:
-            print("nit find the face hull,delete -> ", newPath)
-            os.remove(newPath)
-        else:
+            newPath, landmarkShapeType.LandmarkShapeType.Contour, writeJson = False)
+        if isinstance(findFaceHullRet, np.ndarray):
             cam_file[parentName+imgName+"@Rt"] = img.Rt
             cam_file[parentName+imgName +
                      "@intr"] = cameraDict[img.cameraId].intr
@@ -258,6 +255,9 @@ if __name__ == '__main__':
                      "@h"] = cameraDict[img.cameraId].height
             cam_file[parentName+imgName +
                      "@w"] = cameraDict[img.cameraId].width
+        else:
+            print("nit find the face hull,delete -> ", newPath)
+            os.remove(newPath)
     np.save(os.path.join(shapeMaskDir, 'cam_file.npy'),
              cam_file)
     print()
