@@ -82,6 +82,8 @@ class SpaceMap:
         intrs = {}
         jsonPaths = {}
         imgPaths = {}
+        imgHeights = {}
+        imgWidths = {}
         for id in self.camera_dict.keys():
             if id.find('@')>0:
                 imgName, Data = id.split('@')
@@ -96,6 +98,10 @@ class SpaceMap:
                     Rts[imgName] = self.camera_dict[id]
                 if Data == 'intr':
                     intrs[imgName] = self.camera_dict[id]
+                if Data == 'h':
+                    imgHeights[imgName] = self.camera_dict[id]
+                if Data == 'w':
+                    imgWidths[imgName] = self.camera_dict[id]
         assert len(Rts) == len(intrs) and len(Rts) == len(
             jsonPaths) and len(Rts) == len(
             imgPaths) and len(Rts) > 0, "npy broke"
@@ -112,6 +118,7 @@ class SpaceMap:
             rgb = rgb.reshape(3, -1).transpose(1, 0)
             rgb_images.append(rgb.astype(np.float32))
             object_mask = readLabelme.readLabelmeMask(jsonPaths[k])
+            object_mask = object_mask.reshape(-1)
             mask = object_mask.astype(bool)
         
             intrinsics = intrs[k]
@@ -126,8 +133,8 @@ class SpaceMap:
             print(picIdx, '/', self.n_images, ':valid:', len(validPos))
             picIdx+=1
             pickedGridFlag = self.gridFlag[validPos]
-            xyz = np.linalg.inv(pose)@self.gridCenter[:, validPos]
-            # xyz = pose@self.gridCenter[:, validPos]
+            # xyz = np.linalg.inv(pose)@self.gridCenter[:, validPos]
+            xyz = pose@self.gridCenter[:, validPos]
             zPositive = xyz[2, :] > 0.1
             xyz = xyz/xyz[2, :]
 
@@ -136,7 +143,7 @@ class SpaceMap:
             xyz = np.round(xyz).astype(np.int32)
             xyminFlag = np.logical_and(xyz[0, :] > 0, xyz[1, :] > 0)
             xymaxFlag = np.logical_and(
-                xyz[0, :] < self.imgWidth, xyz[1, :] < self.imgHeight)
+                xyz[0, :] < imgWidths[k], xyz[1, :] < imgHeights[k])
             imgRectFlag = np.logical_and(zPositive, xyminFlag)
             imgRectFlag = np.logical_and(imgRectFlag, xymaxFlag)
 
@@ -148,7 +155,7 @@ class SpaceMap:
                 continue
 
             x = xyz[0, :][imgRectFlag]
-            y = self.imgWidth*xyz[1, :][imgRectFlag]
+            y = imgWidths[k]*xyz[1, :][imgRectFlag]
             xy = x+y
             maskFalse = np.where(mask[xy] == False)[0]
             maskTrue = np.where(mask[xy] == True)[0]

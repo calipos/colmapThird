@@ -253,7 +253,11 @@ if __name__ == '__main__':
         else:
             cam_file[parentName+imgName+"@Rt"] = img.Rt
             cam_file[parentName+imgName +
-                    "@intr"] = cameraDict[img.cameraId].intr
+                     "@intr"] = cameraDict[img.cameraId].intr
+            cam_file[parentName+imgName +
+                     "@h"] = cameraDict[img.cameraId].height
+            cam_file[parentName+imgName +
+                     "@w"] = cameraDict[img.cameraId].width
     np.save(os.path.join(shapeMaskDir, 'cam_file.npy'),
              cam_file)
     print()
