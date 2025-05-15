@@ -9,6 +9,7 @@ import dlibLandMark
 import landmarkShapeType
 import insightFaceLandmark
 import cv2
+import segment
 class Camera:
     def __init__(self, cameraStr):
         seges = cameraStr.split(" ")
@@ -238,6 +239,10 @@ if __name__ == '__main__':
     cam_file = {}
     cam_file['regionStart'] = regionStart
     cam_file['regionEnd'] = regionEnd
+    sam2model = segment.initSAM2()
+    if isinstance(sam2model, int):
+        print('sam2model error')
+        exit(-1)
     for img in ImageList:
         imgPath = os.path.join(dataRoot, img.filePath)
         imgPath = Path(imgPath)  
@@ -255,6 +260,10 @@ if __name__ == '__main__':
                      "@h"] = cameraDict[img.cameraId].height
             cam_file[parentName+imgName +
                      "@w"] = cameraDict[img.cameraId].width
+            mask = segment.segFaceBaseLandmark(sam2model, newPath, findFaceHullRet)
+
+            maskPath = os.path.join(shapeMaskDir, 'mask_'+parentName+imgName+'.npy')
+            np.save(maskPath, mask)
         else:
             print("nit find the face hull,delete -> ", newPath)
             os.remove(newPath)
