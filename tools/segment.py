@@ -1,7 +1,14 @@
 import os
 from sam2 import SAM2Image, draw_masks
+import onnx
 import cv2
 import numpy as np
+import netron
+import logging
+logging.basicConfig(format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s',
+                    level=logging.DEBUG,
+                    filename='test.log',
+                    filemode='w')
 def initSAM2():
     encoder_model_path = "models/sam2_hiera_large_encoder.onnx"
     decoder_model_path = "models/decoder.onnx"
@@ -60,9 +67,138 @@ def segFaceBaseLandmark(sam2model, imgPath, landmarks):
     # cv2.imwrite('c.jpg', masked_img) 
 
     return masks[faceLabel]
+
+
+def onnx_datatype_to_npType(data_type):
+    if data_type == 1:
+        return np.float32
+    elif data_type == 7:
+        return np.int64
+    else:
+        print('data_type=',data_type)
+        raise TypeError("don't support data type")
+
+
+def parser_initializer(initializer):
+    name = initializer.name
+    logging.info(f"initializer name: {name}")
+
+    dims = initializer.dims
+    shape = [x for x in dims]
+    logging.info(f"initializer with shape:{shape}")
+
+    dtype = initializer.data_type
+    if dtype == 7:
+        print()
+    logging.info(f"initializer with type: {onnx_datatype_to_npType(dtype)} ")
+
+    # print tenth buffer
+    weights = np.frombuffer(initializer.raw_data,
+                            dtype=onnx_datatype_to_npType(dtype))
+    logging.info(f"initializer first 10 wights:{weights[:10]}")
+
+
+def parser_tensor(tensor, use='normal'):
+    name = tensor.name
+    logging.info(f"{use} tensor name: {name}")
+
+    data_type = tensor.type.tensor_type.elem_type
+    logging.info(f"{use} tensor data type: {data_type}")
+
+    dims = tensor.type.tensor_type.shape.dim
+    shape = []
+    for i, dim in enumerate(dims):
+        shape.append(dim.dim_value)
+    logging.info(f"{use} tensor with shape:{shape} ")
+
+
+def parser_node(node):
+    def attri_value(attri):
+        if attri.type == 1:
+            return attri.i
+        elif attri.type == 7:
+            return list(attri.ints)
+
+    name = node.name
+    logging.info(f"node name:{name}")
+
+    opType = node.op_type
+    logging.info(f"node op type:{opType}")
+
+    inputs = list(node.input)
+    logging.info(f"node with {len(inputs)} inputs:{inputs}")
+
+    outputs = list(node.output)
+    logging.info(f"node with {len(outputs)} outputs:{outputs}")
+
+    attributes = node.attribute
+    for attri in attributes:
+        name = attri.name
+        value = attri_value(attri)
+        logging.info(f"{name} with value:{value}")
+
+
+def parser_info(onnx_model):
+    ir_version = onnx_model.ir_version
+    producer_name = onnx_model.producer_name
+    producer_version = onnx_model.producer_version
+    for info in [ir_version, producer_name, producer_version]:
+        logging.info("onnx model with info:{}".format(info))
+
+
+def parser_inputs(onnx_graph):
+    inputs = onnx_graph.input
+    for input in inputs:
+        parser_tensor(input, 'input')
+
+
+def parser_outputs(onnx_graph):
+    outputs = onnx_graph.output
+    for output in outputs:
+        parser_tensor(output, 'output')
+
+
+def parser_graph_initializers(onnx_graph):
+    initializers = onnx_graph.initializer
+    for initializer in initializers:
+        parser_initializer(initializer)
+
+
+def parser_graph_nodes(onnx_graph):
+    nodes = onnx_graph.node
+    for node in nodes:
+        parser_node(node)
+        t = 1
+def onnx_parser():
+    model_path = "models/sam2_hiera_large_encoder.onnx"
+    model = onnx.load(model_path)
+
+    # 0.
+    parser_info(model)
+
+    graph = model.graph
+
+    for i in range(len(graph.node)):
+        name = graph.node[i].name
+        logging.info(f"node name :{name}")
+    # 1.
+    parser_inputs(graph)
+
+    # 2.
+    parser_outputs(graph)
+
+    # 3.
+    parser_graph_initializers(graph)
+
+    # 4.
+    parser_graph_nodes(graph)
 if __name__ == '__main__':
+    onnx_parser()
     encoder_model_path = "models/sam2_hiera_large_encoder.onnx"
     decoder_model_path = "models/decoder.onnx"
+    netron.start(encoder_model_path)    
+
+
 
     img = cv2.imread(
         'D:/ucl360/UCL360Calib/CameraCalibGui/pro37/out/1_-90.bmp')
