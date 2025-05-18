@@ -1,4 +1,6 @@
 import os
+
+import onnx.helper
 from sam2 import SAM2Image, draw_masks
 import onnx
 import cv2
@@ -63,8 +65,16 @@ def segFaceBaseLandmark(sam2model, imgPath, landmarks):
     #             (faceOuter[i][0], faceOuter[i][1]), False, faceLabel)
     #         masks = sam2model.get_masks()
 
-    # masked_img = draw_masks(img, masks)
-    # cv2.imwrite('c.jpg', masked_img) 
+    masked_img = draw_masks(img, masks)
+    pos1 = imgPath.rfind('\\')
+    pos2 = imgPath.rfind('/')
+    if pos1>pos2:
+        pos2=pos1
+    else:
+        pos1=pos2
+    parent = imgPath[:pos1+1]
+    filename = imgPath[pos1+1:]
+    cv2.imwrite(parent+'blender_'+filename, masked_img) 
 
     return masks[faceLabel]
 
@@ -160,6 +170,19 @@ def parser_outputs(onnx_graph):
 
 def parser_graph_initializers(onnx_graph):
     initializers = onnx_graph.initializer
+    print(len(initializers))
+    for initializer in initializers:
+        if initializer.name.endswith('Constant_28_output_0'):
+            oldname = initializer.name
+            copy = initializer
+            copy.name='Constant_28_output_0_copy'
+            initializers.append(copy)
+            initializers[-1].name=oldname
+            print(initializers[-1].name)
+            break
+    initializers = onnx_graph.initializer
+    print(len(initializers))
+    print()
     for initializer in initializers:
         parser_initializer(initializer)
 
@@ -170,30 +193,30 @@ def parser_graph_nodes(onnx_graph):
         parser_node(node)
         t = 1
 def onnx_parser():
+    # model_path ='modified_1.onnx'
     model_path = "models/sam2_hiera_large_encoder.onnx"
     model = onnx.load(model_path)
 
-    # 0.
-    parser_info(model)
+    # 0. parser_info(model)
 
     graph = model.graph
+ 
 
-    for i in range(len(graph.node)):
-        name = graph.node[i].name
-        logging.info(f"node name :{name}")
-    # 1.
-    parser_inputs(graph)
 
-    # 2.
-    parser_outputs(graph)
+
+    # 1. parser_inputs(graph)
+
+    # 2. parser_outputs(graph)
 
     # 3.
     parser_graph_initializers(graph)
-
+    print(len(graph.initializer))
+    onnx.save_model(model,'1.onnx')
     # 4.
     parser_graph_nodes(graph)
 if __name__ == '__main__':
     onnx_parser()
+    exit(0)
     encoder_model_path = "models/sam2_hiera_large_encoder.onnx"
     decoder_model_path = "models/decoder.onnx"
     netron.start(encoder_model_path)    

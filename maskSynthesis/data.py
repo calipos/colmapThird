@@ -7,7 +7,7 @@ import numpy as np
 import os
 import utils
 import open3d as o3d
-
+import mcubes
 class SpaceMap:
     def __init__(self, unit, regionStart=None, regionEnd=None):
         regionStart = np.array(regionStart)
@@ -71,7 +71,7 @@ class SpaceMap:
                      self.regionStartY], [self.regionStartZ]])
         self.gridCenter = np.vstack(
             [self.gridCenter, np.ones([1, self.gridCenter.shape[1]]).astype(np.float32)])
-
+ 
     def inputData2(self, data_dir, cam_file):
         self.instance_dir = data_dir
         assert os.path.exists(self.instance_dir), "Data directory is empty"
@@ -89,10 +89,15 @@ class SpaceMap:
                 imgName, Data = id.split('@')
                 jsonPath = os.path.join(
                     data_dir, imgName[0:imgName.rfind('.')]+'.json')
+                orMaskPath = os.path.join(
+                    data_dir, 'mask_'+imgName+'.npy')
                 imgPath = os.path.join(data_dir, imgName)
-                assert os.path.exists(jsonPath), "jsonPath is empty"
+                assert os.path.exists(jsonPath) or os.path.exists(orMaskPath), "jsonPath is empty"
                 assert os.path.exists(imgPath), "imgPath is empty"
-                jsonPaths[imgName] = jsonPath
+                if os.path.exists(jsonPath):
+                    jsonPaths[imgName] = jsonPath   
+                elif os.path.exists(orMaskPath):
+                    jsonPaths[imgName] = orMaskPath   
                 imgPaths[imgName] = imgPath
                 if Data == 'Rt':
                     Rts[imgName] = self.camera_dict[id]
@@ -117,7 +122,10 @@ class SpaceMap:
             rgb = utils.load_rgb(imgPaths[k])
             rgb = rgb.reshape(3, -1).transpose(1, 0)
             rgb_images.append(rgb.astype(np.float32))
-            object_mask = readLabelme.readLabelmeMask(jsonPaths[k])
+            if jsonPaths[k].endswith('.json'):
+                object_mask = readLabelme.readLabelmeMask(jsonPaths[k])
+            elif jsonPaths[k].endswith('.npy'):
+                object_mask = np.load(jsonPaths[k])
             object_mask = object_mask.reshape(-1)
             mask = object_mask.astype(bool)
         
@@ -167,7 +175,9 @@ class SpaceMap:
 
             pickedGridFlag[imgRectFlag] = pickedGridFlag2
             self.gridFlag[validPos] = pickedGridFlag
-        self.getCloud(100)
+        vertices, triangles =mcubes.marching_cubes(self.gridFlag.reshape(self.resolutionX,self.resolutionY,self.resolutionZ), 0)
+        mcubes.export_obj(vertices, triangles, 'sphere.obj')
+        # self.getCloud(100)
     def inputData(self, data_dir, cam_file=None):
         self.instance_dir = data_dir
         assert os.path.exists(self.instance_dir), "Data directory is empty"
