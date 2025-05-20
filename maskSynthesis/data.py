@@ -14,7 +14,7 @@ class SpaceMap:
         regionEnd = np.array(regionEnd)
         self.imgWidth = -1
         self.imgHeight = -1
-        print(np.iinfo(np.uint64).max)
+        print('max uint64=',np.iinfo(np.uint64).max)
         if (regionStart == None).any():
             self.xSize = 2
             self.ySize = 2
@@ -37,7 +37,9 @@ class SpaceMap:
             self.regionEndY = self.ySize-self.regionStartY
             self.regionEndZ = self.zSize-self.regionStartZ
         else:
-
+            regionCenter = 0.5*(regionStart+regionEnd)
+            regionStart = 1.5*(regionStart-regionCenter)+regionCenter
+            regionEnd = 1.5*(regionEnd-regionCenter)+regionCenter
             assert len(regionStart) == 3 and len(
                 regionEnd) == 3, "parameter error"
             assert np.min(

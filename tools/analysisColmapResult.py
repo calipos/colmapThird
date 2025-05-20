@@ -8,7 +8,7 @@ import figureMediapipeKeyPts
 import dlibLandMark
 import landmarkShapeType
 import insightFaceLandmark
-import cv2
+import undistotImg
 import segment
 class Camera:
     def __init__(self, cameraStr):
@@ -245,11 +245,20 @@ if __name__ == '__main__':
         exit(-1)
     for img in ImageList:
         imgPath = os.path.join(dataRoot, img.filePath)
+        possibleUndistortedImgPath = os.path.join(
+            os.path.join(dataRoot, 'images'), img.filePath)
+        if os.path.exists(imgPath):
+            imgPath = possibleUndistortedImgPath
         imgPath = Path(imgPath)  
         imgName = imgPath.name
         parentName = imgPath.parent.name
         newPath = os.path.join(shapeMaskDir, parentName+imgName)
-        shutil.copy(imgPath, newPath)
+        if cameraDict[img.cameraId].cameraType == 'SIMPLE_PINHOLE':
+            shutil.copy(imgPath, newPath)
+        elif not os.path.exists(imgPath) and cameraDict[img.cameraId].cameraType == 'SIMPLE_RADIAL':
+            undistotImg.undist(imgPath, newPath, cameraDict[img.cameraId])
+        else:
+            shutil.copy(imgPath, newPath)
         findFaceHullRet = landmarkFinder.proc(
             newPath, landmarkShapeType.LandmarkShapeType.Contour, writeJson = False)
         if isinstance(findFaceHullRet, np.ndarray):
