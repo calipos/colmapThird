@@ -45,7 +45,7 @@ bool use_HuberLoss = true;
 bool use_manifolds = false;
 std::string blocks_for_inner_iterations = "";
 std::string ordering = "automatic";
-auto cameraOptimModel = ba::OptiModel::fcxcyk1;
+auto cameraOptimModel = ba::OptiModel::fk1k2;
 namespace ba 
 {
     void SetLinearSolver(ceres::Solver::Options* options) {
@@ -171,66 +171,69 @@ namespace ba
 
     void BuildProblem(BALProblem * bal_problem, ceres::Problem * problem)
     {
-        const int point_block_size = bal_problem->point_block_size();
-        const int camera_block_size = bal_problem->camera_block_size();
         double* points = bal_problem->mutable_points();
         double* cameras = bal_problem->mutable_cameras();
 
         const double* observations = bal_problem->observations();
         for (int i = 0; i < bal_problem->num_observations(); ++i) {
-            ceres::CostFunction* cost_function;
-            cost_function = (use_quaternions)
-                ? SnavelyReprojectionErrorWithQuaternions::Create(
-                    observations[2 * i + 0], observations[2 * i + 1])
-                : SnavelyReprojectionError::Create(
-                    observations[2 * i + 0], observations[2 * i + 1]);
+            ceres::CostFunction* cost_function=nullptr;
+            switch (bal_problem->optiModel_)
+            {
+            case ba::OptiModel::fk1k2:
+                cost_function = (use_quaternions)
+                    ? SnavelyReprojectionErrorWithQuaternions::Create(
+                        observations[2 * i + 0], observations[2 * i + 1])
+                    : SnavelyReprojectionError::Create(
+                        observations[2 * i + 0], observations[2 * i + 1]);
+                break;
+            case ba::OptiModel::fk1:  
+                break;
+            case ba::OptiModel::fcxcyk1: 
+                break;
+            default: 
+                break;
+            }
+
+
+            
 
             ceres::LossFunction* loss_function = use_HuberLoss ? new ceres::HuberLoss(1.0) : nullptr;
 
             // Each observation correponds to a pair of a camera and a point
             // which are identified by camera_index()[i] and point_index()[i]
             // respectively.
-            double* camera =
-                cameras + camera_block_size * bal_problem->camera_index()[i];
-            double* point = points + point_block_size * bal_problem->point_index()[i];
+            double* camera = cameras + bal_problem->camera_index()[i];
+            double* point = points +  bal_problem->point_index()[i];
             problem->AddResidualBlock(cost_function, loss_function, camera, point);
-        }
-
-        if (use_quaternions && use_manifolds) {
-            ceres::Manifold* camera_manifold =
-                new ceres::ProductManifold<ceres::QuaternionManifold, ceres::EuclideanManifold<6>>{};
-            for (int i = 0; i < bal_problem->num_cameras(); ++i) {
-                problem->SetManifold(cameras + camera_block_size * i, camera_manifold);
-            }
-        }
+        } 
     }
 
-        void SolveProblem(const ba::OptiModel& optiModel,
-            const std::map<int, std::array<double, 3>>&colmapObjPts,
-            const std::vector<col::ImgPt>&colmapImgPts,
-            const std::map<int, col::Camera>&cameras) {
-            ba::BALProblem bal_problem(optiModel,colmapObjPts, colmapImgPts, cameras, use_quaternions);
-            ceres::Problem problem;
+    void SolveProblem(const ba::OptiModel& optiModel,
+        const std::map<int, std::array<double, 3>>&colmapObjPts,
+        const std::vector<col::ImgPt>&colmapImgPts,
+        const std::map<int, col::Camera>&cameras) {
+        ba::BALProblem bal_problem(optiModel,colmapObjPts, colmapImgPts, cameras, use_quaternions);
+        ceres::Problem problem;
 
-            srand(0);
-            bal_problem.Perturb(0, 0, 0);
+        srand(0);
+        bal_problem.Perturb(10, 10, 10);
 
-            ba::BuildProblem(&bal_problem, &problem);
-            ceres::Solver::Options options;
-            ba::SetSolverOptionsFromFlags(&bal_problem, &options);
-            options.gradient_tolerance = 1e-16;
-            options.function_tolerance = 1e-16;
-            ceres::Solver::Summary summary;
-            Solve(options, &problem, &summary);
-            std::cout << summary.FullReport() << "\n";
-        }
+        ba::BuildProblem(&bal_problem, &problem);
+        ceres::Solver::Options options;
+        ba::SetSolverOptionsFromFlags(&bal_problem, &options);
+        options.gradient_tolerance = 1e-16;
+        options.function_tolerance = 1e-16;
+        ceres::Solver::Summary summary;
+        Solve(options, &problem, &summary);
+        std::cout << summary.FullReport() << "\n";
     }
+}
 int main()
 {
     std::map<int, std::array<double, 3>> colmapObjPts;
     std::vector<col::ImgPt> colmapImgPts;
     std::map<int, col::Camera>cameras;
-    readColmapResult("D:/repo/colmapThird/data", colmapObjPts, colmapImgPts, cameras);
+    readColmapResult("D:/repo/colmap-third/data", colmapObjPts, colmapImgPts, cameras);
     ba::SolveProblem(cameraOptimModel, colmapObjPts, colmapImgPts, cameras);
 	return 0;
 }

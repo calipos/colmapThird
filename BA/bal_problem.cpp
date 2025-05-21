@@ -33,27 +33,15 @@ namespace ba {
         const ba::OptiModel& optiModel,
         const std::map<int, std::array<double, 3>>& colmapObjPts,
         const std::vector<col::ImgPt>& colmapImgPts,
-        const std::map<int, col::Camera>& cameras, bool use_quaternions) {
+        const std::map<int, col::Camera>& cameras, bool use_quaternions) 
+    {
+        optiModel_ = optiModel;
         num_cameras_ = cameras.size();
         num_points_ = colmapObjPts.size();
+        img_Cnt_ = colmapImgPts.size();
         num_observations_ = colmapImgPts.size() * num_points_;
         std::map<int, int>cameraIdToIdx;
-        int eachCameraParamCnt = 0;
-        switch (optiModel)
-        {
-        case ba::OptiModel::fk1k2:
-            eachCameraParamCnt = 3;
-            break;
-        case ba::OptiModel::fk1:
-            eachCameraParamCnt = 2;
-            break;
-        case ba::OptiModel::fcxcyk1:
-            eachCameraParamCnt = 4;
-            break;
-        default:
-            assert(false);
-            break;
-        }
+        int eachCameraParamCnt = getEachCameraParamCnt(optiModel_);
         num_parameters_ = eachCameraParamCnt * num_cameras_ + 6 * colmapImgPts.size() + 3 * num_points_;
         parameters_ = new double[num_parameters_];
         int idx = 0;
@@ -105,6 +93,12 @@ namespace ba {
 
         for (int imgIdx = 0; imgIdx < colmapImgPts.size(); imgIdx++)
         {
+            parameters_[eachCameraParamCnt * num_cameras_ + 6 * imgIdx + 0] = colmapImgPts[imgIdx].r[0];
+            parameters_[eachCameraParamCnt * num_cameras_ + 6 * imgIdx + 1] = colmapImgPts[imgIdx].r[1];
+            parameters_[eachCameraParamCnt * num_cameras_ + 6 * imgIdx + 2] = colmapImgPts[imgIdx].r[2];
+            parameters_[eachCameraParamCnt * num_cameras_ + 6 * imgIdx + 3] = colmapImgPts[imgIdx].t[0];
+            parameters_[eachCameraParamCnt * num_cameras_ + 6 * imgIdx + 4] = colmapImgPts[imgIdx].t[1];
+            parameters_[eachCameraParamCnt * num_cameras_ + 6 * imgIdx + 5] = colmapImgPts[imgIdx].t[2];
             for (int imgPtIdx = 0; imgPtIdx < num_points_; imgPtIdx++)
             {
                 int i = num_points_ * imgIdx + imgPtIdx;
@@ -114,29 +108,36 @@ namespace ba {
                 observations_[2 * i + 1] = colmapImgPts[imgIdx].imgPts[imgPtIdx][1];
             }
         }
-
+        for (int imgPtIdx = 0; imgPtIdx < num_points_; imgPtIdx++)
+        { 
+            CHECK(colmapObjPts.count(imgPtIdx) > 0); 
+            parameters_[eachCameraParamCnt * num_cameras_ + 6 * colmapImgPts.size() + 3 * imgPtIdx] = colmapObjPts.at(imgPtIdx)[0];
+            parameters_[eachCameraParamCnt * num_cameras_ + 6 * colmapImgPts.size() + 3 * imgPtIdx + 1] = colmapObjPts.at(imgPtIdx)[1];
+            parameters_[eachCameraParamCnt * num_cameras_ + 6 * colmapImgPts.size() + 3 * imgPtIdx + 2] = colmapObjPts.at(imgPtIdx)[2];
+        }
  
 
         use_quaternions_ = use_quaternions;
         if (use_quaternions) {
             // Switch the angle-axis rotations to quaternions.
-            num_parameters_ = 10 * num_cameras_ + 3 * num_points_;
+            int num_parameters_ = eachCameraParamCnt * num_cameras_ + 7 * colmapImgPts.size() + 3 * num_points_;;
             auto* quaternion_parameters = new double[num_parameters_];
-            double* original_cursor = parameters_;
-            double* quaternion_cursor = quaternion_parameters;
-            for (int i = 0; i < num_cameras_; ++i) {
+            memcpy(quaternion_parameters, parameters_, eachCameraParamCnt * num_cameras_*sizeof(double));
+            
+            for (int i = 0; i < colmapImgPts.size(); ++i) {
+                double* original_cursor = parameters_ + eachCameraParamCnt * num_cameras_ + 6 * i;
+                double* quaternion_cursor = quaternion_parameters + eachCameraParamCnt * num_cameras_ + 7 * i;
                 ceres::AngleAxisToQuaternion(original_cursor, quaternion_cursor);
                 quaternion_cursor += 4;
                 original_cursor += 3;
-                for (int j = 4; j < 10; ++j) {
-                    *quaternion_cursor++ = *original_cursor++;
-                }
+                quaternion_cursor[0] = original_cursor[0];
+                quaternion_cursor[1] = original_cursor[1];
+                quaternion_cursor[2] = original_cursor[2];
             }
-            // Copy the rest of the points.
-            for (int i = 0; i < 3 * num_points_; ++i) {
-                *quaternion_cursor++ = *original_cursor++;
-            }
-            // Swap in the quaternion parameters.
+
+            memcpy(quaternion_parameters + eachCameraParamCnt * num_cameras_ + 7 * colmapImgPts.size(),
+                parameters_ + eachCameraParamCnt * num_cameras_ + 6 * colmapImgPts.size(), 
+                3 * num_points_ * sizeof(double));
             delete[] parameters_;
             parameters_ = quaternion_parameters;
         }
@@ -246,7 +247,7 @@ namespace ba {
         std::normal_distribution<double> translation_noise_distribution(
             0.0, translation_sigma);
         for (int i = 0; i < num_cameras_; ++i) {
-            double* camera = mutable_cameras() + camera_block_size() * i;
+            double* camera = mutable_cameras() + getEachCameraParamCnt(optiModel_) * i;
 
             double angle_axis[3];
             double center[3];
