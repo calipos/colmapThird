@@ -11,6 +11,7 @@ __pycache__/
 .vscode
 .vs
 .DS_Store
+BA/x64/*
 build/
 buildmingw/
 install-debug/

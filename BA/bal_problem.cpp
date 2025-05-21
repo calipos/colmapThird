@@ -1,0 +1,272 @@
+#include "bal_problem.h"
+#include <map>
+#include <algorithm>
+#include <cstdio>
+#include <fstream>
+#include <functional>
+#include <random>
+#include <string>
+#include <vector>
+
+#include "Eigen/Core"
+#include "ceres/rotation.h"
+#include "glog/logging.h"
+#include "BALog.h"
+namespace ba {
+        using VectorRef = Eigen::Map<Eigen::VectorXd>;
+        using ConstVectorRef = Eigen::Map<const Eigen::VectorXd>;
+
+        void PerturbPoint3(std::function<double()> dist, double* point) {
+            for (int i = 0; i < 3; ++i) {
+                point[i] += dist();
+            }
+        }
+
+        double Median(std::vector<double>* data) {
+            auto mid_point = data->begin() + data->size() / 2;
+            std::nth_element(data->begin(), mid_point, data->end());
+            return *mid_point;
+        }
+
+
+    BALProblem::BALProblem(
+        const ba::OptiModel& optiModel,
+        const std::map<int, std::array<double, 3>>& colmapObjPts,
+        const std::vector<col::ImgPt>& colmapImgPts,
+        const std::map<int, col::Camera>& cameras, bool use_quaternions) {
+        num_cameras_ = cameras.size();
+        num_points_ = colmapObjPts.size();
+        num_observations_ = colmapImgPts.size() * num_points_;
+        std::map<int, int>cameraIdToIdx;
+        int eachCameraParamCnt = 0;
+        switch (optiModel)
+        {
+        case ba::OptiModel::fk1k2:
+            eachCameraParamCnt = 3;
+            break;
+        case ba::OptiModel::fk1:
+            eachCameraParamCnt = 2;
+            break;
+        case ba::OptiModel::fcxcyk1:
+            eachCameraParamCnt = 4;
+            break;
+        default:
+            assert(false);
+            break;
+        }
+        num_parameters_ = eachCameraParamCnt * num_cameras_ + 6 * colmapImgPts.size() + 3 * num_points_;
+        parameters_ = new double[num_parameters_];
+        int idx = 0;
+        for (const auto&d: cameras)
+        {
+            switch (optiModel)
+            {
+            case ba::OptiModel::fk1k2:
+                parameters_[idx * eachCameraParamCnt] = d.second.fx;
+                parameters_[idx * eachCameraParamCnt + 1] = 0;
+                parameters_[idx * eachCameraParamCnt + 2] = 0;
+                if (d.second.distoCoeff.size()==1)
+                {
+                    parameters_[idx * eachCameraParamCnt + 1] = d.second.distoCoeff[0];
+                }
+                break;
+            case ba::OptiModel::fk1:
+                parameters_[idx * eachCameraParamCnt] = d.second.fx;
+                parameters_[idx * eachCameraParamCnt + 1] = 0;
+                if (d.second.distoCoeff.size() == 1)
+                {
+                    parameters_[idx * eachCameraParamCnt + 1] = d.second.distoCoeff[0];
+                }
+                break;
+            case ba::OptiModel::fcxcyk1:
+                parameters_[idx * eachCameraParamCnt] = d.second.fx;
+                parameters_[idx * eachCameraParamCnt + 1] = d.second.cx;
+                parameters_[idx * eachCameraParamCnt + 2] = d.second.cy;
+                parameters_[idx * eachCameraParamCnt + 3] = 0;
+                if (d.second.distoCoeff.size() == 1)
+                {
+                    parameters_[idx * eachCameraParamCnt + 3] = d.second.distoCoeff[0];
+                }
+                break;
+            default:
+                assert(false);
+                break;
+            }
+            cameraIdToIdx[d.first] = idx++;
+        }
+
+        LOG_OUT << "Header: " << num_cameras_ << " " << num_points_ << " "
+            << num_observations_;
+
+        point_index_ = new int[num_observations_];
+        camera_index_ = new int[num_observations_];
+        observations_ = new double[2 * num_observations_];
+
+
+        for (int imgIdx = 0; imgIdx < colmapImgPts.size(); imgIdx++)
+        {
+            for (int imgPtIdx = 0; imgPtIdx < num_points_; imgPtIdx++)
+            {
+                int i = num_points_ * imgIdx + imgPtIdx;
+                camera_index_[i] = cameraIdToIdx[colmapImgPts[imgIdx].cameraId];
+                point_index_[i] = imgPtIdx;
+                observations_[2 * i + 0] = colmapImgPts[imgIdx].imgPts[imgPtIdx][0];
+                observations_[2 * i + 1] = colmapImgPts[imgIdx].imgPts[imgPtIdx][1];
+            }
+        }
+
+ 
+
+        use_quaternions_ = use_quaternions;
+        if (use_quaternions) {
+            // Switch the angle-axis rotations to quaternions.
+            num_parameters_ = 10 * num_cameras_ + 3 * num_points_;
+            auto* quaternion_parameters = new double[num_parameters_];
+            double* original_cursor = parameters_;
+            double* quaternion_cursor = quaternion_parameters;
+            for (int i = 0; i < num_cameras_; ++i) {
+                ceres::AngleAxisToQuaternion(original_cursor, quaternion_cursor);
+                quaternion_cursor += 4;
+                original_cursor += 3;
+                for (int j = 4; j < 10; ++j) {
+                    *quaternion_cursor++ = *original_cursor++;
+                }
+            }
+            // Copy the rest of the points.
+            for (int i = 0; i < 3 * num_points_; ++i) {
+                *quaternion_cursor++ = *original_cursor++;
+            }
+            // Swap in the quaternion parameters.
+            delete[] parameters_;
+            parameters_ = quaternion_parameters;
+        }
+    }
+
+    
+    void BALProblem::WriteToFile(const std::string& filename) const {
+        FILE* fptr = fopen(filename.c_str(), "w");
+
+        if (fptr == nullptr) {
+            LOG(FATAL) << "Error: unable to open file " << filename;
+            return;
+        };
+
+        fprintf(fptr, "%d %d %d\n", num_cameras_, num_points_, num_observations_);
+
+        for (int i = 0; i < num_observations_; ++i) {
+            fprintf(fptr, "%d %d", camera_index_[i], point_index_[i]);
+            for (int j = 0; j < 2; ++j) {
+                fprintf(fptr, " %g", observations_[2 * i + j]);
+            }
+            fprintf(fptr, "\n");
+        }
+
+        for (int i = 0; i < num_cameras(); ++i) {
+            double angleaxis[9];
+            if (use_quaternions_) {
+                // Output in angle-axis format.
+                ceres::QuaternionToAngleAxis(parameters_ + 10 * i, angleaxis);
+                memcpy(angleaxis + 3, parameters_ + 10 * i + 4, 6 * sizeof(double));
+            }
+            else {
+                memcpy(angleaxis, parameters_ + 9 * i, 9 * sizeof(double));
+            }
+            for (double coeff : angleaxis) {
+                fprintf(fptr, "%.16g\n", coeff);
+            }
+        }
+
+        const double* points = parameters_ + camera_block_size() * num_cameras_;
+        for (int i = 0; i < num_points(); ++i) {
+            const double* point = points + i * point_block_size();
+            for (int j = 0; j < point_block_size(); ++j) {
+                fprintf(fptr, "%.16g\n", point[j]);
+            }
+        }
+
+        fclose(fptr);
+    }
+
+    // Write the problem to a PLY file for inspection in Meshlab or CloudCompare.
+    void BALProblem::WriteToPLYFile(const std::string& filename) const {
+        std::ofstream of(filename.c_str());
+
+        of << "ply" << '\n'
+            << "format ascii 1.0" << '\n'
+            << "element vertex " << num_cameras_ + num_points_ << '\n'
+            << "property float x" << '\n'
+            << "property float y" << '\n'
+            << "property float z" << '\n'
+            << "property uchar red" << '\n'
+            << "property uchar green" << '\n'
+            << "property uchar blue" << '\n'
+            << "end_header" << std::endl;
+
+        // Export extrinsic data (i.e. camera centers) as green points.
+        double angle_axis[3];
+        double center[3];
+        for (int i = 0; i < num_cameras(); ++i) {
+            const double* camera = cameras() + camera_block_size() * i;
+            //CameraToAngleAxisAndCenter(camera, angle_axis, center);
+            of << center[0] << ' ' << center[1] << ' ' << center[2] << " 0 255 0"
+                << '\n';
+        }
+
+        // Export the structure (i.e. 3D Points) as white points.
+        const double* points = parameters_ + camera_block_size() * num_cameras_;
+        for (int i = 0; i < num_points(); ++i) {
+            const double* point = points + i * point_block_size();
+            for (int j = 0; j < point_block_size(); ++j) {
+                of << point[j] << ' ';
+            }
+            of << "255 255 255\n";
+        }
+        of.close();
+    }
+
+
+    void BALProblem::Perturb(const double rotation_sigma,
+        const double translation_sigma,
+        const double point_sigma) {
+        CHECK_GE(point_sigma, 0.0);
+        CHECK_GE(rotation_sigma, 0.0);
+        CHECK_GE(translation_sigma, 0.0);
+        std::mt19937 prng;
+        std::normal_distribution<double> point_noise_distribution(0.0, point_sigma);
+        double* points = mutable_points();
+        if (point_sigma > 0) {
+            for (int i = 0; i < num_points_; ++i) {
+                PerturbPoint3(std::bind(point_noise_distribution, std::ref(prng)),
+                    points + 3 * i);
+            }
+        }
+
+        std::normal_distribution<double> rotation_noise_distribution(0.0,
+            point_sigma);
+        std::normal_distribution<double> translation_noise_distribution(
+            0.0, translation_sigma);
+        for (int i = 0; i < num_cameras_; ++i) {
+            double* camera = mutable_cameras() + camera_block_size() * i;
+
+            double angle_axis[3];
+            double center[3];
+            //CameraToAngleAxisAndCenter(camera, angle_axis, center);
+            //if (rotation_sigma > 0.0) {
+            //    PerturbPoint3(std::bind(rotation_noise_distribution, std::ref(prng)),
+            //        angle_axis);
+            //}
+            //AngleAxisAndCenterToCamera(angle_axis, center, camera);
+            //if (translation_sigma > 0.0) {
+            //    PerturbPoint3(std::bind(translation_noise_distribution, std::ref(prng)),
+            //        camera + camera_block_size() - 6);
+            //}
+        }
+    }
+
+    BALProblem::~BALProblem() {
+        delete[] point_index_;
+        delete[] camera_index_;
+        delete[] observations_;
+        delete[] parameters_;
+    }
+}
