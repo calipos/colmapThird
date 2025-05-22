@@ -40,11 +40,9 @@ bool readColmapResult(const std::filesystem::path& dataPath,
 	return true;
 }
 
-bool use_quaternions = true;
-bool use_HuberLoss = true;
-bool use_manifolds = false;
-std::string blocks_for_inner_iterations = "";
-std::string ordering = "automatic";
+bool use_quaternions = false;
+bool use_HuberLoss = false;
+
 auto cameraOptimModel = ba::OptiModel::fk1k2;
 namespace ba 
 {
@@ -64,99 +62,15 @@ namespace ba
         options->max_num_spse_iterations;
     }
 
-    void SetOrdering(BALProblem* bal_problem, ceres::Solver::Options* options) {
-        const int num_points = bal_problem->num_points();
-        const int point_block_size = bal_problem->point_block_size();
-        double* points = bal_problem->mutable_points();
-
-        const int num_cameras = bal_problem->num_cameras();
-        const int camera_block_size = bal_problem->camera_block_size();
-        double* cameras = bal_problem->mutable_cameras();
-
-        if (options->use_inner_iterations) 
-        {
-            if (blocks_for_inner_iterations .compare("cameras")==0) {
-                LOG(INFO) << "Camera blocks for inner iterations";
-                    options->inner_iteration_ordering =
-                    std::make_shared<ceres::ParameterBlockOrdering>();
-                    for (int i = 0; i < num_cameras; ++i) {
-                        options->inner_iteration_ordering->AddElementToGroup(
-                            cameras + camera_block_size * i, 0);
-                    }
-            }
-            else if (blocks_for_inner_iterations .compare("points")==0) {
-                LOG(INFO) << "Point blocks for inner iterations";
-                    options->inner_iteration_ordering =
-                    std::make_shared<ceres::ParameterBlockOrdering>();
-                    for (int i = 0; i < num_points; ++i) {
-                        options->inner_iteration_ordering->AddElementToGroup(
-                            points + point_block_size * i, 0);
-                    }
-            }
-            else if (blocks_for_inner_iterations.compare("cameras,points")==0) {
-                LOG(INFO) << "Camera followed by point blocks for inner iterations";
-                    options->inner_iteration_ordering =
-                    std::make_shared<ceres::ParameterBlockOrdering>();
-                    for (int i = 0; i < num_cameras; ++i) {
-                        options->inner_iteration_ordering->AddElementToGroup(
-                            cameras + camera_block_size * i, 0);
-                    }
-                for (int i = 0; i < num_points; ++i) {
-                    options->inner_iteration_ordering->AddElementToGroup(
-                        points + point_block_size * i, 1);
-                }
-            }
-            else if (blocks_for_inner_iterations.compare(
-                "points,cameras")==0) {
-                LOG(INFO) << "Point followed by camera blocks for inner iterations";
-                    options->inner_iteration_ordering =
-                    std::make_shared<ceres::ParameterBlockOrdering>();
-                    for (int i = 0; i < num_cameras; ++i) {
-                        options->inner_iteration_ordering->AddElementToGroup(
-                            cameras + camera_block_size * i, 1);
-                    }
-                for (int i = 0; i < num_points; ++i) {
-                    options->inner_iteration_ordering->AddElementToGroup(
-                        points + point_block_size * i, 0);
-                }
-            }
-            else if (blocks_for_inner_iterations.compare("automatic") == 0) {
-                LOG(INFO) << "Choosing automatic blocks for inner iterations";
-            }
-            else {
-                LOG(FATAL) << "Unknown block type for inner iterations: "
-                    << blocks_for_inner_iterations;
-            }
-        }
-
-        if (ordering.compare("automatic") == 0) {
-            return;
-        }
-
-        auto* ordering = new ceres::ParameterBlockOrdering;
-
-        // The points come before the cameras.
-        for (int i = 0; i < num_points; ++i) {
-            ordering->AddElementToGroup(points + point_block_size * i, 0);
-        }
-
-        for (int i = 0; i < num_cameras; ++i) {
-            // When using axis-angle, there is a single parameter block for
-            // the entire camera.
-            ordering->AddElementToGroup(cameras + camera_block_size * i, 1);
-        }
-
-        options->linear_solver_ordering.reset(ordering);
-    }
 
     void SetMinimizerOptions(ceres::Solver::Options* options) {
-        options->max_num_iterations = 100;
+        options->max_num_iterations = 1000;
         options->minimizer_progress_to_stdout = true;
         options->num_threads = 4;
         options->eta;
         options->max_solver_time_in_seconds;
         options->use_nonmonotonic_steps;
-        options->minimizer_type = ceres::LINE_SEARCH;
+        options->minimizer_type;
         options->trust_region_strategy_type;
         options->use_inner_iterations;
     }
@@ -165,7 +79,7 @@ namespace ba
         ceres::Solver::Options* options) {
         SetMinimizerOptions(options);
         SetLinearSolver(options);
-        SetOrdering(bal_problem, options);
+        //SetOrdering(bal_problem, options);
     }
 
 
@@ -173,9 +87,24 @@ namespace ba
     {
         double* points = bal_problem->mutable_points();
         double* cameras = bal_problem->mutable_cameras();
-
         const double* observations = bal_problem->observations();
-        for (int i = 0; i < bal_problem->num_observations(); ++i) {
+        double errorBefore = 0;
+        switch (bal_problem->optiModel_)
+        {
+        case ba::OptiModel::fk1k2:
+            errorBefore = (use_quaternions)?0
+                : SnavelyReprojectionError::figureErr(points, cameras, observations, bal_problem->num_observations(), bal_problem->point_index(), bal_problem->camera_index());
+            break;
+        case ba::OptiModel::fk1:
+            break;
+        case ba::OptiModel::fcxcyk1:
+            break;
+        default:
+            break;
+        }
+
+        for (int i = 0; i < bal_problem->num_observations(); ++i) 
+        {
             ceres::CostFunction* cost_function=nullptr;
             switch (bal_problem->optiModel_)
             {
@@ -199,11 +128,11 @@ namespace ba
 
             ceres::LossFunction* loss_function = use_HuberLoss ? new ceres::HuberLoss(1.0) : nullptr;
 
-            // Each observation correponds to a pair of a camera and a point
-            // which are identified by camera_index()[i] and point_index()[i]
-            // respectively.
-            double* camera = cameras + bal_problem->camera_index()[i];
-            double* point = points +  bal_problem->point_index()[i];
+
+            //LOG_OUT << i << ": imgpt=(" << observations[2 * i + 0] << ", " << observations[2 * i + 1] << "; camera_index=" << bal_problem->camera_index()[i] << "; objPt_index=" << bal_problem->point_index()[i];
+            
+            double* camera = cameras + getEachCameraParamCnt(bal_problem->optiModel_) * bal_problem->camera_index()[i];
+            double* point = points +  3*bal_problem->point_index()[i];
             problem->AddResidualBlock(cost_function, loss_function, camera, point);
         } 
     }
@@ -216,7 +145,7 @@ namespace ba
         ceres::Problem problem;
 
         srand(0);
-        bal_problem.Perturb(10, 10, 10);
+        //bal_problem.Perturb(10, 10, 10);
 
         ba::BuildProblem(&bal_problem, &problem);
         ceres::Solver::Options options;
@@ -233,7 +162,7 @@ int main()
     std::map<int, std::array<double, 3>> colmapObjPts;
     std::vector<col::ImgPt> colmapImgPts;
     std::map<int, col::Camera>cameras;
-    readColmapResult("D:/repo/colmap-third/data", colmapObjPts, colmapImgPts, cameras);
+    readColmapResult("../data", colmapObjPts, colmapImgPts, cameras);
     ba::SolveProblem(cameraOptimModel, colmapObjPts, colmapImgPts, cameras);
 	return 0;
 }

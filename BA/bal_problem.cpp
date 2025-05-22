@@ -47,7 +47,7 @@ namespace ba {
         int idx = 0;
         for (const auto&d: cameras)
         {
-            switch (optiModel)
+            switch (optiModel_)
             {
             case ba::OptiModel::fk1k2:
                 parameters_[idx * eachCameraParamCnt] = d.second.fx;
@@ -106,6 +106,12 @@ namespace ba {
                 point_index_[i] = imgPtIdx;
                 observations_[2 * i + 0] = colmapImgPts[imgIdx].imgPts[imgPtIdx][0];
                 observations_[2 * i + 1] = colmapImgPts[imgIdx].imgPts[imgPtIdx][1];
+                if (optiModel_ == ba::OptiModel::fk1k2 || optiModel_ == ba::OptiModel::fk1)
+                {
+                    const col::Camera& theCamera = cameras.at(colmapImgPts[imgIdx].cameraId);
+                    observations_[2 * i + 0] -= (theCamera.width * 0.5);
+                    observations_[2 * i + 1] -= (theCamera.height * 0.5);;
+                }
             }
         }
         for (int imgPtIdx = 0; imgPtIdx < num_points_; imgPtIdx++)
@@ -143,87 +149,6 @@ namespace ba {
         }
     }
 
-    
-    void BALProblem::WriteToFile(const std::string& filename) const {
-        FILE* fptr = fopen(filename.c_str(), "w");
-
-        if (fptr == nullptr) {
-            LOG(FATAL) << "Error: unable to open file " << filename;
-            return;
-        };
-
-        fprintf(fptr, "%d %d %d\n", num_cameras_, num_points_, num_observations_);
-
-        for (int i = 0; i < num_observations_; ++i) {
-            fprintf(fptr, "%d %d", camera_index_[i], point_index_[i]);
-            for (int j = 0; j < 2; ++j) {
-                fprintf(fptr, " %g", observations_[2 * i + j]);
-            }
-            fprintf(fptr, "\n");
-        }
-
-        for (int i = 0; i < num_cameras(); ++i) {
-            double angleaxis[9];
-            if (use_quaternions_) {
-                // Output in angle-axis format.
-                ceres::QuaternionToAngleAxis(parameters_ + 10 * i, angleaxis);
-                memcpy(angleaxis + 3, parameters_ + 10 * i + 4, 6 * sizeof(double));
-            }
-            else {
-                memcpy(angleaxis, parameters_ + 9 * i, 9 * sizeof(double));
-            }
-            for (double coeff : angleaxis) {
-                fprintf(fptr, "%.16g\n", coeff);
-            }
-        }
-
-        const double* points = parameters_ + camera_block_size() * num_cameras_;
-        for (int i = 0; i < num_points(); ++i) {
-            const double* point = points + i * point_block_size();
-            for (int j = 0; j < point_block_size(); ++j) {
-                fprintf(fptr, "%.16g\n", point[j]);
-            }
-        }
-
-        fclose(fptr);
-    }
-
-    // Write the problem to a PLY file for inspection in Meshlab or CloudCompare.
-    void BALProblem::WriteToPLYFile(const std::string& filename) const {
-        std::ofstream of(filename.c_str());
-
-        of << "ply" << '\n'
-            << "format ascii 1.0" << '\n'
-            << "element vertex " << num_cameras_ + num_points_ << '\n'
-            << "property float x" << '\n'
-            << "property float y" << '\n'
-            << "property float z" << '\n'
-            << "property uchar red" << '\n'
-            << "property uchar green" << '\n'
-            << "property uchar blue" << '\n'
-            << "end_header" << std::endl;
-
-        // Export extrinsic data (i.e. camera centers) as green points.
-        double angle_axis[3];
-        double center[3];
-        for (int i = 0; i < num_cameras(); ++i) {
-            const double* camera = cameras() + camera_block_size() * i;
-            //CameraToAngleAxisAndCenter(camera, angle_axis, center);
-            of << center[0] << ' ' << center[1] << ' ' << center[2] << " 0 255 0"
-                << '\n';
-        }
-
-        // Export the structure (i.e. 3D Points) as white points.
-        const double* points = parameters_ + camera_block_size() * num_cameras_;
-        for (int i = 0; i < num_points(); ++i) {
-            const double* point = points + i * point_block_size();
-            for (int j = 0; j < point_block_size(); ++j) {
-                of << point[j] << ' ';
-            }
-            of << "255 255 255\n";
-        }
-        of.close();
-    }
 
 
     void BALProblem::Perturb(const double rotation_sigma,

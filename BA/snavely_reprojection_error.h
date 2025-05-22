@@ -2,7 +2,8 @@
 
 #ifndef CERES_EXAMPLES_SNAVELY_REPROJECTION_ERROR_H_
 #define CERES_EXAMPLES_SNAVELY_REPROJECTION_ERROR_H_
-
+#include <vector>
+#include <numeric>
 #include "ceres/rotation.h"
 #include "optiModel.h"
 namespace ba {
@@ -63,6 +64,21 @@ struct SnavelyReprojectionError {
 
   double observed_x;
   double observed_y;
+
+  static double figureErr(const double*objPts, const double* camerasParam, const double*imgPts,const int& imgPtsCnt, const int* point_index, const int* camera_index)
+  {
+      std::vector<double>errs(imgPtsCnt);
+      for (int i = 0; i < imgPtsCnt; i++)
+      {
+          const int& thisCameraIdx = camera_index[i];
+          const int& thisObjIdx = camera_index[i];
+          const double f = camerasParam[thisCameraIdx * 3];
+          const double k1 = camerasParam[thisCameraIdx * 3+1];
+          const double k2 = camerasParam[thisCameraIdx * 3+2];
+          const double*r = 
+      }
+      return 0;
+  }
 };
 
 // Templated pinhole camera model for used with Ceres.  The camera is
