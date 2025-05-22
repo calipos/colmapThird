@@ -53,6 +53,10 @@ namespace ba {
         {
             return camera_index_;
         }
+        const int* img_index()const
+        {
+            return img_index_;
+        }
         const double* observations()const
         {
             return observations_;
@@ -69,7 +73,10 @@ namespace ba {
         {
             return parameters_;
         }
-        // clang-format on
+        double* mutable_imgRt() {
+            int eachCameraParamCnt = getEachCameraParamCnt(optiModel_);
+            return parameters_ + eachCameraParamCnt * num_cameras_;
+        }
         double* mutable_points() {
             int eachCameraParamCnt = getEachCameraParamCnt(optiModel_);
             return parameters_ + eachCameraParamCnt * num_cameras_
@@ -87,6 +94,7 @@ namespace ba {
 
         int* point_index_;
         int* camera_index_;
+        int* img_index_;
         double* observations_;
         // The parameter vector is laid out as follows
         // [camera_1, ..., camera_n, point_1, ..., point_m]

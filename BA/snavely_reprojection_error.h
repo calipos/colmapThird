@@ -65,17 +65,43 @@ struct SnavelyReprojectionError {
   double observed_x;
   double observed_y;
 
-  static double figureErr(const double*objPts, const double* camerasParam, const double*imgPts,const int& imgPtsCnt, const int* point_index, const int* camera_index)
+  static double figureErr(const double*objPts, const double* camerasParam, const double* imgRtParam, const double*imgPts,const int& imgPtsCnt, const int* point_index, const int* camera_index, const int* img_index)
   {
       std::vector<double>errs(imgPtsCnt);
       for (int i = 0; i < imgPtsCnt; i++)
       {
           const int& thisCameraIdx = camera_index[i];
-          const int& thisObjIdx = camera_index[i];
+          const int& thisObjIdx = point_index[i];
+          const int& thisImgIdx = img_index[i];
           const double f = camerasParam[thisCameraIdx * 3];
           const double k1 = camerasParam[thisCameraIdx * 3+1];
           const double k2 = camerasParam[thisCameraIdx * 3+2];
-          const double*r = 
+          const double* rt = imgRtParam + 6 * thisImgIdx;
+          const double* point = objPts + thisObjIdx * 3;
+
+          double p[3];
+          ceres::AngleAxisRotatePoint(rt, point, p);
+
+          // camera[3,4,5] are the translation.
+          p[0] += rt[3];
+          p[1] += rt[4];
+          p[2] += rt[5];
+
+          // Compute the center of distortion. The sign change comes from
+          // the camera model that Noah Snavely's Bundler assumes, whereby
+          // the camera coordinate system has a negative z axis.
+          const double xp = -p[0] / p[2];
+          const double yp = -p[1] / p[2];
+
+          const double r2 = xp * xp + yp * yp;
+          const double distortion = 1.0 + r2 * (k1 + k2 * r2);
+
+          const T predicted_x = focal * distortion * xp;
+          const T predicted_y = focal * distortion * yp;
+
+          // The error is the difference between the predicted and observed position.
+          residuals[0] = predicted_x - observed_x;
+          residuals[1] = predicted_y - observed_y;
       }
       return 0;
   }

@@ -88,6 +88,7 @@ namespace ba {
 
         point_index_ = new int[num_observations_];
         camera_index_ = new int[num_observations_];
+        img_index_ = new int[num_observations_];
         observations_ = new double[2 * num_observations_];
 
 
@@ -104,6 +105,7 @@ namespace ba {
                 int i = num_points_ * imgIdx + imgPtIdx;
                 camera_index_[i] = cameraIdToIdx[colmapImgPts[imgIdx].cameraId];
                 point_index_[i] = imgPtIdx;
+                img_index_[i] = imgIdx;
                 observations_[2 * i + 0] = colmapImgPts[imgIdx].imgPts[imgPtIdx][0];
                 observations_[2 * i + 1] = colmapImgPts[imgIdx].imgPts[imgPtIdx][1];
                 if (optiModel_ == ba::OptiModel::fk1k2 || optiModel_ == ba::OptiModel::fk1)
@@ -192,6 +194,7 @@ namespace ba {
     BALProblem::~BALProblem() {
         delete[] point_index_;
         delete[] camera_index_;
+        delete[] img_index_;
         delete[] observations_;
         delete[] parameters_;
     }

@@ -87,13 +87,14 @@ namespace ba
     {
         double* points = bal_problem->mutable_points();
         double* cameras = bal_problem->mutable_cameras();
+        double* imgRt = bal_problem->mutable_imgRt();
         const double* observations = bal_problem->observations();
         double errorBefore = 0;
         switch (bal_problem->optiModel_)
         {
         case ba::OptiModel::fk1k2:
             errorBefore = (use_quaternions)?0
-                : SnavelyReprojectionError::figureErr(points, cameras, observations, bal_problem->num_observations(), bal_problem->point_index(), bal_problem->camera_index());
+                : SnavelyReprojectionError::figureErr(points, cameras, imgRt,observations, bal_problem->num_observations(), bal_problem->point_index(), bal_problem->camera_index(), bal_problem->img_index());
             break;
         case ba::OptiModel::fk1:
             break;
