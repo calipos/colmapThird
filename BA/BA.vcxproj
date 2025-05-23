@@ -161,7 +161,11 @@
     <ClInclude Include="BALog.h" />
     <ClInclude Include="bal_problem.h" />
     <ClInclude Include="cameras.h" />
+    <ClInclude Include="fcxcyk1_reprojection_error.h" />
+    <ClInclude Include="fixcamera_reprojection_error.h" />
+    <ClInclude Include="fk1_reprojection_error.h" />
     <ClInclude Include="imagePt.h" />
+    <ClInclude Include="k1_reprojection_error.h" />
     <ClInclude Include="objectPt.h" />
     <ClInclude Include="optiModel.h" />
     <ClInclude Include="snavely_reprojection_error.h" />

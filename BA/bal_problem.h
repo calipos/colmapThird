@@ -69,11 +69,15 @@ namespace ba {
         {
             return parameters_;
         }
+        const double* imgRts() {
+            int eachCameraParamCnt = getEachCameraParamCnt(optiModel_);
+            return parameters_ + eachCameraParamCnt * num_cameras_;
+        }
         double* mutable_cameras()
         {
             return parameters_;
         }
-        double* mutable_imgRt() {
+        double* mutable_imgRts() {
             int eachCameraParamCnt = getEachCameraParamCnt(optiModel_);
             return parameters_ + eachCameraParamCnt * num_cameras_;
         }
@@ -82,15 +86,22 @@ namespace ba {
             return parameters_ + eachCameraParamCnt * num_cameras_
                 + num_image() * (use_quaternions_ ? 7 : 6);
         }
-
+        const double* points() {
+            int eachCameraParamCnt = getEachCameraParamCnt(optiModel_);
+            return parameters_ + eachCameraParamCnt * num_cameras_
+                + num_image() * (use_quaternions_ ? 7 : 6);
+        }
+        double errorBefore = 0;
+        double errorAfter = 0;
         ba::OptiModel  optiModel_;
+        bool use_quaternions_;
+        void printBrief();
     private:
         int num_cameras_;
         int img_Cnt_;
         int num_points_;
         int num_observations_;
         int num_parameters_;
-        bool use_quaternions_;
 
         int* point_index_;
         int* camera_index_;

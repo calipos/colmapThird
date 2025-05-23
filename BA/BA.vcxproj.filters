@@ -62,5 +62,17 @@
     <ClInclude Include="optiModel.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="fk1_reprojection_error.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="fcxcyk1_reprojection_error.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="fixcamera_reprojection_error.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="k1_reprojection_error.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

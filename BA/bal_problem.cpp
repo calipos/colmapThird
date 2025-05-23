@@ -36,6 +36,7 @@ namespace ba {
         const std::map<int, col::Camera>& cameras, bool use_quaternions) 
     {
         optiModel_ = optiModel;
+        use_quaternions_ = use_quaternions;
         num_cameras_ = cameras.size();
         num_points_ = colmapObjPts.size();
         img_Cnt_ = colmapImgPts.size();
@@ -55,7 +56,7 @@ namespace ba {
                 parameters_[idx * eachCameraParamCnt + 2] = 0;
                 if (d.second.distoCoeff.size()==1)
                 {
-                    parameters_[idx * eachCameraParamCnt + 1] = d.second.distoCoeff[0];
+                    //parameters_[idx * eachCameraParamCnt + 1] = d.second.distoCoeff[0];
                 }
                 break;
             case ba::OptiModel::fk1:
@@ -63,7 +64,7 @@ namespace ba {
                 parameters_[idx * eachCameraParamCnt + 1] = 0;
                 if (d.second.distoCoeff.size() == 1)
                 {
-                    parameters_[idx * eachCameraParamCnt + 1] = d.second.distoCoeff[0];
+                    //parameters_[idx * eachCameraParamCnt + 1] = d.second.distoCoeff[0];
                 }
                 break;
             case ba::OptiModel::fcxcyk1:
@@ -73,8 +74,14 @@ namespace ba {
                 parameters_[idx * eachCameraParamCnt + 3] = 0;
                 if (d.second.distoCoeff.size() == 1)
                 {
-                    parameters_[idx * eachCameraParamCnt + 3] = d.second.distoCoeff[0];
+                    parameters_[idx * eachCameraParamCnt + 3] = 0;
+                    //parameters_[idx * eachCameraParamCnt + 3] = d.second.distoCoeff[0];
                 }
+                break;
+            case ba::OptiModel::fixcamera1:
+                break;
+            case ba::OptiModel::k1:
+                parameters_[idx * eachCameraParamCnt] = 0;
                 break;
             default:
                 assert(false);
@@ -114,6 +121,22 @@ namespace ba {
                     observations_[2 * i + 0] -= (theCamera.width * 0.5);
                     observations_[2 * i + 1] -= (theCamera.height * 0.5);;
                 }
+                if (optiModel_ == ba::OptiModel::fixcamera1)
+                {
+                    const col::Camera& theCamera = cameras.at(colmapImgPts[imgIdx].cameraId);
+                    observations_[2 * i + 0] -= (theCamera.width * 0.5);
+                    observations_[2 * i + 1] -= (theCamera.height * 0.5);
+                    observations_[2 * i + 0] /= (theCamera.fx);
+                    observations_[2 * i + 1] /= (theCamera.fy);;
+                }
+                if (optiModel_ == ba::OptiModel::k1)
+                {
+                    const col::Camera& theCamera = cameras.at(colmapImgPts[imgIdx].cameraId);
+                    observations_[2 * i + 0] -= (theCamera.width * 0.5);
+                    observations_[2 * i + 1] -= (theCamera.height * 0.5);
+                    observations_[2 * i + 0] /= (theCamera.fx);
+                    observations_[2 * i + 1] /= (theCamera.fy);;
+                }
             }
         }
         for (int imgPtIdx = 0; imgPtIdx < num_points_; imgPtIdx++)
@@ -125,8 +148,7 @@ namespace ba {
         }
  
 
-        use_quaternions_ = use_quaternions;
-        if (use_quaternions) {
+        if (use_quaternions_) {
             // Switch the angle-axis rotations to quaternions.
             int num_parameters_ = eachCameraParamCnt * num_cameras_ + 7 * colmapImgPts.size() + 3 * num_points_;;
             auto* quaternion_parameters = new double[num_parameters_];
@@ -152,6 +174,72 @@ namespace ba {
     }
 
 
+    void BALProblem::printBrief()
+    {
+        std::cout << "  *************************brief***********************  " << std::endl;
+        std::cout << "use_quaternions : " << std::boolalpha << use_quaternions_ << std::endl;
+        std::cout << "optimized model : " << getOptiModelStr(optiModel_) << std::endl;
+        const double* camera = cameras();
+        const double* imgRt = imgRts();
+        const double* objPts = points();
+        for (int i = 0; i < num_cameras(); i++)
+        {
+            switch (optiModel_)
+            {
+            case ba::OptiModel::fk1k2:
+                std::cout << "camera[" << *(camera + 3 * i) << ", " << *(camera + 3 * i + 1) << ", " << *(camera + 3 * i + 2) << "]" << std::endl;
+                break;
+            case ba::OptiModel::fk1:
+                std::cout << "camera[" << *(camera + 3 * i) << ", " << *(camera + 3 * i + 1) << "]" << std::endl;
+                break;
+            case ba::OptiModel::fcxcyk1:
+                std::cout << "camera[" << *(camera + 3 * i) << ", " << *(camera + 3 * i + 1) << ", " << *(camera + 3 * i + 2) << ", " << *(camera + 3 * i + 3) << "]" << std::endl;
+                break;
+            case ba::OptiModel::fixcamera1:
+                std::cout << "camera[fixed f cx cy]" << std::endl;
+                break;
+            case ba::OptiModel::k1:
+                std::cout << "camera[" << *(camera + 3 * i)  << "]" << std::endl;
+                break;
+            default:
+                std::cout << "camera[error]" << std::endl;
+                break;
+            }
+        }
+        for (int i = 0; i < num_image() && i < 5; i++)
+        {
+            if (use_quaternions_)
+            {
+                std::cout << "qt[";
+                for (int j = 0; j < 7; j++)
+                {
+                    std::cout << *(imgRt + 7 * i + j) << ", ";
+                }
+                std::cout << "]" << std::endl;;
+            }
+            else
+            {
+                std::cout << "rt[";
+                for (int j = 0; j < 6; j++)
+                {
+                    std::cout << *(imgRt + 6 * i + j) << ", ";
+                }
+                std::cout << "]" << std::endl;;
+            }
+        }
+        for (int i = 0; i < num_points() && i < 5; i++)
+        {
+                std::cout << "objPt[";
+                for (int j = 0; j < 3; j++)
+                {
+                    std::cout << *(objPts + 3 * i + j) << ", ";
+                }
+                std::cout << "]" << std::endl;;
+            
+        }
+        std::cout << "  *************************     ***********************  " << std::endl;
+        std::cout << std::endl;
+    }
 
     void BALProblem::Perturb(const double rotation_sigma,
         const double translation_sigma,

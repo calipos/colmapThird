@@ -472,7 +472,7 @@ if not exist %pwd%\install\libigl-2.5.0 (
     -DLIBIGL_USE_STATIC_LIBRARY:BOOL="0"   ^
     -DLIBIGL_GLFW:BOOL="0"   ^
     -DLIBIGL_XML:BOOL="0"   ^
-    -DFETCHCONTENT_SOURCE_DIR_EIGEN:PATH="D:/repo/colmapThird/install/eigen-3.4.0/include/eigen3"   ^
+    -DFETCHCONTENT_SOURCE_DIR_EIGEN:PATH=%pwd%install/eigen-3.4.0/include/eigen3   ^
     -DLIBIGL_GLFW_TESTS:BOOL="0"   ^
     -DCATCH_INSTALL_DOCS:BOOL="0"   ^
     -DLIBIGL_INSTALL:BOOL="1"   ^
@@ -504,3 +504,18 @@ if not exist %pwd%\install\flatbuffers-24.12.23 (
     msbuild %pwd%\build\flatbuffers-24.12.23\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
     cd %pwd%
 ) 
+
+if not exist %pwd%\install\BA_exe (
+    echo  -----------build BA_exe----------
+    cmake  -G "Visual Studio 16 2019"    -B %pwd%build\BA_exe  -S %pwd%BA   ^
+    -DCERES_INCLUDE_DIR:PATH=%pwd%install/ceres-solver-2.2.0/include   ^
+    -DCERES_LIB_DIR:PATH=%pwd%install/ceres-solver-2.2.0/include   ^
+    -DGLOG_INCLUDE:PATH=%pwd%install/glog-0.7.1/lib   ^
+    -DGLOG_LIB_DIR:PATH=%pwd%install/glog-0.7.1/include   ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/BA_exe
+
+    TIMEOUT /T 1
+    msbuild %pwd%\build\BA_exe\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
+    cd %pwd%
+) 
+pause
