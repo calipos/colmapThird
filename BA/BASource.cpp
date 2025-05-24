@@ -245,7 +245,7 @@ int main(int argc, char** argv)
     std::filesystem::path  dataPath = "../data";
     if (argc>1)
     {
-        dataPath = argv[0];
+        dataPath = std::filesystem::path(argv[1]);
     }
 
 
@@ -254,7 +254,7 @@ int main(int argc, char** argv)
     std::map<int, std::array<double, 3>> colmapObjPts;
     std::vector<col::ImgPt> colmapImgPts;
     std::map<int, col::Camera>cameras;
-    readColmapResult("../data", colmapObjPts, colmapImgPts, cameras);
+    readColmapResult(dataPath, colmapObjPts, colmapImgPts, cameras);
     ba::SolveProblem(cameraOptimModel, colmapObjPts, colmapImgPts, cameras);
 	return 0;
 }

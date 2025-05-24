@@ -2,6 +2,7 @@
 #define _CAMERA_H_
 #include <string>
 #include <fstream>
+#include <vector>
 #include <filesystem>
 #include <map>
 

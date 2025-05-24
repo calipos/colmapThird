@@ -31,17 +31,17 @@ if not exist %pwd%\installmingw\jsoncpp-1.9.6 (
     cd %pwd%
 )
 
-if not exist %pwd%\installmingw\GKlib (
-    echo  -----------build gklib----------
-    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\gklib  -S %pwd%\GKlib -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw ^
-    -DGKREGEX:BOOL="1" -DGKRAND:BOOL="1" ^
-    -DBUILD_SHARED_LIBS:BOOL="0" ^
-    -DBUILD_TESTING:BOOL="0" ^
-    -DCMAKE_BUILD_TYPE="Release" 
-    cd %pwd%\buildmingw\gklib
-    ninja install -j16
-    cd %pwd%
-)
+rem if not exist %pwd%\installmingw\GKlib (
+rem     echo  -----------build gklib----------
+rem     cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\gklib  -S %pwd%\GKlib -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw ^
+rem     -DGKREGEX:BOOL="1" -DGKRAND:BOOL="1" ^
+rem     -DBUILD_SHARED_LIBS:BOOL="0" ^
+rem     -DBUILD_TESTING:BOOL="0" ^
+rem     -DCMAKE_BUILD_TYPE="Release" 
+rem     cd %pwd%\buildmingw\gklib
+rem     ninja install -j16
+rem     cd %pwd%
+rem )
 
  
 
@@ -417,3 +417,19 @@ if not exist %pwd%\installmingw\protobuf-3.20.0-rc3 (
 ) 
 
 
+
+
+if not exist %pwd%\installmingw\BA_exe (
+    echo  -----------build BA_exe----------
+    cmake  -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++     -B %pwd%buildmingw\BA_exe  -S %pwd%BA   ^
+    -DCERES_INCLUDE_DIR:PATH=%pwd%installmingw/ceres-solver-2.2.0/include   ^
+    -DCERES_LIB_DIR:PATH=%pwd%installmingw/ceres-solver-2.2.0/lib   ^
+    -DGLOG_INCLUDE_DIR:PATH=%pwd%installmingw/glog-0.7.1/include   ^
+    -DGLOG_LIB_DIR:PATH=%pwd%installmingw/glog-0.7.1/lib   ^
+    -DEIGEN_INCLUDE_DIR:PATH=%pwd%installmingw/eigen-3.4.0/include/eigen3   ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw/BA_exe
+    cd  %pwd%\buildmingw\BA_exe
+    ninja install -j16
+    cd %pwd%
+) 
+pause

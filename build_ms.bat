@@ -1,4 +1,4 @@
-@echo off
+@echo on
 set pwd=%~dp0
 echo %pwd%
 set pwd2=D:/BaiduSyncdisk/
@@ -509,9 +509,10 @@ if not exist %pwd%\install\BA_exe (
     echo  -----------build BA_exe----------
     cmake  -G "Visual Studio 16 2019"    -B %pwd%build\BA_exe  -S %pwd%BA   ^
     -DCERES_INCLUDE_DIR:PATH=%pwd%install/ceres-solver-2.2.0/include   ^
-    -DCERES_LIB_DIR:PATH=%pwd%install/ceres-solver-2.2.0/include   ^
-    -DGLOG_INCLUDE:PATH=%pwd%install/glog-0.7.1/lib   ^
-    -DGLOG_LIB_DIR:PATH=%pwd%install/glog-0.7.1/include   ^
+    -DCERES_LIB_DIR:PATH=%pwd%install/ceres-solver-2.2.0/lib   ^
+    -DGLOG_INCLUDE_DIR:PATH=%pwd%install/glog-0.7.1/include   ^
+    -DGLOG_LIB_DIR:PATH=%pwd%install/glog-0.7.1/lib   ^
+    -DEIGEN_INCLUDE_DIR:PATH=%pwd%install/eigen-3.4.0/include/eigen3   ^
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/BA_exe
 
     TIMEOUT /T 1

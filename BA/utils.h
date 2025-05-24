@@ -1,6 +1,8 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 #include <string>
+#include <iostream>
+#include <cstdint>
 #include <vector>
 #include <sstream>
 namespace utils
