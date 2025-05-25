@@ -512,6 +512,8 @@ if not exist %pwd%\install\BA_exe (
     -DCERES_LIB_DIR:PATH=%pwd%install/ceres-solver-2.2.0/lib   ^
     -DGLOG_INCLUDE_DIR:PATH=%pwd%install/glog-0.7.1/include   ^
     -DGLOG_LIB_DIR:PATH=%pwd%install/glog-0.7.1/lib   ^
+    -DJSONCPP_INCLUDE_DIR:PATH=%pwd%install/jsoncpp-1.9.6/include   ^
+    -DJSONCPP_LIB_DIR:PATH=%pwd%install/jsoncpp-1.9.6/lib   ^
     -DEIGEN_INCLUDE_DIR:PATH=%pwd%install/eigen-3.4.0/include/eigen3   ^
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/BA_exe
 
@@ -519,4 +521,7 @@ if not exist %pwd%\install\BA_exe (
     msbuild %pwd%\build\BA_exe\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
     cd %pwd%
 ) 
+
+copy %pwd%\install\jsoncpp-1.9.6-release\bin\jsoncpp.dll  %pwd%install\BA_exe
+copy %pwd%\install\glog-0.7.1\bin\glog.dll  %pwd%install\BA_exe
 pause

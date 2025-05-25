@@ -184,9 +184,10 @@ namespace ba
         return;
     }
 
-    void SolveProblem(const ba::OptiModel& optiModel,
+    void SolveProblem(const std::filesystem::path&dataPath,
+        const ba::OptiModel& optiModel,
         const std::map<int, std::array<double, 3>>&colmapObjPts,
-        const std::vector<col::ImgPt>&colmapImgPts,
+        std::vector<col::ImgPt>&colmapImgPts,
         const std::map<int, col::Camera>&cameras) {
         ba::BALProblem bal_problem(optiModel,colmapObjPts, colmapImgPts, cameras, use_quaternions);
         ceres::Problem problem;
@@ -233,11 +234,35 @@ namespace ba
         default:
             break;
         }
+        
+        for (int i = 0; i < colmapImgPts.size(); ++i) 
+        {
+            if (bal_problem.use_quaternions_)
+            {
+                const double* quaternion_cursor = bal_problem.imgRts() + 7 * i;
+                ceres::QuaternionToAngleAxis(quaternion_cursor, &colmapImgPts[i].r[0]);
+                colmapImgPts[i].t[0] = quaternion_cursor[4];
+                colmapImgPts[i].t[1] = quaternion_cursor[5];
+                colmapImgPts[i].t[2] = quaternion_cursor[6];
+            }
+            else
+            {
+                const double* rt = bal_problem.imgRts() + 6 * i;
+                colmapImgPts[i].r[0] = rt[0];
+                colmapImgPts[i].r[1] = rt[1];
+                colmapImgPts[i].r[2] = rt[2];
+                colmapImgPts[i].t[0] = rt[3];
+                colmapImgPts[i].t[1] = rt[4];
+                colmapImgPts[i].t[2] = rt[5];
+            }
+        }
+        
         std::cout << summary.BriefReport() << "\n";
         //std::cout << summary.FullReport() << "\n";
         LOG_OUT << bal_problem.errorBefore;
         LOG_OUT << bal_problem.errorAfter;
         bal_problem.printBrief();
+        bal_problem.saveResultJson(dataPath, colmapObjPts, colmapImgPts, cameras);
     }
 }
 int main(int argc, char** argv)
@@ -254,7 +279,10 @@ int main(int argc, char** argv)
     std::map<int, std::array<double, 3>> colmapObjPts;
     std::vector<col::ImgPt> colmapImgPts;
     std::map<int, col::Camera>cameras;
-    readColmapResult(dataPath, colmapObjPts, colmapImgPts, cameras);
-    ba::SolveProblem(cameraOptimModel, colmapObjPts, colmapImgPts, cameras);
+    if (!readColmapResult(dataPath, colmapObjPts, colmapImgPts, cameras))
+    {
+        return -1;
+    };
+    ba::SolveProblem(dataPath,cameraOptimModel, colmapObjPts, colmapImgPts, cameras);
 	return 0;
 }

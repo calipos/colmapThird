@@ -3,8 +3,9 @@
 #include "BALog.h"
 namespace col
 {
-	Camera::Camera(const double& fx_, const double& fy_, const double& cx_, const double& cy_, const int& height_, const int& width_, const std::vector<double>* distoCoeff_)
+	Camera::Camera(const cameraModel& camera_model, const double& fx_, const double& fy_, const double& cx_, const double& cy_, const int& height_, const int& width_, const std::vector<double>* distoCoeff_)
 	{
+		camera_model_ = camera_model;
 		fx = fx_;
 		fy = fy_;
 		cx = cx_;
@@ -110,7 +111,7 @@ std::map<int, col::Camera>readCamerasFromTXT(const std::filesystem::path& camera
 				param.emplace_back(cy);
 				disto.emplace_back(k);
 			}
-			ret[cameraId] = col::Camera(param[0], param[0], param[1], param[2], height, width, &disto);
+			ret[cameraId] = col::Camera(thisCameraModel, param[0], param[0], param[1], param[2], height, width, &disto);
 		}
 	}
 	return ret;

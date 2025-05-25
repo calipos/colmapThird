@@ -7,7 +7,7 @@
 #include <random>
 #include <string>
 #include <vector>
-
+#include "json/json.h"
 #include "Eigen/Core"
 #include "ceres/rotation.h"
 #include "glog/logging.h"
@@ -41,7 +41,6 @@ namespace ba {
         num_points_ = colmapObjPts.size();
         img_Cnt_ = colmapImgPts.size();
         num_observations_ = colmapImgPts.size() * num_points_;
-        std::map<int, int>cameraIdToIdx;
         int eachCameraParamCnt = getEachCameraParamCnt(optiModel_);
         num_parameters_ = eachCameraParamCnt * num_cameras_ + 6 * colmapImgPts.size() + 3 * num_points_;
         parameters_ = new double[num_parameters_];
@@ -87,7 +86,9 @@ namespace ba {
                 assert(false);
                 break;
             }
-            cameraIdToIdx[d.first] = idx++;
+            cameraIdToIdx[d.first] = idx;
+            cameraIdxToId[idx] = d.first;
+            idx++;
         }
 
         LOG_OUT << "Header: " << num_cameras_ << " " << num_points_ << " "
@@ -240,7 +241,100 @@ namespace ba {
         std::cout << "  *************************     ***********************  " << std::endl;
         std::cout << std::endl;
     }
-
+    int BALProblem::saveResultJson(const std::filesystem::path& dir,
+        const std::map<int, std::array<double, 3>>& colmapObjPts,
+        const std::vector<col::ImgPt>& colmapImgPts,
+        const std::map<int, col::Camera>& colCameras)
+    {
+ 
+        Json::Value labelRoot;
+        labelRoot["version"] = Json::Value("1.");
+        labelRoot["use_quaternions"] = Json::Value(use_quaternions_);
+        labelRoot["optimized_model"] = Json::Value(getOptiModelStr(this->optiModel_));
+        const double* camera = this->cameras();
+        const double* imgRt = this->imgRts();
+        for (int i = 0; i < num_cameras(); i++)
+        {
+            const int& colmapCameraId = cameraIdxToId[i];
+            const auto& colmapCameraIdStr = std::to_string(colmapCameraId);
+            Json::Value cameraNode;
+            switch (this->optiModel_)
+            {
+            case ba::OptiModel::fk1k2:
+                cameraNode["fx"] = *(camera + 3 * i);
+                cameraNode["fy"] = *(camera + 3 * i);
+                cameraNode["k1"] = *(camera + 3 * i + 1);
+                cameraNode["k2"] = *(camera + 3 * i + 2);
+                labelRoot[colmapCameraIdStr]= cameraNode;
+                break;
+            case ba::OptiModel::fk1:
+                cameraNode["fx"] = *(camera + 3 * i);
+                cameraNode["fy"] = *(camera + 3 * i);
+                cameraNode["k1"] = *(camera + 3 * i + 1);
+                labelRoot[colmapCameraIdStr] = cameraNode;
+                break;
+            case ba::OptiModel::fcxcyk1:
+                cameraNode["fx"] = *(camera + 3 * i);
+                cameraNode["fy"] = *(camera + 3 * i);
+                cameraNode["cx"] = *(camera + 3 * i + 1);
+                cameraNode["cy"] = *(camera + 3 * i + 2);
+                cameraNode["k1"] = *(camera + 3 * i + 3);
+                labelRoot[colmapCameraIdStr] = cameraNode;
+                break;
+            case ba::OptiModel::fixcamera1:
+            {
+                const col::Camera& theCamera = colCameras.at(colmapCameraId);
+                cameraNode["fx"] = theCamera.fx;
+                cameraNode["fy"] = theCamera.fy;
+                cameraNode["cx"] = theCamera.cx;
+                cameraNode["cy"] = theCamera.cy;
+                if (theCamera.camera_model_ == col::Camera::cameraModel::SIMPLE_RADIAL)
+                {
+                    cameraNode["k1"] = theCamera.distoCoeff[0];
+                }
+                labelRoot[colmapCameraIdStr] = cameraNode;
+                break;
+            }
+            case ba::OptiModel::k1:
+            {
+                const col::Camera& theCamera = colCameras.at(colmapCameraId);
+                cameraNode["fx"] = theCamera.fx;
+                cameraNode["fy"] = theCamera.fy;
+                cameraNode["cx"] = theCamera.cx;
+                cameraNode["cy"] = theCamera.cy;
+                cameraNode["k1"] = *(camera + 3 * i);
+                labelRoot[colmapCameraIdStr] = cameraNode;
+                break;
+            }
+            default:
+                std::cout << "camera[error]" << std::endl;
+                break;
+            }
+        }
+        Json::Value imgArray;
+        for (int i = 0; i < colmapImgPts.size(); i++)
+        {
+            Json::Value imgNode;
+            const col::ImgPt&img = colmapImgPts[i];
+            imgNode["path"] = img.imgPath.string();
+            imgNode["cameraId"] = img.cameraId;
+            Json::Value imgrt;
+            imgrt.append(img.r[0]);
+            imgrt.append(img.r[1]);
+            imgrt.append(img.r[2]);
+            imgrt.append(img.t[0]);
+            imgrt.append(img.t[1]);
+            imgrt.append(img.t[2]);
+            imgNode["rt"] = imgrt;
+            imgArray.append(imgNode);
+        }
+        labelRoot["imgArray"] = imgArray;
+        Json::StyledWriter sw;
+        std::fstream fout(dir/"ba.json", std::ios::out);
+        fout << sw.write(labelRoot);
+        fout.close();
+        return 0;
+    }
     void BALProblem::Perturb(const double rotation_sigma,
         const double translation_sigma,
         const double point_sigma) {

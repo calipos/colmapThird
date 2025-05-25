@@ -426,6 +426,8 @@ if not exist %pwd%\installmingw\BA_exe (
     -DCERES_LIB_DIR:PATH=%pwd%installmingw/ceres-solver-2.2.0/lib   ^
     -DGLOG_INCLUDE_DIR:PATH=%pwd%installmingw/glog-0.7.1/include   ^
     -DGLOG_LIB_DIR:PATH=%pwd%installmingw/glog-0.7.1/lib   ^
+    -DJSONCPP_INCLUDE_DIR:PATH=%pwd%installmingw/jsoncpp-1.9.6/include   ^
+    -DJSONCPP_LIB_DIR:PATH=%pwd%installmingw/jsoncpp-1.9.6/lib   ^
     -DEIGEN_INCLUDE_DIR:PATH=%pwd%installmingw/eigen-3.4.0/include/eigen3   ^
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw/BA_exe
     cd  %pwd%\buildmingw\BA_exe

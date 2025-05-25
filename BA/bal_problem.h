@@ -2,6 +2,7 @@
 #define CERES_EXAMPLES_BAL_PROBLEM_H_
 #include <map>
 #include <string>
+#include <filesystem>
 #include "cameras.h"
 #include "imagePt.h"
 #include "optiModel.h"
@@ -96,6 +97,10 @@ namespace ba {
         ba::OptiModel  optiModel_;
         bool use_quaternions_;
         void printBrief();
+        int saveResultJson(const std::filesystem::path&dir,
+            const std::map<int, std::array<double, 3>>& colmapObjPts,
+            const std::vector<col::ImgPt>& colmapImgPts,
+            const std::map<int, col::Camera>& colCameras);
     private:
         int num_cameras_;
         int img_Cnt_;
@@ -110,6 +115,13 @@ namespace ba {
         // The parameter vector is laid out as follows
         // [camera_1, ..., camera_n, point_1, ..., point_m]
         double* parameters_;
+
+        //to ceres figure idx(from 0)
+        std::map<int, int>cameraIdToIdx;
+        //to colmap camera id(from 1)
+        std::map<int, int>cameraIdxToId;
+
+         
     };
 
 }  // namespace ceres::examples
