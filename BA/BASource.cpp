@@ -10,6 +10,7 @@
 #include "snavely_reprojection_error.h"
 #include "fk1_reprojection_error.h"
 #include "fcxcyk1_reprojection_error.h"
+#include "fcxcy_reprojection_error.h"
 #include "fixcamera_reprojection_error.h"
 #include "k1_reprojection_error.h"
 #include "optiModel.h"
@@ -119,6 +120,11 @@ namespace ba
                     K1ReprojectionErrorWithQuaternions::figureErr(points, cameras, imgRts, observations, bal_problem->num_observations(), bal_problem->point_index(), bal_problem->camera_index(), bal_problem->img_index())
                     : K1ReprojectionError::figureErr(points, cameras, imgRts, observations, bal_problem->num_observations(), bal_problem->point_index(), bal_problem->camera_index(), bal_problem->img_index());
                 break;
+        case ba::OptiModel::fcxcy:
+            bal_problem->errorBefore = (bal_problem->use_quaternions_) ?
+                FcxcyReprojectionErrorWithQuaternions::figureErr(points, cameras, imgRts, observations, bal_problem->num_observations(), bal_problem->point_index(), bal_problem->camera_index(), bal_problem->img_index())
+                : FcxcyReprojectionError::figureErr(points, cameras, imgRts, observations, bal_problem->num_observations(), bal_problem->point_index(), bal_problem->camera_index(), bal_problem->img_index());
+            break;
         default:
             break;
         }
@@ -161,6 +167,13 @@ namespace ba
                     ? K1ReprojectionErrorWithQuaternions::Create(
                         observations[2 * i + 0], observations[2 * i + 1])
                     : K1ReprojectionError::Create(
+                        observations[2 * i + 0], observations[2 * i + 1]);
+                break;
+            case ba::OptiModel::fcxcy:
+                cost_function = (bal_problem->use_quaternions_)
+                    ? FcxcyReprojectionErrorWithQuaternions::Create(
+                        observations[2 * i + 0], observations[2 * i + 1])
+                    : FcxcyReprojectionError::Create(
                         observations[2 * i + 0], observations[2 * i + 1]);
                 break;
             default: 
@@ -231,6 +244,11 @@ namespace ba
                 K1ReprojectionErrorWithQuaternions::figureErr(bal_problem.mutable_points(), bal_problem.mutable_cameras(), bal_problem.mutable_imgRts(), bal_problem.observations(), bal_problem.num_observations(), bal_problem.point_index(), bal_problem.camera_index(), bal_problem.img_index())
                 : K1ReprojectionError::figureErr(bal_problem.mutable_points(), bal_problem.mutable_cameras(), bal_problem.mutable_imgRts(), bal_problem.observations(), bal_problem.num_observations(), bal_problem.point_index(), bal_problem.camera_index(), bal_problem.img_index());
             break;
+        case ba::OptiModel::fcxcy:
+            bal_problem.errorAfter = (bal_problem.use_quaternions_) ?
+                FcxcyReprojectionErrorWithQuaternions::figureErr(bal_problem.mutable_points(), bal_problem.mutable_cameras(), bal_problem.mutable_imgRts(), bal_problem.observations(), bal_problem.num_observations(), bal_problem.point_index(), bal_problem.camera_index(), bal_problem.img_index())
+                : FcxcyReprojectionError::figureErr(bal_problem.mutable_points(), bal_problem.mutable_cameras(), bal_problem.mutable_imgRts(), bal_problem.observations(), bal_problem.num_observations(), bal_problem.point_index(), bal_problem.camera_index(), bal_problem.img_index());
+            break;
         default:
             break;
         }
@@ -274,7 +292,7 @@ int main(int argc, char** argv)
     }
 
 
-    cameraOptimModel = ba::OptiModel::k1;
+    cameraOptimModel = ba::OptiModel::fcxcy;
     use_quaternions = false;
     std::map<int, std::array<double, 3>> colmapObjPts;
     std::vector<col::ImgPt> colmapImgPts;

@@ -541,7 +541,10 @@ void Reconstruction::Read(const std::string& path) {
   }
 }
 
-void Reconstruction::Write(const std::string& path) const { WriteBinary(path); }
+void Reconstruction::Write(const std::string& path) const {
+  WriteBinary(path);
+  WriteText(path);
+}
 
 void Reconstruction::ReadText(const std::string& path) {
   cameras_.clear();

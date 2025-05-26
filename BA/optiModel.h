@@ -10,6 +10,7 @@ namespace ba
         fcxcyk1 = 3,
         fixcamera1 = 4,//fixed camera = fcxcy
         k1 = 5,//fixed camera = fcxcy
+        fcxcy = 6,
     };
     inline int getEachCameraParamCnt(const ba::OptiModel& optiModel)
     {
@@ -29,7 +30,10 @@ namespace ba
             eachCameraParamCnt = 0;    // 
             break;
         case ba::OptiModel::k1:
-            eachCameraParamCnt = 1;    
+            eachCameraParamCnt = 1;
+            break;
+        case ba::OptiModel::fcxcy:
+            eachCameraParamCnt = 3;
             break;
         default:
             return -1;
@@ -52,6 +56,8 @@ namespace ba
             return "fixcamera1";
         case ba::OptiModel::k1:
             return "k1";
+        case ba::OptiModel::fcxcy:
+            return "fcxcy";
         default:
             return "error  !!!";
         }

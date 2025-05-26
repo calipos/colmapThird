@@ -38,7 +38,14 @@ class Camera:
             self.cameraType = 'SIMPLE_PINHOLE'
             return
         if seges[1] == 'PINHOLE':  # fx fy cx cy
-            print("not support PINHOLE yet")
+            if (len(seges) != 8):
+                return
+            self.intr = np.array([np.float32(seges[4]), 0, np.float32(
+                seges[6]), 0, np.float32(seges[5]), np.float32(seges[7]), 0, 0, 1]).reshape(3, 3)
+            self.width = int(seges[2])
+            self.height = int(seges[3])
+            self.disto = []
+            self.cameraType = 'PINHOLE'
             return 
         if seges[1] == 'RADIAL':  # f cx cy  k1 k2
             print("not support RADIAL yet")
@@ -174,9 +181,9 @@ def readFromColmapPointsTxt(ColmapTxtPath):
     return pts.reshape(-1, 3)
 
 def readColmapResult(dataDir):
-    CameraTxt = os.path.join(dataDir, 'cameras.txt')
-    imagesTxt = os.path.join(dataDir, 'images.txt')
-    points3DTxt = os.path.join(dataDir, 'points3D.txt')
+    CameraTxt = os.path.join(dataDir, os.path.join('sparse', 'cameras.txt'))
+    imagesTxt = os.path.join(dataDir, os.path.join('sparse', 'images.txt'))
+    points3DTxt = os.path.join(dataDir, os.path.join('sparse', 'points3D.txt'))
     if os.path.exists(CameraTxt) and os.path.exists(imagesTxt) and os.path.exists(points3DTxt):
         print('begin...')
     else:

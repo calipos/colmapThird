@@ -434,4 +434,6 @@ if not exist %pwd%\installmingw\BA_exe (
     ninja install -j16
     cd %pwd%
 ) 
+copy %pwd%\installmingw\glog-0.7.1\bin\libglog.dll  %pwd%\installmingw\BA_exe
+copy %pwd%\installmingw\ceres-solver-2.2.0\bin\libceres.dll  %pwd%\installmingw\BA_exe
 pause

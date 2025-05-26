@@ -17,7 +17,7 @@ if __name__ == '__main__':
                               [0, 1712.6196232455209, 640],
                               [0, 0, 1]], dtype=np.float32)
     dist_coeffs = np.array(
-        [-0.074876139067549669, 0, 0, 0, 0], dtype=np.float32)
+        [-0.95465118780250591, 0, 0, 0, 0], dtype=np.float32)
     oriImg = cv2.imread('D:/repo/colmapThird/data/b/00005.jpg')
     h = oriImg.shape[0]
     w = oriImg.shape[1]
@@ -35,4 +35,4 @@ if __name__ == '__main__':
     print(u*camera_matrix[0, 0]+camera_matrix[0, 2],v*camera_matrix[1, 1]+camera_matrix[1, 2])
     undistortImg = cv2.undistort(
         oriImg, camera_matrix, dist_coeffs, camera_matrix)
-    cv2.imwrite('D:/repo/colmapThird/data/images/b/00005b.jpg', undistortImg)
+    cv2.imwrite('D:/repo/colmapThird/data/b/00005b.jpg', undistortImg)

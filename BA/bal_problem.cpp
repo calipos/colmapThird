@@ -82,6 +82,11 @@ namespace ba {
             case ba::OptiModel::k1:
                 parameters_[idx * eachCameraParamCnt] = 0;
                 break;
+            case ba::OptiModel::fcxcy:
+                parameters_[idx * eachCameraParamCnt] = d.second.fx;
+                parameters_[idx * eachCameraParamCnt + 1] = d.second.cx;
+                parameters_[idx * eachCameraParamCnt + 2] = d.second.cy;
+                break;
             default:
                 assert(false);
                 break;
@@ -202,6 +207,9 @@ namespace ba {
             case ba::OptiModel::k1:
                 std::cout << "camera[" << *(camera + 3 * i)  << "]" << std::endl;
                 break;
+            case ba::OptiModel::fcxcy:
+                std::cout << "camera[" << *(camera + 3 * i) << ", " << *(camera + 3 * i + 1) << ", " << *(camera + 3 * i + 2) << "]" << std::endl;
+                break;
             default:
                 std::cout << "camera[error]" << std::endl;
                 break;
@@ -306,6 +314,13 @@ namespace ba {
                 labelRoot[colmapCameraIdStr] = cameraNode;
                 break;
             }
+            case ba::OptiModel::fcxcy:
+                cameraNode["fx"] = *(camera + 3 * i);
+                cameraNode["fy"] = *(camera + 3 * i);
+                cameraNode["cx"] = *(camera + 3 * i + 1);
+                cameraNode["cy"] = *(camera + 3 * i + 2);
+                labelRoot[colmapCameraIdStr] = cameraNode;
+                break;
             default:
                 std::cout << "camera[error]" << std::endl;
                 break;
