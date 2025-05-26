@@ -92,6 +92,20 @@ if not exist %pwd%\installmingw\eigen-3.4.0 (
     cd %pwd%
 )
 rem =======================================================================
+if not exist %pwd%\installmingw\PoseLib-2.0.4 (
+    echo  -----------build PoseLib-2.0.4----------
+    cmake -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++  -B %pwd%\buildmingw\PoseLib-2.0.4  -S %pwd%\PoseLib-2.0.4     ^
+    -DBUILD_SHARED_LIBS:BOOL="0" ^
+    -DEigen3_DIR:PATH="%pwd%installmingw/eigen-3.4.0/share/eigen3/cmake"  ^
+    -DCMAKE_BUILD_TYPE="Release" ^
+    -DCMAKE_INSTALL_PREFIX:PATH="%pwd%installmingw/PoseLib-2.0.4"
+    cd  %pwd%\buildmingw\PoseLib-2.0.4
+    ninja install -j16
+    cd %pwd%
+)
+rem =======================================================================
+
+
 
 if not exist %pwd%\installmingw\cgal-5.6.1 (
     echo  -----------build cgal-5.6.1----------
@@ -175,7 +189,7 @@ if not exist %pwd%\installmingw\opencv480 (
     -DBUILD_FAT_JAVA_LIB:BOOL="0"     ^
     -DBUILD_opencv_dnn:BOOL="1"       ^
     -DCMAKE_BUILD_TYPE="Release" ^
-	-DEigen3_DIR:PATH="%pwd%installmingw/eigen-3.4.0/share/eigen3/cmake"  ^
+    -DEigen3_DIR:PATH="%pwd%installmingw/eigen-3.4.0/share/eigen3/cmake"  ^
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw/opencv480 
     cd  %pwd%\buildmingw\opencv480
     ninja install -j12

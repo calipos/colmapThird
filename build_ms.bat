@@ -1,4 +1,4 @@
-@echo on
+@echo off
 set pwd=%~dp0
 echo %pwd%
 set pwd2=D:/BaiduSyncdisk/
@@ -126,9 +126,21 @@ if not exist %pwd%\install\eigen-3.4.0 (
 )
 rem =======================================================================
 
+if not exist %pwd%\install\PoseLib-2.0.4 (
+    echo  -----------build PoseLib-2.0.4----------
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\PoseLib-2.0.4  -S %pwd%\PoseLib-2.0.4     ^
+    -DBUILD_SHARED_LIBS:BOOL="0" ^
+    -DEigen3_DIR:PATH="%pwd%install/eigen-3.4.0/share/eigen3/cmake"  ^
+    -DCMAKE_BUILD_TYPE="Release" ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/PoseLib-2.0.4
+    TIMEOUT /T 1
+    msbuild %pwd%\build\PoseLib-2.0.4\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
+)
+rem =======================================================================
+
 if not exist %pwd%\install\cgal-5.6.1 (
     echo  -----------build cgal-5.6.1----------
-    cmake  -B %pwd%\build\cgal-5.6.1  -S %pwd%\cgal-5.6.1     ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\cgal-5.6.1  -S %pwd%\cgal-5.6.1     ^
     -DBUILD_DOC:BOOL="0" ^
     -DCGAL_REPORT_DUPLICATE_FILES:BOOL="0" ^
     -DCMAKE_SKIP_INSTALL_RPATH:BOOL="0" ^
@@ -153,7 +165,7 @@ rem =======================================================================
 
 if not exist %pwd%\install\opencv480 (
     echo  -----------build opencv480----------
-    cmake  -B %pwd%\build\opencv480  -S %pwd%\opencv480     ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\opencv480  -S %pwd%\opencv480     ^
     -DBUILD_opencv_apps:BOOL="0" ^
     -DBUILD_WITH_DEBUG_INFO:BOOL="0" ^
     -DBUILD_opencv_flann:BOOL="1" ^
@@ -213,7 +225,7 @@ rem =======================================================================
 
 if not exist %pwd%\install\lz4-1.9.4 (
     echo  -----------build lz4-1.9.4----------
-    cmake  -B %pwd%\build\lz4-1.9.4  -S %pwd%\lz4-1.9.4\build\cmake     ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\lz4-1.9.4  -S %pwd%\lz4-1.9.4\build\cmake     ^
     -DBUILD_SHARED_LIBS:BOOL="0" ^
     -DBUILD_STATIC_LIBS:BOOL="1" ^
 	-DBUILD_TESTS:BOOL="0"  ^
@@ -227,7 +239,7 @@ rem =======================================================================
 
 if not exist %pwd%\install\zlib-1.2.13 (
     echo  -----------build zlib-1.2.13----------
-    cmake  -B %pwd%\build\zlib-1.2.13  -S %pwd%\zlib-1.2.13     ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\zlib-1.2.13  -S %pwd%\zlib-1.2.13     ^
 	-DBUILD_TESTS:BOOL="0"  ^
 	-DBUILD_EXAMPLES:BOOL="0"   ^
     -DBUILD_PYTHON_BINDINGS:BOOL="0" ^
@@ -241,7 +253,7 @@ rem =======================================================================
 
 if not exist %pwd%\install\hdf5-hdf5-1_14_3 (
     echo  -----------build hdf5-hdf5-1_14_3----------
-    cmake  -B %pwd%\build\hdf5-hdf5-1_14_3  -S %pwd%\hdf5-hdf5-1_14_3    ^
+    cmake   -G "Visual Studio 16 2019"   -B %pwd%\build\hdf5-hdf5-1_14_3  -S %pwd%\hdf5-hdf5-1_14_3    ^
     -DZLIB_LIBRARY_RELEASE:FILEPATH=%pwd%/install/zlib-1.2.13/lib/zlibstatic.lib  ^
     -DHDF5_USE_FILE_LOCKING:BOOL="1"  ^
     -DCMAKE_CXX_STANDARD=17 ^
@@ -282,7 +294,7 @@ rem =======================================================================
 
 if not exist %pwd%\install\ceres-solver-2.2.0 (
     echo  -----------build ceres-solver-2.2.0----------
-    cmake  -B %pwd%\build\ceres-solver-2.2.0  -S %pwd%\ceres-solver-2.2.0    ^
+    cmake   -G "Visual Studio 16 2019"   -B %pwd%\build\ceres-solver-2.2.0  -S %pwd%\ceres-solver-2.2.0    ^
     -DEigen3_DIR:PATH=%pwd%install/eigen-3.4.0/share/eigen3/cmake ^
     -DCMAKE_CXX_STANDARD=17 ^
     -DUSE_CUDA:BOOL="0"  ^
@@ -307,7 +319,7 @@ rem =======================================================================
 
 if not exist %pwd%\install\flann-1.9.2 (
     echo  -----------build flann-1.9.2----------
-    cmake  -B %pwd%\build\flann-1.9.2  -S %pwd%\flann-1.9.2    ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\flann-1.9.2  -S %pwd%\flann-1.9.2    ^
     -DHDF5_DIR:PATH=%pwd%/install/hdf5-hdf5-1_14_3/cmake ^
     -DLZ4_INCLUDE_DIRS:PATH=%pwd%/install/lz4-1.9.4/include ^
     -DLZ4_LINK_LIBRARIES:FILEPATH=%pwd%/install/lz4-1.9.4/lib/lz4.lib  ^
@@ -326,7 +338,7 @@ rem =======================================================================
 
 if not exist %pwd%\install\glew-2.1.0 (
     echo  -----------build glew-2.1.0----------
-    cmake  -B %pwd%\build\glew-2.1.0  -S %pwd%\glew-2.1.0\build\cmake    ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\glew-2.1.0  -S %pwd%\glew-2.1.0\build\cmake    ^
     -DHDF5_DIR:PATH=%pwd%/install/hdf5-hdf5-1_14_3/cmake ^
     -DLZ4_INCLUDE_DIRS:PATH=%pwd%/install/lz4-1.9.4/include ^
     -DLZ4_LINK_LIBRARIES:FILEPATH=%pwd%/install/lz4-1.9.4/lib/lz4.lib  ^
@@ -345,7 +357,7 @@ rem =======================================================================
 
 if not exist %pwd%\install\colmap-3.10 (
     echo  -----------build colmap-3.10----------
-    cmake  -B %pwd%\build\colmap-3.10  -S %pwd%\colmap-3.10    ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\colmap-3.10  -S %pwd%\colmap-3.10    ^
     -DSQLite3_INCLUDE_DIR:PATH=%pwd%install/sqlite-amalgamation-3460100   ^
     -DJSONCPP_LIBRARIES_DIRS:FILEPATH=%pwd%install/jsoncpp-1.9.6/lib   ^
     -DJSONCPP_INCLUDE_DIRS:PATH=%pwd%install/jsoncpp-1.9.6/include  ^
@@ -396,7 +408,7 @@ copy %pwd%\install\jsoncpp-1.9.6\bin\jsoncpp.dll  %pwd%\install\colmap-3.10\bin
 
 if not exist %pwd%\install\test (
     echo  -----------build test----------
-    cmake  -B %pwd%\build\test  -S %pwd%\test    ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\test  -S %pwd%\test    ^
     -DEigen3_DIR:PATH=%pwd%install/eigen-3.4.0/share/eigen3/cmake ^
     -DSQLite3_INCLUDE_DIR:PATH=%pwd%install/sqlite-amalgamation-3460100   ^
     -DFREEIMAGE_LIBRARIES:FILEPATH=%pwd%FreeImage3180Win32Win64/x64/FreeImage.lib   ^
