@@ -29,7 +29,8 @@
 
 
 set(FOLDER_NAME "exe")
-
+include_directories(${JSONCPP_INCLUDE_DIRS})
+link_directories(${JSONCPP_LIBRARIES_DIRS})
 if(IS_MSVC)
     add_compile_options("/bigobj")
 endif()

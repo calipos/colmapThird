@@ -16,7 +16,7 @@ mkdir install
 
 if not exist %pwd%\install\jsoncpp-1.9.6 (
     echo  -----------build jsoncpp-1.9.6----------
-    cmake  -B %pwd%\build\jsoncpp-1.9.6  -S %pwd%\jsoncpp-1.9.6 -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install\jsoncpp-1.9.6
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\jsoncpp-1.9.6  -S %pwd%\jsoncpp-1.9.6 -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install\jsoncpp-1.9.6
     -DJSONCPP_WITH_CMAKE_PACKAGE:BOOL="1" ^
     -DJSONCPP_STATIC_WINDOWS_RUNTIME:BOOL="0" ^
     -DBUILD_OBJECT_LIBS:BOOL="1" ^
@@ -35,7 +35,7 @@ if not exist %pwd%\install\jsoncpp-1.9.6 (
     msbuild %pwd%\build\jsoncpp-1.9.6\INSTALL.vcxproj  -t:Rebuild -p:Configuration=Release
 
     echo  -----------build jsoncpp-1.9.6----------
-    cmake  -B %pwd%\build\jsoncpp-1.9.6  -S %pwd%\jsoncpp-1.9.6 -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install\jsoncpp-1.9.6\debug 
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\jsoncpp-1.9.6  -S %pwd%\jsoncpp-1.9.6 -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install\jsoncpp-1.9.6\debug 
     -DJSONCPP_WITH_CMAKE_PACKAGE:BOOL="1" ^
     -DJSONCPP_STATIC_WINDOWS_RUNTIME:BOOL="0" ^
     -DBUILD_OBJECT_LIBS:BOOL="1" ^
@@ -55,7 +55,7 @@ if not exist %pwd%\install\jsoncpp-1.9.6 (
 
 if not exist %pwd%\install\GKlib (
     echo  -----------build gklib----------
-    cmake  -B %pwd%\build\gklib  -S %pwd%\GKlib -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install 
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\gklib  -S %pwd%\GKlib  -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install 
     -DGKREGEX:BOOL="1" -DGKRAND:BOOL="1" ^
     -DBUILD_SHARED_LIBS:BOOL="0" ^
     -DBUILD_TESTING:BOOL="0" ^
@@ -69,7 +69,7 @@ rem =======================================================================
 
 if not exist %pwd%\install\METIS-5.2.1.1 (
     echo  -----------build METIS----------
-    cmake  -B %pwd%\build\METIS-5.2.1.1  -S %pwd%\METIS-5.2.1.1 ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\METIS-5.2.1.1  -S %pwd%\METIS-5.2.1.1 ^
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/METIS-5.2.1.1  ^
     -DGKREGEX:BOOL="1" ^
     -DGKRAND:BOOL="1" ^
@@ -83,7 +83,7 @@ rem =======================================================================
 
 if not exist %pwd%\install\glog-0.7.1 (
     echo  -----------build glog-0.7.1----------
-    cmake  -B %pwd%\build\glog-0.7.1  -S %pwd%\glog-0.7.1 ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\glog-0.7.1  -S %pwd%\glog-0.7.1 ^
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/glog-0.7.1  ^
     -DBUILD_TESTING:BOOL="0" ^
     -DWITH_GFLAGS:BOOL="0"  ^
@@ -98,7 +98,7 @@ rem =======================================================================
 
 if not exist %pwd%\install\eigen-3.4.0 (
     echo  -----------build eigen-3.4.0----------
-    cmake  -B %pwd%\build\eigen-3.4.0  -S %pwd%\eigen-3.4.0     ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\eigen-3.4.0  -S %pwd%\eigen-3.4.0     ^
     -DEIGEN_TEST_AVX:BOOL="0"  ^
     -DEIGEN_TEST_SSSE3:BOOL="1"  ^
     -DEIGEN_TEST_SSE3:BOOL="1"  ^
@@ -391,10 +391,7 @@ if not exist %pwd%\install\colmap-3.10 (
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/colmap-3.10
     TIMEOUT /T 1
     msbuild %pwd%\build\colmap-3.10\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
-    
-REM IDXTYPEWIDTH=32 REALTYPEWIDTH=32
 )
-rem =======================================================================
 copy %pwd%\FreeImage3180Win32Win64\x64\FreeImage.dll  %pwd%\install\colmap-3.10\bin
 copy %pwd%\install\jsoncpp-1.9.6-release\bin\jsoncpp.dll  %pwd%\install\colmap-3.10\bin
 copy %pwd%\install\glog-0.7.1\bin\glog.dll  %pwd%\install\colmap-3.10\bin
@@ -403,7 +400,50 @@ copy %pwd%\install\sqlite-amalgamation-3460100\sqlite3.dll  %pwd%\install\colmap
 copy %pwd%\auxiliary\gmp\lib\libgmp-10.dll  %pwd%\install\colmap-3.10\bin
 copy %pwd%\auxiliary\gmp\lib\libmpfr-4.dll  %pwd%\install\colmap-3.10\bin
 copy %pwd%\install\jsoncpp-1.9.6\bin\jsoncpp.dll  %pwd%\install\colmap-3.10\bin
-
+rem =======================================================================
+if not exist %pwd%\install\colmap-3.11.1 (
+    echo  -----------build colmap-3.11.1----------
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\colmap-3.11.1  -S %pwd%\colmap-3.11.1    ^
+    -DEigen3_DIR:PATH=%pwd%install/eigen-3.4.0/share/eigen3/cmake   ^
+    -DCERES_INCLUDE_DIRS:PATH=%pwd%install/ceres-solver-2.2.0/include   ^
+    -DCERES_LIBRARIES:FILEPATH=%pwd%install/ceres-solver-2.2.0/lib/ceres.lib ^
+    -DJSONCPP_LIBRARIES_DIRS:PATH=%pwd%install/jsoncpp-1.9.6/lib   ^
+    -DJSONCPP_INCLUDE_DIRS:PATH=%pwd%install/jsoncpp-1.9.6/include  ^
+    -DGLOG_INCLUDE_DIRS:PATH=%pwd%install/glog-0.7.1/include   ^
+    -DGLOG_LIBRARIES:FILEPATH=%pwd%install/glog-0.7.1/lib/glog.lib^
+    -DBOOST_INCLUDE_DIRS:PATH=D:/ucl360/library2019share/boost185/include/boost-1_85 ^
+    -DBOOST_LIBRARIES_DIR:PATH=D:/ucl360/library2019share/boost185/lib ^
+    -DBOOST_PROGRAM_OPTIONS_LIBRARIES:FILEPATH=D:/ucl360/library2019share/boost185/lib/libboost_program_options-vc142-mt-s-x64-1_85.lib ^
+    -DBOOST_GRAPH_LIBRARIES:FILEPATH=D:/ucl360/library2019share/boost185/lib/libboost_graph-vc142-mt-s-x64-1_85.lib ^
+    -DBOOST_SYSTEM_LIBRARIES:FILEPATH=D:/ucl360/library2019share/boost185/lib/libboost_system-vc142-mt-s-x64-1_85.lib ^
+    -DPOSELIB_INCLUDE_DIRS:PATH=%pwd%install/PoseLib-2.0.4/include  ^
+    -DPOSELIB_LIBRARIES:FILEPATH=%pwd%install/PoseLib-2.0.4/lib/PoseLib.lib ^
+    -DSQLITE_INCLUDE_DIRS:PATH=%pwd%install/sqlite-amalgamation-3460100   ^
+    -DSQLITE_LIBRARIES:FILEPATH=%pwd%install/sqlite-amalgamation-3460100/sqlite3.lib ^
+    -DFREEIMAGE_INCLUDE_DIRS:PATH=%pwd%FreeImage3180Win32Win64/x64 ^
+    -DFREEIMAGE_LIBRARIES:FILEPATH=%pwd%FreeImage3180Win32Win64/x64/FreeImage.lib ^
+    -DFLANN_DIR_INCLUDE_DIRS:PATH=%pwd%install/flann-1.9.2/include ^
+    -DFLANN_DIR_LIBRARIES:FILEPATH=%pwd%install/flann-1.9.2/lib/flann_cpp_s.lib ^
+    -DLZ4_DIR_INCLUDE_DIRS:PATH=%pwd%install/lz4-1.9.4/include   ^
+    -DLZ4_DIR_LIBRARIES:FILEPATH=%pwd%install/lz4-1.9.4/lib/lz4.lib  ^
+    -DMETIS_DIR_INCLUDE_DIRS:PATH=%pwd%install/METIS-5.2.1.1/include  ^
+    -DMETIS_LIBRARIES:FILEPATH=%pwd%install/METIS-5.2.1.1/lib/metis.lib ^
+    -DGKLIB_LIBRARIES:FILEPATH=%pwd%install/GKlib/lib/GKlib.lib ^
+    -DQt5_DIRS:PATH=C:/Qt/Qt5.14.2/5.14.2/msvc2017_64/include ^
+    -DCMAKE_BUILD_TYPE="Release" ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/colmap-3.11.1
+    TIMEOUT /T 1
+    msbuild %pwd%\build\colmap-3.11.1\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
+)
+copy %pwd%\FreeImage3180Win32Win64\x64\FreeImage.dll  %pwd%\install\colmap-3.11.1\bin
+copy %pwd%\install\jsoncpp-1.9.6-release\bin\jsoncpp.dll  %pwd%\install\colmap-3.11.1\bin
+copy %pwd%\install\glog-0.7.1\bin\glog.dll  %pwd%\install\colmap-3.11.1\bin
+copy %pwd%\install\glew-2.1.0\bin\glew32.dll  %pwd%\install\colmap-3.11.1\bin
+copy %pwd%\install\sqlite-amalgamation-3460100\sqlite3.dll  %pwd%\install\colmap-3.11.1\bin
+copy %pwd%\auxiliary\gmp\lib\libgmp-10.dll  %pwd%\install\colmap-3.11.1\bin
+copy %pwd%\auxiliary\gmp\lib\libmpfr-4.dll  %pwd%\install\colmap-3.11.1\bin
+copy %pwd%\install\jsoncpp-1.9.6\bin\jsoncpp.dll  %pwd%\install\colmap-3.11.1\bin
+rem =======================================================================
 
 
 if not exist %pwd%\install\test (

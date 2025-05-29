@@ -37,11 +37,148 @@
 #include "colmap/util/misc.h"
 #include "colmap/util/opengl_utils.h"
 #include "colmap/util/timer.h"
-
+#include "colmap/feature/utils.h"
+#include <string>
 #include <numeric>
-
+#include <random>
+#include <numeric>
+#include <filesystem>
+#include <mutex>
+#include "json/json.h"
+std::map<std::string, std::vector<int>> featMap;
+std::mutex mtx;
+int checkFeat(const std::vector<int>& a, const std::vector<int>& b) {
+    int sum = 0;
+    for (size_t i = 0; i < a.size(); i++) {
+        sum += (a[i] * b[i]);
+    }
+    return sum;
+}
+void checkFeat() {
+    for (const auto& a : featMap) {
+        for (const auto& b : featMap) {
+            if (a.first.compare(b.first) == 0) {
+                continue;
+            }
+            int dot = checkFeat(a.second, b.second);
+            if (dot > 65535) {
+                std::cout << "&&&&&&&&&&&&&&&&&&&&&" << a.first << "-" << b.first
+                    << " : " << checkFeat(a.second, b.second)
+                    << std::endl;
+            }
+        }
+    }
+    return;
+}
 namespace colmap {
 namespace {
+    bool readPtsFromLabelMeJson(const std::filesystem::path& jsonPath,
+        FeatureKeypoints* keypoints,
+        FeatureDescriptors* descriptors) {
+        std::lock_guard<std::mutex> lck(mtx);
+        keypoints->clear();
+        // descriptors->resize(keypoints->size(), 128);
+        std::stringstream ss;
+        std::string aline;
+        std::fstream fin(jsonPath, std::ios::in);
+        while (std::getline(fin, aline)) {
+            ss << aline;
+        }
+        std::map<std::string, std::pair<double, double>> labelInfo;
+        fin.close();
+        aline = ss.str();
+        JSONCPP_STRING err;
+        Json::Value newRoot;
+        const auto rawJsonLength = static_cast<int>(aline.length());
+        Json::CharReaderBuilder newBuilder;
+        const std::unique_ptr<Json::CharReader> newReader(newBuilder.newCharReader());
+
+        if (!newReader->parse(
+            aline.c_str(), aline.c_str() + rawJsonLength, &newRoot, &err)) {
+            return false;
+        }
+        auto newMemberNames = newRoot.getMemberNames();
+        auto pathNode = newRoot["imagePath"];
+        auto shapeNode = newRoot["shapes"];
+        if (pathNode.isNull() || shapeNode.isNull() || !shapeNode.isArray()) {
+            return false;
+        }
+        for (int i = 0; i < shapeNode.size(); i++) {
+            auto label = shapeNode[i];
+            if (label["label"].isNull() || label["points"].isNull() ||
+                label["shape_type"].isNull()) {
+                return false;
+            }
+            std::string shapeType = label["shape_type"].asString();
+            if (shapeType.compare("point") != 0) {
+                continue;
+            }
+            std::string cornerLabel = label["label"].asString();
+            if (label["points"].size() != 1) {
+                LOG(INFO) << "not unique!";
+                return false;
+            }
+            double x = label["points"][0][0].asDouble();
+            double y = label["points"][0][1].asDouble();
+            if (labelInfo.count(cornerLabel) != 0) {
+                LOG(INFO) << "not unique!";
+                return false;
+            }
+            labelInfo[cornerLabel].first = x;
+            labelInfo[cornerLabel].second = y;
+        }
+        if (labelInfo.size() == 0) {
+            return false;
+        }
+        if (featMap.size() == 0) {
+            double featIntPooSum = sqrt(2.);
+            Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>tempDescriptorsFloat;
+            tempDescriptorsFloat.resize(1, 128);
+            tempDescriptorsFloat(0, 0) = 1. / featIntPooSum;
+            tempDescriptorsFloat(0, 1) = 1. / featIntPooSum;
+            for (int i = 2; i < 128; i++) {
+                tempDescriptorsFloat(0, i) = 0;
+            }
+            FeatureDescriptors tempDescriptors = FeatureDescriptorsToUnsignedByte(tempDescriptorsFloat);
+            featMap["_______________"] = std::vector<int>(128);
+            for (int i = 0; i < 128; i++) {
+                featMap["_______________"][i] = tempDescriptors(0, i);
+            }
+        }
+        {
+            LOG(INFO) << pathNode.asString() << "  labelInfo.size() = " << labelInfo.size();
+            int kpIdx = 0;
+            keypoints->reserve(labelInfo.size());
+            Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>descriptorsFloat;
+            descriptorsFloat.resize(labelInfo.size(), 128);
+            descriptors->resize(labelInfo.size(), 128);
+            std::filesystem::path featIdToNameFile =
+                jsonPath.parent_path() / (jsonPath.filename().stem().string() + ".IdToName");
+            std::fstream fout(featIdToNameFile, std::ios::out);
+            for (const auto& d : labelInfo) {
+                fout << keypoints->size() << " " << d.first << std::endl;
+                keypoints->emplace_back(d.second.first, d.second.second, 1.f, 1.f, 1.f, 1.f);
+
+                //LOG(INFO) << jsonPath << " : thisLabelHash : " << hashMap[d.first];
+                if (featMap.count(d.first) == 0) {
+                    int featMapSize = featMap.size() + 1;
+                    int row = std::ceil(0.5 * (sqrt(8 * featMapSize + 1) - 1));
+                    int col = row * (row + 1) / 2 - featMapSize;
+                    featMap[d.first] = std::vector<int>(128, 0);
+                    featMap[d.first][row] = featMap["_______________"][0];
+                    featMap[d.first][col] = featMap["_______________"][1];
+                }
+                for (int i = 0; i < 128; i++) {
+                    (*descriptors)(kpIdx, i) = featMap[d.first][i];
+                }
+                kpIdx++;
+            }
+            //*descriptors = FeatureDescriptorsToUnsignedByte(descriptorsFloat);       
+            fout.close();
+        }
+        checkFeat();
+        return true;
+    }
 
 void ScaleKeypoints(const Bitmap& bitmap,
                     const Camera& camera,
@@ -148,11 +285,14 @@ class ImageResizerThread : public Thread {
 
 class SiftFeatureExtractorThread : public Thread {
  public:
-  SiftFeatureExtractorThread(const SiftExtractionOptions& sift_options,
+  SiftFeatureExtractorThread(
+      const ImageReaderOptions& reader_options,
+      const SiftExtractionOptions& sift_options,
                              const std::shared_ptr<Bitmap>& camera_mask,
                              JobQueue<ImageData>* input_queue,
                              JobQueue<ImageData>* output_queue)
-      : sift_options_(sift_options),
+      : reader_options_(reader_options),
+      sift_options_(sift_options),
         camera_mask_(camera_mask),
         input_queue_(input_queue),
         output_queue_(output_queue) {
@@ -167,20 +307,19 @@ class SiftFeatureExtractorThread : public Thread {
 
  private:
   void Run() override {
-    if (sift_options_.use_gpu) {
-#if !defined(COLMAP_CUDA_ENABLED)
-      THROW_CHECK_NOTNULL(opengl_context_);
-      THROW_CHECK(opengl_context_->MakeCurrent());
-#endif
-    }
-
-    std::unique_ptr<FeatureExtractor> extractor =
-        CreateSiftFeatureExtractor(sift_options_);
-    if (extractor == nullptr) {
-      LOG(ERROR) << "Failed to create feature extractor.";
-      SignalInvalidSetup();
-      return;
-    }
+//    if (sift_options_.use_gpu) {
+//#if !defined(COLMAP_CUDA_ENABLED)
+//      THROW_CHECK_NOTNULL(opengl_context_);
+//      THROW_CHECK(opengl_context_->MakeCurrent());
+//#endif
+//    }
+//    std::unique_ptr<FeatureExtractor> extractor =
+//        CreateSiftFeatureExtractor(sift_options_);
+//    if (extractor == nullptr) {
+//      LOG(ERROR) << "Failed to create feature extractor.";
+//      SignalInvalidSetup();
+//      return;
+//    }
 
     SignalValidSetup();
 
@@ -194,35 +333,45 @@ class SiftFeatureExtractorThread : public Thread {
         auto& image_data = input_job.Data();
 
         if (image_data.status == ImageReader::Status::SUCCESS) {
-          if (extractor->Extract(image_data.bitmap,
-                                 &image_data.keypoints,
-                                 &image_data.descriptors)) {
-            ScaleKeypoints(
-                image_data.bitmap, image_data.camera, &image_data.keypoints);
-            if (camera_mask_) {
-              MaskKeypoints(*camera_mask_,
-                            &image_data.keypoints,
-                            &image_data.descriptors);
+          //if (extractor->Extract(image_data.bitmap,
+          //                       &image_data.keypoints,
+          //                       &image_data.descriptors)) {
+          //  ScaleKeypoints(
+          //      image_data.bitmap, image_data.camera, &image_data.keypoints);
+          //  if (camera_mask_) {
+          //    MaskKeypoints(*camera_mask_,
+          //                  &image_data.keypoints,
+          //                  &image_data.descriptors);
+          //  }
+            //if (image_data.mask.Data()) {
+            //  MaskKeypoints(image_data.mask,
+            //                &image_data.keypoints,
+            //                &image_data.descriptors);
+            //}
+            std::string imageStem;
+            std::string imageExt;
+            SplitFileExtension(image_data.image.Name(), &imageStem, &imageExt);
+            auto jsonPath = JoinPaths(reader_options_.image_path, imageStem) + ".json";
+            if (ExistsFile(jsonPath)) {
+                LOG(INFO) << (image_data.descriptors);
+                readPtsFromLabelMeJson(
+                    jsonPath, &image_data.keypoints, &image_data.descriptors);
             }
-            if (image_data.mask.Data()) {
-              MaskKeypoints(image_data.mask,
-                            &image_data.keypoints,
-                            &image_data.descriptors);
+            else {
+                LOG(WARNING) << "not found: "<< jsonPath;
+                image_data.status = ImageReader::Status::FAILURE;
             }
-          } else {
-            image_data.status = ImageReader::Status::FAILURE;
-          }
         }
 
         image_data.bitmap.Deallocate();
-
-        output_queue_->Push(std::move(image_data));
+        if (image_data.status == ImageReader::Status::SUCCESS)
+            output_queue_->Push(std::move(image_data));
       } else {
         break;
       }
     }
   }
-
+  const ImageReaderOptions reader_options_;
   const SiftExtractionOptions sift_options_;
   std::shared_ptr<Bitmap> camera_mask_;
 
@@ -377,7 +526,8 @@ class FeatureExtractorController : public Thread {
       for (const auto& gpu_index : gpu_indices) {
         sift_gpu_options.gpu_index = std::to_string(gpu_index);
         extractors_.emplace_back(
-            std::make_unique<SiftFeatureExtractorThread>(sift_gpu_options,
+            std::make_unique<SiftFeatureExtractorThread>(reader_options_, 
+                sift_gpu_options,
                                                          camera_mask,
                                                          extractor_queue_.get(),
                                                          writer_queue_.get()));
@@ -401,7 +551,7 @@ class FeatureExtractorController : public Thread {
       custom_sift_options.use_gpu = false;
       for (int i = 0; i < num_threads; ++i) {
         extractors_.emplace_back(
-            std::make_unique<SiftFeatureExtractorThread>(custom_sift_options,
+            std::make_unique<SiftFeatureExtractorThread>(reader_options_, custom_sift_options,
                                                          camera_mask,
                                                          extractor_queue_.get(),
                                                          writer_queue_.get()));

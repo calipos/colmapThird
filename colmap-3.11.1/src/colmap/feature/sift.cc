@@ -92,6 +92,21 @@ bool SiftMatchingOptions::Check() const {
 
 namespace {
 
+    void showFeat(const std::shared_ptr<const FeatureDescriptors>& a) {
+        LOG(INFO) << a->size();
+        for (int r = 0; r < a->rows(); r++) {
+            for (int c = 0; c < a->cols(); c++) {
+                if ((*a)(r, c) > 0) {
+                    std::cout << 1;
+                }
+                else {
+                    std::cout << ".";
+                }
+            }
+            std::cout << std::endl;
+        }
+        return;
+    }
 void WarnDarknessAdaptivityNotAvailable() {
   LOG(WARNING) << "Darkness adaptivity only available for GLSL SiftGPU.";
 }

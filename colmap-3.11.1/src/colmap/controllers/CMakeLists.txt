@@ -58,7 +58,9 @@ COLMAP_ADD_LIBRARY(
         Ceres::ceres
         Boost::boost
 )
-
+include_directories(${JSONCPP_INCLUDE_DIRS})
+link_directories(${JSONCPP_LIBRARIES_DIRS})
+target_link_libraries(colmap_controllers PRIVATE jsoncpp)
 COLMAP_ADD_TEST(
     NAME hierarchical_pipeline_test
     SRCS hierarchical_pipeline_test.cc
