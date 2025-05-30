@@ -53,11 +53,7 @@ FeatureMatcherWorker::FeatureMatcherWorker(
       output_queue_(output_queue) {
   THROW_CHECK(matching_options_.Check());
 
-  if (matching_options_.use_gpu) {
-#if !defined(COLMAP_CUDA_ENABLED)
-    opengl_context_ = std::make_unique<OpenGLContextManager>();
-#endif
-  }
+
 }
 
 void FeatureMatcherWorker::SetMaxNumMatches(int max_num_matches) {
@@ -65,12 +61,7 @@ void FeatureMatcherWorker::SetMaxNumMatches(int max_num_matches) {
 }
 
 void FeatureMatcherWorker::Run() {
-  if (matching_options_.use_gpu) {
-#if !defined(COLMAP_CUDA_ENABLED)
-    THROW_CHECK_NOTNULL(opengl_context_);
-    THROW_CHECK(opengl_context_->MakeCurrent());
-#endif
-  }
+
 
   matching_options_.cpu_descriptor_index_cache =
       &cache_->GetFeatureDescriptorIndexCache();
@@ -212,31 +203,9 @@ FeatureMatcherController::FeatureMatcherController(
   std::vector<int> gpu_indices = CSVToVector<int>(matching_options_.gpu_index);
   THROW_CHECK_GT(gpu_indices.size(), 0);
 
-#if defined(COLMAP_CUDA_ENABLED)
-  if (matching_options_.use_gpu && gpu_indices.size() == 1 &&
-      gpu_indices[0] == -1) {
-    const int num_cuda_devices = GetNumCudaDevices();
-    THROW_CHECK_GT(num_cuda_devices, 0);
-    gpu_indices.resize(num_cuda_devices);
-    std::iota(gpu_indices.begin(), gpu_indices.end(), 0);
-  }
-#endif  // COLMAP_CUDA_ENABLED
 
-  if (matching_options_.use_gpu) {
-    auto matching_options_copy = matching_options_;
-    // The first matching is always without guided matching.
-    matching_options_copy.guided_matching = false;
-    matchers_.reserve(gpu_indices.size());
-    for (const auto& gpu_index : gpu_indices) {
-      matching_options_copy.gpu_index = std::to_string(gpu_index);
-      matchers_.emplace_back(
-          std::make_unique<FeatureMatcherWorker>(matching_options_copy,
-                                                 geometry_options_,
-                                                 cache_,
-                                                 &matcher_queue_,
-                                                 &verifier_queue_));
-    }
-  } else {
+
+    {
     auto matching_options_copy = matching_options_;
     // The first matching is always without guided matching.
     matching_options_copy.guided_matching = false;
@@ -259,19 +228,7 @@ FeatureMatcherController::FeatureMatcherController(
           geometry_options_, cache_, &verifier_queue_, &guided_matcher_queue_));
     }
 
-    if (matching_options_.use_gpu) {
-      auto matching_options_copy = matching_options_;
-      guided_matchers_.reserve(gpu_indices.size());
-      for (const auto& gpu_index : gpu_indices) {
-        matching_options_copy.gpu_index = std::to_string(gpu_index);
-        guided_matchers_.emplace_back(
-            std::make_unique<FeatureMatcherWorker>(matching_options_copy,
-                                                   geometry_options_,
-                                                   cache_,
-                                                   &guided_matcher_queue_,
-                                                   &output_queue_));
-      }
-    } else {
+      {
       guided_matchers_.reserve(num_threads);
       for (int i = 0; i < num_threads; ++i) {
         guided_matchers_.emplace_back(

@@ -260,12 +260,7 @@ if __name__ == '__main__':
         imgName = imgPath.name
         parentName = imgPath.parent.name
         newPath = os.path.join(shapeMaskDir, parentName+imgName)
-        if cameraDict[img.cameraId].cameraType == 'SIMPLE_PINHOLE':
-            shutil.copy(imgPath, newPath)
-        elif not os.path.exists(imgPath) and cameraDict[img.cameraId].cameraType == 'SIMPLE_RADIAL':
-            undistotImg.undist(imgPath, newPath, cameraDict[img.cameraId])
-        else:
-            shutil.copy(imgPath, newPath)
+        shutil.copy(imgPath, newPath)
         findFaceHullRet = landmarkFinder.proc(
             newPath, landmarkShapeType.LandmarkShapeType.Contour, writeJson = False)
         if isinstance(findFaceHullRet, np.ndarray):

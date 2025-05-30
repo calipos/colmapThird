@@ -1051,9 +1051,9 @@ class SiftCPUFeatureMatcher : public FeatureMatcher {
     Eigen::RowMajorMatrixXi indices_2to1;
     Eigen::RowMajorMatrixXi l2_dists_2to1;
     index2_->Search(
-        /*num_neighbors=*/2, *image1.descriptors, indices_1to2, l2_dists_1to2);
+        /*num_neighbors=*/1, *image1.descriptors, indices_1to2, l2_dists_1to2);
     if (options_.cross_check) {
-      index1_->Search(/*num_neighbors=*/2,
+      index1_->Search(/*num_neighbors=*/1,
                       *image2.descriptors,
                       indices_2to1,
                       l2_dists_2to1);
@@ -1437,6 +1437,8 @@ class SiftGPUFeatureMatcher : public FeatureMatcher {
 std::unique_ptr<FeatureMatcher> CreateSiftFeatureMatcher(
     const SiftMatchingOptions& options) {
   if (options.use_gpu) {
+      LOG(INFO) << "Creating SIFT CPU feature matcher";
+      return SiftCPUFeatureMatcher::Create(options);
 #if defined(COLMAP_GPU_ENABLED)
     LOG(INFO) << "Creating SIFT GPU feature matcher";
     return SiftGPUFeatureMatcher::Create(options);

@@ -407,8 +407,9 @@ if not exist %pwd%\install\colmap-3.11.1 (
     -DEigen3_DIR:PATH=%pwd%install/eigen-3.4.0/share/eigen3/cmake   ^
     -DCERES_INCLUDE_DIRS:PATH=%pwd%install/ceres-solver-2.2.0/include   ^
     -DCERES_LIBRARIES:FILEPATH=%pwd%install/ceres-solver-2.2.0/lib/ceres.lib ^
-    -DJSONCPP_LIBRARIES_DIRS:PATH=%pwd%install/jsoncpp-1.9.6/lib   ^
     -DJSONCPP_INCLUDE_DIRS:PATH=%pwd%install/jsoncpp-1.9.6/include  ^
+    -DJSONCPP_LIBRARIES_DIRS:PATH=%pwd%install/jsoncpp-1.9.6/lib   ^
+    -DJSONCPP_LIBRARIES:STRING=jsoncpp_static.lib   ^
     -DGLOG_INCLUDE_DIRS:PATH=%pwd%install/glog-0.7.1/include   ^
     -DGLOG_LIBRARIES:FILEPATH=%pwd%install/glog-0.7.1/lib/glog.lib^
     -DBOOST_INCLUDE_DIRS:PATH=D:/ucl360/library2019share/boost185/include/boost-1_85 ^

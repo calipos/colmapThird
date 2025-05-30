@@ -70,6 +70,17 @@ class FlannFeatureDescriptorIndex : public FeatureDescriptorIndex {
 
     indices.resize(num_query_descriptors, num_eff_neighbors);
     l2_dists.resize(num_query_descriptors, num_eff_neighbors);
+    for (int i = 0; i < num_query_descriptors; i++)
+    {
+        for (int j = 0; j < num_eff_neighbors; j++)
+        {
+            indices(i, j) = i;
+            l2_dists(i, j) = 0;
+        }
+    }
+    return;
+
+
     const flann::Matrix<uint8_t> query_matrix(
         const_cast<uint8_t*>(query_descriptors.data()),
         num_query_descriptors,

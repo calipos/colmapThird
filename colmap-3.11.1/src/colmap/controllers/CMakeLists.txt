@@ -60,7 +60,7 @@ COLMAP_ADD_LIBRARY(
 )
 include_directories(${JSONCPP_INCLUDE_DIRS})
 link_directories(${JSONCPP_LIBRARIES_DIRS})
-target_link_libraries(colmap_controllers PRIVATE jsoncpp)
+target_link_libraries(colmap_controllers PRIVATE jsoncpp_static)
 COLMAP_ADD_TEST(
     NAME hierarchical_pipeline_test
     SRCS hierarchical_pipeline_test.cc
