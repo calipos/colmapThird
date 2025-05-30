@@ -26,7 +26,7 @@ def writeLabelmeJson(imgDir, imgPath, jsonPath, frontLandmarks2d, keyType, shape
     absImgPath = os.path.join(imgDir, imgPath)
     absJsonPath = os.path.join(imgDir, jsonPath)
     cv_mat = cv2.imread(absImgPath)
-    base64_data = encodeImgToBase64(cv_mat, os.path.splitext(imgPath)[1])
+    # base64_data = encodeImgToBase64(cv_mat, os.path.splitext(imgPath)[1])
     time1_end = time.time()
 
     time2_start = time.time()
@@ -47,7 +47,9 @@ def writeLabelmeJson(imgDir, imgPath, jsonPath, frontLandmarks2d, keyType, shape
         shape = {"label": keyType, "points": points, "group_id": "",
                     "description": "", "shape_type": "point", "flags": {}, "mask": ""}
         shapes.append(shape)
-    data = {'version': '5.4.1', "flags": {}, "imagePath": imgPath, "imageData": str(base64_data, encoding="ascii"),
+    # data = {'version': '5.4.1', "flags": {}, "imagePath": imgPath, "imageData": str(base64_data, encoding="ascii"),
+    #         'imageHeight': cv_mat .shape[0], 'imageWidth': cv_mat .shape[1], "shapes": shapes}
+    data = {'version': '5.4.1', "flags": {}, "imagePath": imgPath, "imageData": None,
             'imageHeight': cv_mat .shape[0], 'imageWidth': cv_mat .shape[1], "shapes": shapes}
     with open(absJsonPath, 'w') as f:
         json.dump(data, f)

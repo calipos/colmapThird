@@ -307,6 +307,7 @@ class Landmark:
         self.allMarkIdx = [x for x in range(106)]
         self.eyeAndNoseIdx = [33]+[x for x in range(35,38)]+[x for x in range(39,52)]+[x for x in range(72,88)]+[x for x in range(89,92)]+[x for x in range(93,106)]
         self.faceContourIdx = [33]+[x for x in range(35,38)]+[x for x in range(39,52)]+[x for x in range(72,88)]+[x for x in range(89,92)]+[x for x in range(93,106)]
+        self.EyeMouthBorder = [35, 93, 52, 61]
         find_sub = False
         find_mul = False
         model = onnx.load(self.model_file)
@@ -433,6 +434,8 @@ class InsightFaceFinder:
             frontLandmarks2d=frontLandmarks2d*borderFactor
         if landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.EyeAndNoise:
             frontLandmarks2d = frontLandmarks2d[self.landmarkFinder.eyeAndNoseIdx]
+        elif landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.EyeMouthBorder:
+            frontLandmarks2d = frontLandmarks2d[self.landmarkFinder.EyeMouthBorder]
         elif landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.Contour:
             hull = cv2.convexHull(frontLandmarks2d)
             frontLandmarks2d = hull.squeeze()
@@ -442,12 +445,12 @@ class InsightFaceFinder:
         base = os.path.splitext(imgPath)[0]
         if writeJson==True:
             jsonPath = f"{base}.{'json'}"
-            if landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.EyeAndNoise:
+            if landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.Contour:
+                writeLabelme.writeLabelmeJson(imgDir, imgPath, jsonPath,
+                                              frontLandmarks2d, 'insightface', writeLabelme.LabelmeShapeType.HULL)
+            else:
                 writeLabelme.writeLabelmeJson(imgDir, imgPath, jsonPath,
                                             frontLandmarks2d, 'insightface')
-            elif landmarkShapeType_ == landmarkShapeType.LandmarkShapeType.Contour:
-                writeLabelme.writeLabelmeJson(imgDir, imgPath, jsonPath,
-                                            frontLandmarks2d, 'insightface', writeLabelme.LabelmeShapeType.HULL)
         return frontLandmarks2d
     def figureIdrMask(self, imgPath,idrDir):
         outImgDir = os.path.join(idrDir, 'image')
@@ -506,7 +509,7 @@ if __name__ == '__main__':
     
    
     fontFace = cv2.FONT_HERSHEY_SIMPLEX
-    fontScale = 0.25
+    fontScale = 0.4
     textColor = (0, 0, 0)  # 蓝色文本
     thickness = 1
  

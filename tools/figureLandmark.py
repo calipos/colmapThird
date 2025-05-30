@@ -2,6 +2,7 @@ import os
 import figureMediapipeKeyPts
 import dlibLandMark
 import insightFaceLandmark
+import landmarkShapeType
 import cv2
 
 def listImages(imgRoot):
@@ -46,6 +47,7 @@ if __name__ == '__main__':
         print('landmarkFinder == None')
         exit(-1)
     for imgPath in imgPathList:
-        landmarkFinder.proc(imgPath)
+        landmarkFinder.proc(
+            imgPath, landmarkShapeType.LandmarkShapeType.EyeMouthBorder)
 
  
