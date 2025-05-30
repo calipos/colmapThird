@@ -194,6 +194,7 @@ FeatureMatcherController::FeatureMatcherController(
       geometry_options_(geometry_options),
       cache_(std::move(cache)),
       is_setup_(false) {
+    matching_options_.num_threads = 1;
   THROW_CHECK(matching_options_.Check());
   THROW_CHECK(geometry_options_.Check());
 

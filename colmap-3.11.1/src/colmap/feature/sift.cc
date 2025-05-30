@@ -81,9 +81,6 @@ bool SiftExtractionOptions::Check() const {
 }
 
 bool SiftMatchingOptions::Check() const {
-  if (use_gpu) {
-    CHECK_OPTION_GT(CSVToVector<int>(gpu_index).size(), 0);
-  }
   CHECK_OPTION_GT(max_ratio, 0.0);
   CHECK_OPTION_GT(max_distance, 0.0);
   CHECK_OPTION_GT(max_num_matches, 0);
