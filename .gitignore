@@ -1,0 +1,97 @@
+# Custom files
+LocalConfig.cmake
+src/colmap/util/version.cc
+build/
+install/
+__pycache__/
+*.py[cod]
+*$py.class
+# Custom directories
+.idea/
+.vscode
+.vs
+.DS_Store
+BA/x64/*
+build/
+buildmingw/
+install-debug/
+install-release/
+installmingw/
+cameraCali/data/
+cameraCali/out/
+cameraCali/imgui.ini
+data/
+models/
+idr/exp/
+idr/data/
+
+doc/_build
+vcpkg_installed/
+
+RegisterImgGui/x64/*
+RegisterImgGui/Debug/*
+RegisterImgGui/Release/*
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+*.pyc
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+sqlite-dll-win-x64-3460100/sqlite3.exp
+!sqlite3.dll
+!libgmp-10.dll
+!libgmp-10.lib
+!libmpfr-4.dll
+!libmpfr-4.lib
+!Labelme.exe
+!glew-2.1.0/build
+!lz4-1.9.4/build
+!FreeImage3180Win32Win64/*/*lib
+!FreeImage3180Win32Win64/*/*dll
+*.pyc
+*.pts
+*.txt
+*.obj
+Deep3d/BFM/*
+!Deep3d/requirements.txt
+!cgal-5.6.1/AABB_tree/doc/AABB_tree/fig_src/AABB_demo.ppt
+!cgal-5.6.1/Poisson_surface_reconstruction_3/doc/Poisson_surface_reconstruction_3/fig_src/Surface_reconstruction_images.ppt
+!opencv480/doc/tutorials/features2d/akaze_matching/images/res.png
+!opencv480/doc/tutorials/features2d/akaze_matching/images/graf.png
+!zlib-1.2.13/doc/crc-doc.1.0.pdf
+!Deep3d/BFM/std_exp.txt
+*/__pycache__/*
+!CMakeLists.txt
+
+!license.txt
+!readme.txt
+!COPYING.txt
+!idr/data/DTU/scan40/image/*.*
+!idr/data/DTU/scan40/mask/*.*
+!idr/data/DTU/scan40/cameras.npz
+!idr/data/DTU/scan40/cameras_linear_init.npz
