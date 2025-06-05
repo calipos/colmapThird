@@ -102,6 +102,7 @@ namespace ImGui
         // this function will pre-fill the input dialog with a filename.
         void SetInputName(std::string_view input);
 
+        bool triggerCancel{false};
     private:
 
         template <class Functor>
@@ -705,9 +706,9 @@ inline void ImGui::FileBrowser::Display()
     }
 
     SameLine();
-
+    triggerCancel = Button("cancel");
     bool shouldExit =
-        Button("cancel") || closeFlag_ ||
+        triggerCancel || closeFlag_ ||
         ((flags_ & ImGuiFileBrowserFlags_CloseOnEsc) &&
             IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
             IsKeyPressed(ImGuiKey_Escape));
