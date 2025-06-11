@@ -51,6 +51,21 @@
     <ClCompile Include="labelme.cpp">
       <Filter>Resource Files</Filter>
     </ClCompile>
+    <ClCompile Include="two_view_geometry.cpp">
+      <Filter>Resource Files</Filter>
+    </ClCompile>
+    <ClCompile Include="camera.cpp">
+      <Filter>Resource Files</Filter>
+    </ClCompile>
+    <ClCompile Include="scene.cpp">
+      <Filter>Resource Files</Filter>
+    </ClCompile>
+    <ClCompile Include="rigid3.cpp">
+      <Filter>Resource Files</Filter>
+    </ClCompile>
+    <ClCompile Include="image.cpp">
+      <Filter>Resource Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">
@@ -63,6 +78,24 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="labelme.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="camera.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="types.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="scene.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="image.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="rigid3.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="two_view_geometry.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

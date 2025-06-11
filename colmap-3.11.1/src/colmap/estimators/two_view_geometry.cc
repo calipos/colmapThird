@@ -202,28 +202,31 @@ TwoViewGeometry EstimateUncalibratedTwoViewGeometry(
 
   const std::vector<char>* best_inlier_mask = &F_report.inlier_mask;
   int num_inliers = F_report.support.num_inliers;
-  if (H_F_inlier_ratio > options.max_H_inlier_ratio) {
-    geometry.config = TwoViewGeometry::ConfigurationType::PLANAR_OR_PANORAMIC;
-    if (H_report.support.num_inliers >= F_report.support.num_inliers) {
-      num_inliers = H_report.support.num_inliers;
-      best_inlier_mask = &H_report.inlier_mask;
-    }
-  } else {
+  //if (H_F_inlier_ratio > options.max_H_inlier_ratio)
+  //{
+  //  geometry.config = TwoViewGeometry::ConfigurationType::PLANAR_OR_PANORAMIC;
+  //  if (H_report.support.num_inliers >= F_report.support.num_inliers) {
+  //    num_inliers = H_report.support.num_inliers;
+  //    best_inlier_mask = &H_report.inlier_mask;
+  //  }
+  //} 
+  //else 
+  {
     geometry.config = TwoViewGeometry::ConfigurationType::UNCALIBRATED;
   }
 
   geometry.inlier_matches =
       ExtractInlierMatches(matches, num_inliers, *best_inlier_mask);
 
-  if (options.detect_watermark && DetectWatermark(camera1,
-                                                  matched_points1,
-                                                  camera2,
-                                                  matched_points2,
-                                                  num_inliers,
-                                                  *best_inlier_mask,
-                                                  options)) {
-    geometry.config = TwoViewGeometry::ConfigurationType::WATERMARK;
-  }
+  //if (options.detect_watermark && DetectWatermark(camera1,
+  //                                                matched_points1,
+  //                                                camera2,
+  //                                                matched_points2,
+  //                                                num_inliers,
+  //                                                *best_inlier_mask,
+  //                                                options)) {
+  //  geometry.config = TwoViewGeometry::ConfigurationType::WATERMARK;
+  //}
 
   if (options.compute_relative_pose) {
     EstimateTwoViewGeometryPose(camera1, points1, camera2, points2, &geometry);
@@ -485,53 +488,62 @@ TwoViewGeometry EstimateCalibratedTwoViewGeometry(
   const std::vector<char>* best_inlier_mask = nullptr;
   size_t num_inliers = 0;
 
-  if (E_report.success && E_F_inlier_ratio > options.min_E_F_inlier_ratio &&
-      E_report.support.num_inliers >= min_num_inliers) {
-    // Calibrated configuration.
+  //if (E_report.success && E_F_inlier_ratio > options.min_E_F_inlier_ratio &&
+  //    E_report.support.num_inliers >= min_num_inliers) 
+  //{
+  //  // Calibrated configuration.
 
-    // Always use the model with maximum matches.
-    if (E_report.support.num_inliers >= F_report.support.num_inliers) {
-      num_inliers = E_report.support.num_inliers;
-      best_inlier_mask = &E_report.inlier_mask;
-    } else {
-      num_inliers = F_report.support.num_inliers;
-      best_inlier_mask = &F_report.inlier_mask;
-    }
+  //  // Always use the model with maximum matches.
+  //  if (E_report.support.num_inliers >= F_report.support.num_inliers) {
+  //    num_inliers = E_report.support.num_inliers;
+  //    best_inlier_mask = &E_report.inlier_mask;
+  //  } else {
+  //    num_inliers = F_report.support.num_inliers;
+  //    best_inlier_mask = &F_report.inlier_mask;
+  //  }
 
-    if (H_E_inlier_ratio > options.max_H_inlier_ratio) {
-      geometry.config = TwoViewGeometry::ConfigurationType::PLANAR_OR_PANORAMIC;
-      if (H_report.support.num_inliers > num_inliers) {
-        num_inliers = H_report.support.num_inliers;
-        best_inlier_mask = &H_report.inlier_mask;
-      }
-    } else {
-      geometry.config = TwoViewGeometry::ConfigurationType::CALIBRATED;
-    }
-  } else if (F_report.success &&
-             F_report.support.num_inliers >= min_num_inliers) {
+  //  if (H_E_inlier_ratio > options.max_H_inlier_ratio) {
+  //    geometry.config = TwoViewGeometry::ConfigurationType::PLANAR_OR_PANORAMIC;
+  //    if (H_report.support.num_inliers > num_inliers) {
+  //      num_inliers = H_report.support.num_inliers;
+  //      best_inlier_mask = &H_report.inlier_mask;
+  //    }
+  //  } else {
+  //    geometry.config = TwoViewGeometry::ConfigurationType::CALIBRATED;
+  //  }
+  //} 
+  //else if (F_report.success &&
+  //           F_report.support.num_inliers >= min_num_inliers) 
+  {
     // Uncalibrated configuration.
 
     num_inliers = F_report.support.num_inliers;
     best_inlier_mask = &F_report.inlier_mask;
 
-    if (H_F_inlier_ratio > options.max_H_inlier_ratio) {
-      geometry.config = TwoViewGeometry::ConfigurationType::PLANAR_OR_PANORAMIC;
-      if (H_report.support.num_inliers > num_inliers) {
-        num_inliers = H_report.support.num_inliers;
-        best_inlier_mask = &H_report.inlier_mask;
-      }
-    } else {
+    //if (H_F_inlier_ratio > options.max_H_inlier_ratio) {
+    //  geometry.config = TwoViewGeometry::ConfigurationType::PLANAR_OR_PANORAMIC;
+    //  if (H_report.support.num_inliers > num_inliers) {
+    //    num_inliers = H_report.support.num_inliers;
+    //    best_inlier_mask = &H_report.inlier_mask;
+    //  }
+    //} 
+    //else 
+    {
       geometry.config = TwoViewGeometry::ConfigurationType::UNCALIBRATED;
     }
-  } else if (H_report.success &&
-             H_report.support.num_inliers >= min_num_inliers) {
-    num_inliers = H_report.support.num_inliers;
-    best_inlier_mask = &H_report.inlier_mask;
-    geometry.config = TwoViewGeometry::ConfigurationType::PLANAR_OR_PANORAMIC;
-  } else {
-    geometry.config = TwoViewGeometry::ConfigurationType::DEGENERATE;
-    return geometry;
-  }
+  } 
+  //else if (H_report.success &&
+  //           H_report.support.num_inliers >= min_num_inliers) 
+  //{
+  //  num_inliers = H_report.support.num_inliers;
+  //  best_inlier_mask = &H_report.inlier_mask;
+  //  geometry.config = TwoViewGeometry::ConfigurationType::PLANAR_OR_PANORAMIC;
+  //} 
+  //else 
+  //{
+  //  geometry.config = TwoViewGeometry::ConfigurationType::DEGENERATE;
+  //  return geometry;
+  //}
 
   if (best_inlier_mask != nullptr) {
     geometry.inlier_matches =

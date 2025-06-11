@@ -171,6 +171,7 @@ bool IncrementalMapper::FindInitialImagePair(const Options& options,
     image_ids1 = FindFirstInitialImage(options);
   }
 
+  std::map<image_pair_t, float>degDiffs;
   // Try to find good initial pair.
   for (size_t i1 = 0; i1 < image_ids1.size(); ++i1) {
     image_id1 = image_ids1[i1];
@@ -193,11 +194,17 @@ bool IncrementalMapper::FindInitialImagePair(const Options& options,
 
       if (EstimateInitialTwoViewGeometry(
               options, two_view_geometry, image_id1, image_id2)) {
-        return true;
+          degDiffs[pair_id] =abs(two_view_geometry.tri_angle);
       }
     }
   }
+  auto max_key = std::max_element(degDiffs.begin(), degDiffs.end(), [](const auto&a, const auto& b) {return a.second < b.second;});
+  std::pair<image_t, image_t>pickedPair = Database::PairIdToImagePair(max_key->first);
+  image_id1 = pickedPair.first;
+  image_id2 = pickedPair.second;
 
+
+  return true;
   // No suitable pair found in entire dataset.
   image_id1 = kInvalidImageId;
   image_id2 = kInvalidImageId;
@@ -328,12 +335,15 @@ void IncrementalMapper::RegisterInitialImagePair(
     const Eigen::Vector2d point2D2 =
         camera2.CamFromImg(image2.Point2D(corr.point2D_idx2).xy);
     Eigen::Vector3d xyz;
-    if (TriangulatePoint(
-            cam_from_world1, cam_from_world2, point2D1, point2D2, &xyz) &&
-        CalculateTriangulationAngle(proj_center1, proj_center2, xyz) >=
-            min_tri_angle_rad &&
-        HasPointPositiveDepth(cam_from_world1, xyz) &&
-        HasPointPositiveDepth(cam_from_world2, xyz)) {
+    bool triangulatePointRet = TriangulatePoint(cam_from_world1, cam_from_world2, point2D1, point2D2, &xyz);
+    double triangulationAngle = CalculateTriangulationAngle(proj_center1, proj_center2, xyz);
+    bool pointPositiveDepth1 = HasPointPositiveDepth(cam_from_world1, xyz); 
+    bool pointPositiveDepth2 = HasPointPositiveDepth(cam_from_world2, xyz);
+
+
+    if (triangulatePointRet &&
+        pointPositiveDepth1 &&
+        pointPositiveDepth2) {
       track.Element(0).point2D_idx = corr.point2D_idx1;
       track.Element(1).point2D_idx = corr.point2D_idx2;
       obs_manager_->AddPoint3D(xyz, track);
@@ -400,11 +410,11 @@ bool IncrementalMapper::RegisterNextImage(const Options& options,
       const Camera& corr_camera = *corr_image.CameraPtr();
 
       // Avoid correspondences to images with bogus camera parameters.
-      if (corr_camera.HasBogusParams(options.min_focal_length_ratio,
-                                     options.max_focal_length_ratio,
-                                     options.max_extra_param)) {
-        continue;
-      }
+      //if (corr_camera.HasBogusParams(options.min_focal_length_ratio,
+      //                               options.max_focal_length_ratio,
+      //                               options.max_extra_param)) {
+      //  continue;
+      //}
 
       const Point3D& point3D =
           reconstruction_->Point3D(corr_point2D.point3D_id);
@@ -1282,7 +1292,7 @@ bool IncrementalMapper::EstimateInitialTwoViewGeometry(
 
   TwoViewGeometryOptions two_view_geometry_options;
   two_view_geometry_options.min_num_inliers = 8;
-  two_view_geometry_options.ransac_options.min_num_trials = 30;
+  two_view_geometry_options.ransac_options.min_num_trials = 1;
   two_view_geometry_options.ransac_options.max_error = options.init_max_error;
   two_view_geometry = EstimateCalibratedTwoViewGeometry(
       camera1, points1, camera2, points2, matches, two_view_geometry_options);
@@ -1292,13 +1302,14 @@ bool IncrementalMapper::EstimateInitialTwoViewGeometry(
     return false;
   }
 
-  if (static_cast<int>(two_view_geometry.inlier_matches.size()) >=
-          options.init_min_num_inliers &&
-      std::abs(two_view_geometry.cam2_from_cam1.translation.z()) <
-          options.init_max_forward_motion &&
-      two_view_geometry.tri_angle > DegToRad(options.init_min_tri_angle)) {
-    return true;
-  }
+  return true;
+  //if (static_cast<int>(two_view_geometry.inlier_matches.size()) >=
+  //        options.init_min_num_inliers &&
+  //    std::abs(two_view_geometry.cam2_from_cam1.translation.z()) <
+  //        options.init_max_forward_motion &&
+  //    two_view_geometry.tri_angle > DegToRad(options.init_min_tri_angle)) {
+  //  return true;
+  //}
 
   return false;
 }

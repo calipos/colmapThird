@@ -20,12 +20,17 @@ public:
 	ImgDir() {};
 	ImgDir(const std::filesystem::path&dir) 
 	{
+		imgDir_ = dir;
+		updata();
+	};
+	void updata()
+	{
 		ImgPts.clear();
-		if (!std::filesystem::exists(dir))
+		if (!std::filesystem::exists(imgDir_))
 		{
 			return;
 		}
-		for (auto const& dir_entry : std::filesystem::directory_iterator{ dir })
+		for (auto const& dir_entry : std::filesystem::directory_iterator{ imgDir_ })
 		{
 			const auto& thisFilename = dir_entry.path();
 			if (thisFilename.has_extension())
@@ -34,7 +39,7 @@ public:
 				const auto& ext = thisFilename.extension().string();
 				if (ext.compare(".json") == 0)
 				{
-					std::map<std::string, Eigen::Vector2i>&imgPts= ImgPts[shortName];
+					std::map<std::string, Eigen::Vector2d>& imgPts = ImgPts[shortName];
 					Eigen::Vector2i imgSizeWH;
 					labelme::readPtsFromLabelMeJson(thisFilename, imgPts, imgSizeWH);
 
@@ -42,12 +47,21 @@ public:
 			}
 		}
 		return;
-	};
-	std::map<std::string, std::map<std::string, Eigen::Vector2i>>ImgPts;
+	}
+	std::map<std::string, std::map<std::string, Eigen::Vector2d>>ImgPts;
 	~ImgDir() {};
-
+	std::vector<std::string>getTotal()
+	{
+		std::vector<std::string> ret;
+		ret.reserve(ImgPts.size());
+		for (const auto&d: ImgPts)
+		{
+			ret.emplace_back(d.first);
+		}
+		return ret;
+	}
 private:
-
+	std::filesystem::path imgDir_;
 };
 
 

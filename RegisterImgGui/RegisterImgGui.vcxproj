@@ -116,7 +116,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>D:\repo\colmapThird\glfw-3.3.10.bin.WIN64\include;D:\repo\colmapThird\install\jsoncpp-1.9.6\include;D:\repo\colmapThird\install\eigen-3.4.0\include\eigen3;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\repo\colmapThird\glfw-3.3.10.bin.WIN64\include;D:\repo\colmapThird\install\jsoncpp-1.9.6\include;D:\repo\colmapThird\install\eigen-3.4.0\include\eigen3;D:\repo\colmapThird\install\ceres-solver-2.2.0\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -134,7 +134,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>D:\repo\colmapThird\glfw-3.3.10.bin.WIN64\include;D:\repo\colmapThird\install\jsoncpp-1.9.6\include;D:\repo\colmapThird\install\eigen-3.4.0\include\eigen3;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>D:\repo\colmapThird\glfw-3.3.10.bin.WIN64\include;D:\repo\colmapThird\install\jsoncpp-1.9.6\include;D:\repo\colmapThird\install\eigen-3.4.0\include\eigen3;D:\repo\colmapThird\install\ceres-solver-2.2.0\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
@@ -148,6 +148,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="browser.cpp" />
+    <ClCompile Include="camera.cpp" />
+    <ClCompile Include="image.cpp" />
     <ClCompile Include="imgui.cpp" />
     <ClCompile Include="imgui_demo.cpp" />
     <ClCompile Include="imgui_draw.cpp" />
@@ -159,12 +161,21 @@
     <ClCompile Include="log.cpp" />
     <ClCompile Include="registerFrame.cpp" />
     <ClCompile Include="registerImgMain.cpp" />
+    <ClCompile Include="rigid3.cpp" />
+    <ClCompile Include="scene.cpp" />
+    <ClCompile Include="two_view_geometry.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="browser.h" />
+    <ClInclude Include="camera.h" />
+    <ClInclude Include="image.h" />
     <ClInclude Include="labelme.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="registerFrame.h" />
+    <ClInclude Include="rigid3.h" />
+    <ClInclude Include="scene.h" />
+    <ClInclude Include="two_view_geometry.h" />
+    <ClInclude Include="types.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

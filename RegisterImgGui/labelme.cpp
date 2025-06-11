@@ -5,7 +5,7 @@
 namespace labelme
 {
 	bool readPtsFromLabelMeJson(const std::filesystem::path& jsonPath,
-		std::map<std::string, Eigen::Vector2i>& cornerInfo, Eigen::Vector2i& imgSizeWH)
+		std::map<std::string, Eigen::Vector2d>& cornerInfo, Eigen::Vector2i& imgSizeWH,std::string*imgpath)
 	{
 		cornerInfo.clear();
 		std::stringstream ss;
@@ -28,6 +28,10 @@ namespace labelme
 		}
 		auto newMemberNames = newRoot.getMemberNames();
 		auto pathNode = newRoot["imagePath"];
+		if (imgpath !=nullptr)
+		{
+			*imgpath = newRoot["imagePath"].asString();
+		}
 		auto shapeNode = newRoot["shapes"];
 		if (pathNode.isNull() || shapeNode.isNull() || !shapeNode.isArray())
 		{
@@ -53,10 +57,8 @@ namespace labelme
 				LOG_ERR_OUT << "not unique!";
 				return false;
 			}
-			double x = label["points"][0][0].asDouble();
-			double y = label["points"][0][1].asDouble();
-			cornerInfo[cornerLabel].x() = std::round(x);
-			cornerInfo[cornerLabel].y() = std::round(y); 
+			cornerInfo[cornerLabel].x() = label["points"][0][0].asDouble();
+			cornerInfo[cornerLabel].y() = label["points"][0][1].asDouble();
 		}
 		if (cornerInfo.size() == 0)
 		{

@@ -64,7 +64,7 @@ class IncrementalMapper {
  public:
   struct Options {
     // Minimum number of inliers for initial image pair.
-    int init_min_num_inliers = 100;
+    int init_min_num_inliers = 8;
 
     // Maximum error in pixels for two-view geometry estimation for initial
     // image pair.
@@ -83,7 +83,7 @@ class IncrementalMapper {
     double abs_pose_max_error = 12.0;
 
     // Minimum number of inliers in absolute pose estimation.
-    int abs_pose_min_num_inliers = 30;
+    int abs_pose_min_num_inliers = 8;
 
     // Minimum inlier ratio in absolute pose estimation.
     double abs_pose_min_inlier_ratio = 0.25;

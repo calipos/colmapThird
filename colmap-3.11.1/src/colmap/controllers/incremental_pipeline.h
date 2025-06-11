@@ -38,7 +38,7 @@ namespace colmap {
 // NOLINTNEXTLINE(clang-analyzer-optin.performance.Padding)
 struct IncrementalPipelineOptions {
   // The minimum number of matches for inlier matches to be considered.
-  int min_num_matches = 15;
+  int min_num_matches = 8;
 
   // Whether to ignore the inlier matches of watermark image pairs.
   bool ignore_watermarks = false;
@@ -47,7 +47,7 @@ struct IncrementalPipelineOptions {
   bool multiple_models = true;
 
   // The number of sub-models to reconstruct.
-  int max_num_models = 50;
+  int max_num_models = 1;
 
   // The maximum number of overlapping images between sub-models. If the
   // current sub-models shares more than this number of images with another
@@ -57,7 +57,7 @@ struct IncrementalPipelineOptions {
   // The minimum number of registered images of a sub-model, otherwise the
   // sub-model is discarded. Note that the first sub-model is always kept
   // independent of size.
-  int min_model_size = 10;
+  int min_model_size = 1;
 
   // The image identifiers used to initialize the reconstruction. Note that
   // only one or both image identifiers can be specified. In the former case,
@@ -66,7 +66,7 @@ struct IncrementalPipelineOptions {
   int init_image_id2 = -1;
 
   // The number of trials to initialize the reconstruction.
-  int init_num_trials = 200;
+  int init_num_trials = 2;
 
   // Whether to extract colors for reconstructed points.
   bool extract_colors = true;

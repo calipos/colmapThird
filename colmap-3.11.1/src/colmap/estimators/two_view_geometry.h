@@ -98,10 +98,10 @@ struct TwoViewGeometryOptions {
   RANSACOptions ransac_options;
 
   TwoViewGeometryOptions() {
-    ransac_options.max_error = 4.0;
+    ransac_options.max_error = 400000;
     ransac_options.confidence = 0.999;
-    ransac_options.min_num_trials = 100;
-    ransac_options.max_num_trials = 10000;
+    ransac_options.min_num_trials = 1;
+    ransac_options.max_num_trials = 2;
     ransac_options.min_inlier_ratio = 0.25;
   }
 

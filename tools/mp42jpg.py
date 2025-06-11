@@ -65,7 +65,8 @@ def capture(video_path, time_interval):
 
 
 if __name__ == '__main__':
-    video_path = ['data/a.mp4', 'data/b.mp4'] 
+    # video_path = ['data/a.mp4', 'data/b.mp4']
+    video_path = ['data2/a.mp4']
     time_interval = 4
     for path in video_path:
         capture(path, time_interval)

@@ -17,8 +17,14 @@ static void glfw_error_callback(int error, const char* description)
 }
 bool show_imgRegister_window = false;
 bool show_main_window = true;
+
+
+extern int test_geometry();
+
 int main(int, char**)
 {
+    return test_geometry();
+
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
         return 1;
