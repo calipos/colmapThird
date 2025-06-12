@@ -19,7 +19,7 @@ void Image::SetPoints2D(const std::vector<Eigen::Vector2d>& points) {
     }
 }
 
-void Image::SetPoints2D(const std::vector<struct Point2D>& points) {
+void Image::SetPoints2D(const std::vector<Eigen::Vector2d>& points) {
     if(points2D_.empty())LOG_ERR_OUT << "error!!!";
     points2D_ = points;
     num_points3D_ = 0;
@@ -30,9 +30,9 @@ void Image::SetPoints2D(const std::vector<struct Point2D>& points) {
     }
 }
 
-void Image::SetPoints2D(const std::map<point2D_t, struct Point2D>& featPts)
+void Image::SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>& featPts)
 {
-    if (featPts.empty())LOG_ERR_OUT << "error!!!";
+    if (featPts.size()==0)LOG_ERR_OUT << "error!!!";
     points2D_.resize(featPts.size());
     std::vector<point2D_t>featIds;
     featIds.reserve(featPts.size());
@@ -47,7 +47,7 @@ void Image::SetPoints2D(const std::map<point2D_t, struct Point2D>& featPts)
 }
 void Image::SetPoint3DForPoint2D(const point2D_t point2D_idx,
     const point3D_t point3D_id) {
-    struct Point2D& point2D = points2D_.at(point2D_idx);
+    Eigen::Vector2d& point2D = points2D_.at(point2D_idx);
     if (!point2D.HasPoint3D()) {
         num_points3D_ += 1;
     }
@@ -55,7 +55,7 @@ void Image::SetPoint3DForPoint2D(const point2D_t point2D_idx,
 }
 
 void Image::ResetPoint3DForPoint2D(const point2D_t point2D_idx) {
-    struct Point2D& point2D = points2D_.at(point2D_idx);
+    Eigen::Vector2d& point2D = points2D_.at(point2D_idx);
     if (point2D.HasPoint3D()) {
         point2D.point3D_id = kInvalidPoint3DId;
         num_points3D_ -= 1;
@@ -65,7 +65,7 @@ void Image::ResetPoint3DForPoint2D(const point2D_t point2D_idx) {
 bool Image::HasPoint3D(const point3D_t point3D_id) const {
     return std::find_if(points2D_.begin(),
         points2D_.end(),
-        [point3D_id](const struct Point2D& point2D) {
+        [point3D_id](const Eigen::Vector2d& point2D) {
             return point2D.point3D_id == point3D_id;
         }) != points2D_.end();
 }

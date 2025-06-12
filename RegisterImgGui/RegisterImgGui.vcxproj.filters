@@ -66,6 +66,9 @@
     <ClCompile Include="image.cpp">
       <Filter>Resource Files</Filter>
     </ClCompile>
+    <ClCompile Include="estimate.cpp">
+      <Filter>Resource Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">
@@ -96,6 +99,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="two_view_geometry.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="estimate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

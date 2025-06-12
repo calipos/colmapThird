@@ -181,24 +181,22 @@ TwoViewGeometry EstimateUncalibratedTwoViewGeometry(
   geometry.F = F_report.model;
 
   // Estimate planar or panoramic model.
-
-  LORANSAC<HomographyMatrixEstimator, HomographyMatrixEstimator> H_ransac(
-      options.ransac_options);
-  const auto H_report = H_ransac.Estimate(matched_points1, matched_points2);
-  geometry.H = H_report.model;
-
-  if ((!F_report.success && !H_report.success) ||
-      (F_report.support.num_inliers < min_num_inliers &&
-       H_report.support.num_inliers < min_num_inliers)) {
-    geometry.config = TwoViewGeometry::ConfigurationType::DEGENERATE;
-    return geometry;
-  }
+  //LORANSAC<HomographyMatrixEstimator, HomographyMatrixEstimator> H_ransac(
+  //    options.ransac_options);
+  //const auto H_report = H_ransac.Estimate(matched_points1, matched_points2);
+  //geometry.H = H_report.model;
+  //if ((!F_report.success && !H_report.success) ||
+  //    (F_report.support.num_inliers < min_num_inliers &&
+  //     H_report.support.num_inliers < min_num_inliers)) {
+  //  geometry.config = TwoViewGeometry::ConfigurationType::DEGENERATE;
+  //  return geometry;
+  //}
 
   // Determine inlier ratios of different models.
 
-  const double H_F_inlier_ratio =
-      static_cast<double>(H_report.support.num_inliers) /
-      F_report.support.num_inliers;
+  //const double H_F_inlier_ratio =
+  //    static_cast<double>(H_report.support.num_inliers) /
+  //    F_report.support.num_inliers;
 
   const std::vector<char>* best_inlier_mask = &F_report.inlier_mask;
   int num_inliers = F_report.support.num_inliers;

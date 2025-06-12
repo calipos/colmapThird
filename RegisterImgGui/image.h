@@ -60,12 +60,12 @@ public:
     inline void ResetPose();
 
     // Access the coordinates of image points.
-    inline const struct Point2D& Point2D(point2D_t point2D_idx) const;
-    inline struct Point2D& Point2D(point2D_t point2D_idx);
-    inline const std::vector<struct Point2D>& Points2D() const;
-    inline std::vector<struct Point2D>& Points2D();
+    inline const Eigen::Vector2d& Point2D(point2D_t point2D_idx) const;
+    inline Eigen::Vector2d& Point2D(point2D_t point2D_idx);
+    inline const std::vector<Eigen::Vector2d>& Points2D() const;
+    inline std::vector<Eigen::Vector2d>& Points2D();
     void SetPoints2D(const std::vector<Eigen::Vector2d>& points);
-    void SetPoints2D(const std::vector<struct Point2D>& points);
+    void SetPoints2D(const std::vector<Eigen::Vector2d>& points);
 
     // Set the point as triangulated, i.e. it is part of a 3D point track.
     void SetPoint3DForPoint2D(point2D_t point2D_idx, point3D_t point3D_id);
@@ -93,8 +93,8 @@ public:
 
     static std::map<std::string, int>keypointNameToIndx;
     static std::map<int,std::string>keypointIndexToName;
-    std::map<point2D_t, struct Point2D>featPts;
-    void SetPoints2D(const std::map<point2D_t, struct Point2D>&featPts);
+    std::map<point2D_t, Eigen::Vector2d>featPts;
+    void SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>&featPts);
 private:
     // Identifier of the image, if not specified `kInvalidImageId`.
     image_t image_id_;
@@ -115,7 +115,7 @@ private:
     std::optional<Rigid3d> cam_from_world_;
 
     // All image points, including points that are not part of a 3D point track.
-    std::vector<struct Point2D> points2D_;
+    std::vector<Eigen::Vector2d> points2D_;
 };
 
 std::ostream& operator<<(std::ostream& stream, const Image& image);
@@ -192,17 +192,17 @@ void Image::SetCamFromWorld(const std::optional<Rigid3d>& cam_from_world) {
 
     void Image::ResetPose() { cam_from_world_.reset(); }
 
-    const struct Point2D& Image::Point2D(const point2D_t point2D_idx) const {
+    const Eigen::Vector2d& Image::Point2D(const point2D_t point2D_idx) const {
         return points2D_.at(point2D_idx);
     }
 
-    struct Point2D& Image::Point2D(const point2D_t point2D_idx) {
+    Eigen::Vector2d& Image::Point2D(const point2D_t point2D_idx) {
         return points2D_.at(point2D_idx);
     }
 
-    const std::vector<struct Point2D>& Image::Points2D() const { return points2D_; }
+    const std::vector<Eigen::Vector2d>& Image::Points2D() const { return points2D_; }
 
-    std::vector<struct Point2D>& Image::Points2D() { return points2D_; }
+    std::vector<Eigen::Vector2d>& Image::Points2D() { return points2D_; }
 
     bool Image::operator==(const Image& other) const {
         return image_id_ == other.image_id_ && camera_id_ == other.camera_id_ &&

@@ -61,12 +61,13 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 			const auto& featPos = feat.second;
 			if (Image::keypointNameToIndx.count(featName)==0)
 			{
-				int featId = Image::keypointNameToIndx.size();
-				Image::keypointNameToIndx[featName] = featId;
-				Image::keypointIndexToName[featId] = featName;
-				thisImg.featPts[featId].xy = featPos;
-				thisImg.featPts[featId].point3D_id = featId;
+				int featId_ = Image::keypointNameToIndx.size();
+				Image::keypointNameToIndx[featName] = featId_;
+				Image::keypointIndexToName[featId_] = featName;
 			}
+			const int& featId = Image::keypointNameToIndx[featName];
+			thisImg.featPts[featId].xy = featPos;
+			thisImg.featPts[featId].point3D_id = featId;
 		}
 		thisImg.SetPoints2D(thisImg.featPts);
 		if (type== ImageIntrType::DIFFERENT)
@@ -75,6 +76,7 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 			Camera temp = Camera::CreateFromModelId(camera_id++, defaultCameraType, focal_length, sizeWH.x(), sizeWH.y());
 			bool has_focal_length = false;
 			temp.has_prior_focal_length = has_focal_length;
+			thisImg.SetCameraId(temp.camera_id);
 			dataSet[temp].emplace_back(thisImg);
 		}
 		else if (type == ImageIntrType::SHARED_WITH_FOLDER)
@@ -84,6 +86,7 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 			Camera temp = Camera::CreateFromModelId(camera_id, defaultCameraType, focal_length, sizeWH.x(), sizeWH.y());
 			bool has_focal_length = false;
 			temp.has_prior_focal_length = has_focal_length;
+			thisImg.SetCameraId(temp.camera_id);
 			dataSet[temp].emplace_back(thisImg);
 			
 		}
@@ -93,6 +96,7 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 			Camera temp = Camera::CreateFromModelId(0, defaultCameraType, focal_length, sizeWH.x(), sizeWH.y());
 			bool has_focal_length = false;
 			temp.has_prior_focal_length = has_focal_length;
+			thisImg.SetCameraId(temp.camera_id);
 			dataSet[temp].emplace_back(thisImg);
 		}		
 	}
