@@ -64,8 +64,6 @@ public:
     inline Eigen::Vector2d& Point2D(point2D_t point2D_idx);
     inline const std::vector<Eigen::Vector2d>& Points2D() const;
     inline std::vector<Eigen::Vector2d>& Points2D();
-    void SetPoints2D(const std::vector<Eigen::Vector2d>& points);
-    void SetPoints2D(const std::vector<Eigen::Vector2d>& points);
 
     // Set the point as triangulated, i.e. it is part of a 3D point track.
     void SetPoint3DForPoint2D(point2D_t point2D_idx, point3D_t point3D_id);
@@ -73,8 +71,6 @@ public:
     // Set the point as not triangulated, i.e. it is not part of a 3D point track.
     void ResetPoint3DForPoint2D(point2D_t point2D_idx);
 
-    // Check whether one of the image points is part of the 3D point track.
-    bool HasPoint3D(point3D_t point3D_id) const;
 
     // Extract the projection center in world space.
     Eigen::Vector3d ProjectionCenter() const;

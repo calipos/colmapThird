@@ -66,8 +66,7 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 				Image::keypointIndexToName[featId_] = featName;
 			}
 			const int& featId = Image::keypointNameToIndx[featName];
-			thisImg.featPts[featId].xy = featPos;
-			thisImg.featPts[featId].point3D_id = featId;
+			thisImg.featPts[featId] = featPos;
 		}
 		thisImg.SetPoints2D(thisImg.featPts);
 		if (type== ImageIntrType::DIFFERENT)

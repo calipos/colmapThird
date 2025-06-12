@@ -96,3 +96,11 @@ Deep3d/BFM/*
 !idr/data/DTU/scan40/mask/*.*
 !idr/data/DTU/scan40/cameras.npz
 !idr/data/DTU/scan40/cameras_linear_init.npz
+
+!glfw-3.3.10.bin.WIN64/lib-mingw-w64/*
+!glfw-3.3.10.bin.WIN64/lib-static-ucrt/*
+!glfw-3.3.10.bin.WIN64/lib-vc2013/*
+!glfw-3.3.10.bin.WIN64/lib-vc2015/*
+!glfw-3.3.10.bin.WIN64/lib-vc2017/*
+!glfw-3.3.10.bin.WIN64/lib-vc2019/*
+!glfw-3.3.10.bin.WIN64/lib-vc2022/*

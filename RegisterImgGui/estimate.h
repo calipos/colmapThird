@@ -2,9 +2,11 @@
 #define _ESTIMATOR_H_
 #include <map>
 #include <vector>
+#include <random>
+#include <algorithm>
 #include <Eigen/Core>
 #include  "types.h"
-
+#include "log.h"
 // Fundamental matrix estimator from corresponding point pairs.
 // This algorithm solves the 7-Point problem and is based on the following
 // paper:
@@ -218,18 +220,6 @@ public:
         typename Estimator::M_t model;
     };
     explicit RANSAC(const RANSACOptions& options);
-    // Determine the maximum number of trials required to sample at least one
-    // outlier-free random set of samples with the specified confidence,
-    // given the inlier ratio.
-    // @param num_inliers				The number of inliers.
-    // @param num_samples				The total number of samples.
-    // @param confidence				Confidence that one sample is outlier-free.
-    // @param num_trials_multiplier   Multiplication factor to the computed number of trials.
-    // @return               The required number of iterations.
-    static size_t ComputeNumTrials(size_t num_inliers,
-        size_t num_samples,
-        double confidence,
-        double num_trials_multiplier);
     // Robustly estimate model with RANSAC (RANdom SAmple Consensus).
     // @param X              Independent variables.
     // @param Y              Dependent variables.
@@ -252,6 +242,19 @@ RANSAC<Estimator, SupportMeasurer>::RANSAC(
     // Determine max_num_trials based on assumed `min_inlier_ratio`.
     const size_t kNumSamples = 10;
 }
+template <typename Estimator, typename SupportMeasurer>
+typename RANSAC<Estimator, SupportMeasurer>::Report
+RANSAC<Estimator, SupportMeasurer>::Estimate(
+    const std::map<point2D_t, typename Estimator::X_t>& featPts1,
+    const std::map<point2D_t, typename Estimator::Y_t>& featPts2) 
+{
+    Report report;
+    report.success = false;
+    report.num_trials = 0;
+    return report;
+}
+
+
 // Implementation of LO-RANSAC (Locally Optimized RANSAC).
 // "Locally Optimized RANSAC" Ondrej Chum, Jiri Matas, Josef Kittler, DAGM 2003.
 template <typename Estimator, typename LocalEstimator, typename SupportMeasurer = InlierSupportMeasurer>
@@ -267,9 +270,12 @@ public:
     Report Estimate(
         const std::map<point2D_t, typename Estimator::X_t>& featPts1,
         const std::map<point2D_t, typename Estimator::Y_t>& featPts2);
+    int Combination1(const int& n, const  const int& m);
     using RANSAC<Estimator, SupportMeasurer>::estimator;
     LocalEstimator local_estimator;
     using RANSAC<Estimator, SupportMeasurer>::support_measurer;
+private:
+        using RANSAC<Estimator, SupportMeasurer>::options_;
 };
 
 template <typename Estimator,
@@ -277,35 +283,46 @@ template <typename Estimator,
     typename SupportMeasurer>
     LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::LORANSAC()
     : RANSAC<Estimator, SupportMeasurer>() {}
-
+template <typename Estimator, typename LocalEstimator, typename SupportMeasurer>
+int LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::Combination1(const int& n, const  const int& m) 
+{
+    if (n <= 0 || m <= 0)
+    {
+        return 0;
+    }
+    int res = 1;
+    for (int i = 1; i <= m; ++i) {
+        res = res * (n - m + i) / i;        // ÏÈ³Ëºó³ý
+    }
+    return res;
+}
 template <typename Estimator, typename LocalEstimator, typename SupportMeasurer>
 typename LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::Report LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::Estimate(
     const std::map<point2D_t, typename Estimator::X_t>& featPts1,
     const std::map<point2D_t, typename Estimator::Y_t>& featPts2)
 {
-    typename RANSAC<Estimator, SupportMeasurer, Sampler>::Report report;
+    typename RANSAC<Estimator, SupportMeasurer>::Report report;
     report.success = false;
     report.num_trials = 0;
-    if (X.size() != Y.size())
-    {
-        LOG_ERR_OUT << "X.size() != Y.size()";
-        return report;
-    }
-
     std::vector<point2D_t>matches;
-    matches.reserve(std::min(img1.featPts.size(), img2.featPts.size()));
-    for (std::map<point2D_t, Eigen::Vector2d>::const_iterator iter = img1.featPts.begin(); iter != img1.featPts.end(); iter++) {
-        if (img2.featPts.count(iter->first) != 0)
+    matches.reserve(std::min(featPts1.size(), featPts2.size()));
+    for (std::map<point2D_t, Eigen::Vector2d>::const_iterator iter = featPts1.begin(); iter != featPts1.end(); iter++) {
+        if (featPts2.count(iter->first) != 0)
         {
             matches.emplace_back(iter->first);
         }
     }
 
-    const size_t num_samples = X.size();
+    const size_t num_samples = matches.size();
     if (num_samples < Estimator::kMinNumSamples) 
     {
-        LOG(INFO) << "num_samples < Estimator::kMinNumSamples: " << Estimator::kMinNumSamples;
         return report;
+    }
+    std::vector<Eigen::Vector2d> X(matches.size());
+    std::vector<Eigen::Vector2d> Y(matches.size());
+    for (size_t i = 0; i < matches.size(); ++i) {
+        X[i] = featPts1[matches[i]];
+        Y[i] = featPts2[matches[i]];
     }
     typename SupportMeasurer::Support best_support;
     typename Estimator::M_t best_model;
@@ -322,103 +339,70 @@ typename LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::Report LORANSAC<E
     std::vector<typename Estimator::Y_t> Y_rand(Estimator::kMinNumSamples);
     std::vector<typename Estimator::M_t> sample_models;
     std::vector<typename LocalEstimator::M_t> local_models;
+    
 
-    sampler.Initialize(num_samples);
-
-    size_t max_num_trials =
-        std::min<size_t>(options_.max_num_trials, sampler.MaxNumSamples());
-    size_t dyn_max_num_trials = max_num_trials;
-    const size_t min_num_trials = options_.min_num_trials;
-
-    for (report.num_trials = 0; report.num_trials < max_num_trials;
-        ++report.num_trials) {
-        if (abort) {
-            report.num_trials += 1;
-            break;
+    int maxTrialsNum = std::min(Combination1(matches.size(), 7), 200); 
+    for (report.num_trials = 0; report.num_trials < maxTrialsNum;
+        ++report.num_trials) 
+    {
+        report.num_trials += 1;
+        std::shuffle(matches.begin(), matches.end(), std::default_random_engine(std::time(0)));
+        for (size_t i = 0; i < Estimator::kMinNumSamples; ++i) {
+            X_rand[i] = featPts1[matches[i]];
+            Y_rand[i] = featPts2[matches[i]];
         }
-
-        sampler.SampleXY(X, Y, &X_rand, &Y_rand);
-
         // Estimate model for current subset.
         estimator.Estimate(X_rand, Y_rand, &sample_models);
 
         // Iterate through all estimated models
         for (const auto& sample_model : sample_models) {
             estimator.Residuals(X, Y, sample_model, &residuals);
-            THROW_CHECK_EQ(residuals.size(), num_samples);
-
             const auto support = support_measurer.Evaluate(residuals, max_residual);
-
             // Do local optimization if better than all previous subsets.
             if (support_measurer.IsLeftBetter(support, best_support)) {
                 best_support = support;
                 best_model = sample_model;
                 best_model_is_local = false;
-
-                //LOG(INFO) << LocalEstimator::kMinNumSamples<<" : " << Estimator::kMinNumSamples;
                 // Estimate locally optimized model from inliers.
                 if (support.num_inliers > Estimator::kMinNumSamples &&
-                    support.num_inliers >= LocalEstimator::kMinNumSamples) {
-                    // Recursive local optimization to expand inlier set.
-                    const size_t kMaxNumLocalTrials = 10;
-                    for (size_t local_num_trials = 0;
-                        local_num_trials < kMaxNumLocalTrials;
-                        ++local_num_trials) {
-                        X_inlier.clear();
-                        Y_inlier.clear();
-                        X_inlier.reserve(num_samples);
-                        Y_inlier.reserve(num_samples);
-                        for (size_t i = 0; i < residuals.size(); ++i) {
-                            if (residuals[i] <= max_residual) {
-                                X_inlier.push_back(X[i]);
-                                Y_inlier.push_back(Y[i]);
-                            }
+                    support.num_inliers >= LocalEstimator::kMinNumSamples)
+                {
+                    X_inlier.clear();
+                    Y_inlier.clear();
+                    X_inlier.reserve(num_samples);
+                    Y_inlier.reserve(num_samples);
+                    for (size_t i = 0; i < residuals.size(); ++i) {
+                        if (residuals[i] <= max_residual) {
+                            X_inlier.push_back(X[i]);
+                            Y_inlier.push_back(Y[i]);
                         }
-
-                        local_estimator.Estimate(X_inlier, Y_inlier, &local_models);
-
-                        const size_t prev_best_num_inliers = best_support.num_inliers;
-
-                        for (const auto& local_model : local_models) {
-                            local_estimator.Residuals(X, Y, local_model, &residuals);
-                            THROW_CHECK_EQ(residuals.size(), num_samples);
-
-                            const auto local_support =
-                                support_measurer.Evaluate(residuals, max_residual);
-
-                            // Check if locally optimized model is better.
-                            if (support_measurer.IsLeftBetter(local_support, best_support)) {
-                                best_support = local_support;
-                                best_model = local_model;
-                                best_model_is_local = true;
-                                std::swap(residuals, best_local_residuals);
-                            }
-                        }
-
-                        // Only continue recursive local optimization, if the inlier set
-                        // size increased and we thus have a chance to further improve.
-                        if (best_support.num_inliers <= prev_best_num_inliers) {
-                            break;
-                        }
-
-                        // Swap back the residuals, so we can extract the best inlier
-                        // set in the next recursion of local optimization.
-                        std::swap(residuals, best_local_residuals);
                     }
+                    local_estimator.Estimate(X_inlier, Y_inlier, &local_models);
+                    const size_t prev_best_num_inliers = best_support.num_inliers;
+                    for (const auto& local_model : local_models) {
+                        local_estimator.Residuals(X, Y, local_model, &residuals);
+                        const auto local_support =
+                            support_measurer.Evaluate(residuals, max_residual);
+                        // Check if locally optimized model is better.
+                        if (support_measurer.IsLeftBetter(local_support, best_support)) {
+                            best_support = local_support;
+                            best_model = local_model;
+                            best_model_is_local = true;
+                            std::swap(residuals, best_local_residuals);
+                        }
+                    }
+
+                    // Only continue recursive local optimization, if the inlier set
+                    // size increased and we thus have a chance to further improve.
+                    if (best_support.num_inliers <= prev_best_num_inliers) {
+                        break;
+                    }
+
+                    // Swap back the residuals, so we can extract the best inlier
+                    // set in the next recursion of local optimization.
+                    std::swap(residuals, best_local_residuals);
+
                 }
-
-                dyn_max_num_trials =
-                    RANSAC<Estimator, SupportMeasurer, Sampler>::ComputeNumTrials(
-                        best_support.num_inliers,
-                        num_samples,
-                        options_.confidence,
-                        options_.dyn_num_trials_multiplier);
-            }
-
-            if (report.num_trials >= dyn_max_num_trials &&
-                report.num_trials >= min_num_trials) {
-                abort = true;
-                break;
             }
         }
     }
@@ -443,14 +427,10 @@ typename LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::Report LORANSAC<E
     else {
         estimator.Residuals(X, Y, report.model, &residuals);
     }
-
-    THROW_CHECK_EQ(residuals.size(), num_samples);
-
     report.inlier_mask.resize(num_samples);
     for (size_t i = 0; i < residuals.size(); ++i) {
         report.inlier_mask[i] = residuals[i] <= max_residual;
     }
-
     return report;
 }
 

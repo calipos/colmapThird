@@ -48,8 +48,8 @@ TwoViewGeometry EstimateUncalibratedTwoViewGeometry(
     std::vector<Eigen::Vector2d> totalPoints1(matches.size());
     std::vector<Eigen::Vector2d> totalPoints2(matches.size());
     for (size_t i = 0; i < matches.size(); ++i) {
-        totalPoints1[i] = img1.Points2D()[matches[i]].xy;
-        totalPoints2[i] = img2.Points2D()[matches[i]].xy;
+        totalPoints1[i] = img1.Points2D()[matches[i]];
+        totalPoints2[i] = img2.Points2D()[matches[i]];
     }
     InlierSupportMeasurer support_measurer;
     typename InlierSupportMeasurer::Support best_support;    
@@ -69,8 +69,8 @@ TwoViewGeometry EstimateUncalibratedTwoViewGeometry(
         std::vector<Eigen::Vector2d> sevenPoints1(7);
         std::vector<Eigen::Vector2d> sevenPoints2(7);
         for (size_t i = 0; i < 7; ++i) {
-            sevenPoints1[i] = img1.Points2D()[matches[i]].xy;
-            sevenPoints2[i] = img2.Points2D()[matches[i]].xy;
+            sevenPoints1[i] = img1.Points2D()[matches[i]];
+            sevenPoints2[i] = img2.Points2D()[matches[i]];
         }
         std::vector<double> residuals;
         std::vector<double> best_local_residuals;
@@ -178,8 +178,8 @@ TwoViewGeometry EstimateCalibratedTwoViewGeometry(
     std::vector<Eigen::Vector2d> matched_points2_normalized(matches.size());
     for (size_t i = 0; i < matches.size(); ++i) {
         const auto& featId = matches[i];
-        matched_points1[i] = img1.Points2D()[featId].xy;
-        matched_points2[i] = img2.Points2D()[featId].xy;
+        matched_points1[i] = img1.Points2D()[featId];
+        matched_points2[i] = img2.Points2D()[featId];
         matched_points1_normalized[i] = camera1.CamFromImg(matched_points1[i]);
         matched_points2_normalized[i] = camera2.CamFromImg(matched_points2[i]);
     }
@@ -194,8 +194,8 @@ TwoViewGeometry EstimateCalibratedTwoViewGeometry(
     std::vector<Eigen::Vector2d> totalPoints1(matches.size());
     std::vector<Eigen::Vector2d> totalPoints2(matches.size());
     for (size_t i = 0; i < matches.size(); ++i) {
-        totalPoints1[i] = img1.Points2D()[matches[i]].xy;
-        totalPoints2[i] = img2.Points2D()[matches[i]].xy;
+        totalPoints1[i] = img1.Points2D()[matches[i]];
+        totalPoints2[i] = img2.Points2D()[matches[i]];
     }
     InlierSupportMeasurer support_measurer;
     typename InlierSupportMeasurer::Support best_support;
@@ -215,8 +215,8 @@ TwoViewGeometry EstimateCalibratedTwoViewGeometry(
         std::vector<Eigen::Vector2d> sevenPoints1(7);
         std::vector<Eigen::Vector2d> sevenPoints2(7);
         for (size_t i = 0; i < 7; ++i) {
-            sevenPoints1[i] = img1.Points2D()[matches[i]].xy;
-            sevenPoints2[i] = img2.Points2D()[matches[i]].xy;
+            sevenPoints1[i] = img1.Points2D()[matches[i]];
+            sevenPoints2[i] = img2.Points2D()[matches[i]];
         }
         std::vector<double> residuals;
         std::vector<double> best_local_residuals;

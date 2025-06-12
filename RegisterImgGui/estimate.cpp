@@ -110,9 +110,9 @@ bool FundamentalMatrixSevenPointEstimator::Estimate(
     const std::vector<X_t>& points1,
     const std::vector<Y_t>& points2,
     std::vector<M_t>* models) {
-    if (points1.size() != 7 || points2.size() != 7)
+    if (points1.size() < 7 || points1.size()!= points2.size())
     {
-        LOG_ERR_OUT << "pts size!=7";
+        LOG_ERR_OUT << "pts size<7";
         return false;
     }
     if (models == nullptr)
@@ -467,7 +467,7 @@ bool EssentialMatrixFivePointEstimator::Estimate(
 {
     if (points1.size() < 5 || points2.size() != points1.size())
     {
-        LOG_ERR_OUT << "points1.size() <8 || points2.size() != points1.size()";
+        LOG_ERR_OUT << "points1.size() <5 || points2.size() != points1.size()";
         return false;
     }
     if (models == nullptr)
@@ -516,7 +516,7 @@ bool EssentialMatrixFivePointEstimator::Estimate(
     Eigen::VectorXd roots_real;
     Eigen::VectorXd roots_imag;
     if (!FindPolynomialRootsCompanionMatrix(coeffs, &roots_real, &roots_imag)) {
-        return;
+        return false;
     }
     const int num_roots = roots_real.size();
     models->reserve(num_roots);

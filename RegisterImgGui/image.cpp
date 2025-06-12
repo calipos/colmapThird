@@ -11,24 +11,7 @@ Image::Image()
     camera_ptr_(nullptr),
     num_points3D_(0) {}
 
-void Image::SetPoints2D(const std::vector<Eigen::Vector2d>& points) {
-    if(points2D_.empty())LOG_ERR_OUT<<"error!!!";
-    points2D_.resize(points.size());
-    for (point2D_t point2D_idx = 0; point2D_idx < points.size(); ++point2D_idx) {
-        points2D_[point2D_idx].xy = points[point2D_idx];
-    }
-}
 
-void Image::SetPoints2D(const std::vector<Eigen::Vector2d>& points) {
-    if(points2D_.empty())LOG_ERR_OUT << "error!!!";
-    points2D_ = points;
-    num_points3D_ = 0;
-    for (const auto& point2D : points2D_) {
-        if (point2D.HasPoint3D()) {
-            num_points3D_ += 1;
-        }
-    }
-}
 
 void Image::SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>& featPts)
 {
@@ -48,27 +31,12 @@ void Image::SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>& featPts)
 void Image::SetPoint3DForPoint2D(const point2D_t point2D_idx,
     const point3D_t point3D_id) {
     Eigen::Vector2d& point2D = points2D_.at(point2D_idx);
-    if (!point2D.HasPoint3D()) {
-        num_points3D_ += 1;
-    }
-    point2D.point3D_id = point3D_id;
 }
 
 void Image::ResetPoint3DForPoint2D(const point2D_t point2D_idx) {
     Eigen::Vector2d& point2D = points2D_.at(point2D_idx);
-    if (point2D.HasPoint3D()) {
-        point2D.point3D_id = kInvalidPoint3DId;
-        num_points3D_ -= 1;
-    }
 }
 
-bool Image::HasPoint3D(const point3D_t point3D_id) const {
-    return std::find_if(points2D_.begin(),
-        points2D_.end(),
-        [point3D_id](const Eigen::Vector2d& point2D) {
-            return point2D.point3D_id == point3D_id;
-        }) != points2D_.end();
-}
 
 Eigen::Vector3d Image::ProjectionCenter() const {
     return CamFromWorld().rotation.inverse() * -CamFromWorld().translation;
