@@ -6,6 +6,7 @@
 #include <string>
 #include "camera.h"
 #include "image.h"
+#include "eigen_alignment.h"
 
 
 enum class ImageIntrType

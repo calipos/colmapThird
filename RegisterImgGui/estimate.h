@@ -4,8 +4,9 @@
 #include <random>
 #include <algorithm>
 #include <Eigen/Core>
-#include  "types.h"
+#include "types.h"
 #include "log.h"
+#include "eigen_alignment.h"
 // Fundamental matrix estimator from corresponding point pairs.
 // This algorithm solves the 7-Point problem and is based on the following
 // paper:

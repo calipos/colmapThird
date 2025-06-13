@@ -1,6 +1,5 @@
 #pragma once
 #include "types.h"
-#include "rigid3.h"
 
 struct TwoViewGeometry {
     // The configuration of the two-view geometry.

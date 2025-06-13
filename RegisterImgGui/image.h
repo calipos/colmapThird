@@ -9,6 +9,7 @@
 #include "camera.h"
 #include "types.h"
 #include "rigid3.h"
+#include "eigen_alignment.h"
 #include <Eigen/Core>
 
 
