@@ -104,5 +104,11 @@
     <ClInclude Include="estimate.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="essential_matrix_poly.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="essential_matrix_coeffs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

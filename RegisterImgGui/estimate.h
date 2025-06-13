@@ -1,6 +1,5 @@
 #ifndef _ESTIMATOR_H_
 #define _ESTIMATOR_H_
-#include <map>
 #include <vector>
 #include <random>
 #include <algorithm>
@@ -225,8 +224,8 @@ public:
     // @param Y              Dependent variables.
     // @return               The report with the results of the estimation.
     Report Estimate(
-        const std::map<point2D_t, typename Estimator::X_t>& featPts1,
-        const std::map<point2D_t, typename Estimator::Y_t>& featPts2);
+        const std::vector< typename Estimator::X_t>& featPts1,
+        const std::vector< typename Estimator::Y_t>& featPts2);
     // Objects used in RANSAC procedure. Access useful to define custom behavior
     // through options or e.g. to compute residuals.
     Estimator estimator;
@@ -245,8 +244,8 @@ RANSAC<Estimator, SupportMeasurer>::RANSAC(
 template <typename Estimator, typename SupportMeasurer>
 typename RANSAC<Estimator, SupportMeasurer>::Report
 RANSAC<Estimator, SupportMeasurer>::Estimate(
-    const std::map<point2D_t, typename Estimator::X_t>& featPts1,
-    const std::map<point2D_t, typename Estimator::Y_t>& featPts2) 
+    const std::vector< typename Estimator::X_t>& featPts1,
+    const std::vector< typename Estimator::Y_t>& featPts2) 
 {
     Report report;
     report.success = false;
@@ -262,14 +261,14 @@ class LORANSAC : public RANSAC<Estimator, SupportMeasurer>
 {
 public:
     using typename RANSAC<Estimator, SupportMeasurer>::Report;
-    explicit LORANSAC();
+    explicit LORANSAC(const RANSACOptions& options);
     // Robustly estimate model with RANSAC (RANdom SAmple Consensus).
     // @param X              Independent variables.
     // @param Y              Dependent variables.
     // @return               The report with the results of the estimation.
     Report Estimate(
-        const std::map<point2D_t, typename Estimator::X_t>& featPts1,
-        const std::map<point2D_t, typename Estimator::Y_t>& featPts2);
+        const std::vector< typename Estimator::X_t>& featPts1,
+        const std::vector< typename Estimator::Y_t>& featPts2);
     int Combination1(const int& n, const  const int& m);
     using RANSAC<Estimator, SupportMeasurer>::estimator;
     LocalEstimator local_estimator;
@@ -281,8 +280,8 @@ private:
 template <typename Estimator,
     typename LocalEstimator,
     typename SupportMeasurer>
-    LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::LORANSAC()
-    : RANSAC<Estimator, SupportMeasurer>() {}
+    LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::LORANSAC(const RANSACOptions& options)
+    : RANSAC<Estimator, SupportMeasurer>(options) {}
 template <typename Estimator, typename LocalEstimator, typename SupportMeasurer>
 int LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::Combination1(const int& n, const  const int& m) 
 {
@@ -298,31 +297,30 @@ int LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::Combination1(const int
 }
 template <typename Estimator, typename LocalEstimator, typename SupportMeasurer>
 typename LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::Report LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::Estimate(
-    const std::map<point2D_t, typename Estimator::X_t>& featPts1,
-    const std::map<point2D_t, typename Estimator::Y_t>& featPts2)
+    const std::vector<typename Estimator::X_t>& featPts1,
+    const std::vector<typename Estimator::Y_t>& featPts2)
 {
     typename RANSAC<Estimator, SupportMeasurer>::Report report;
     report.success = false;
     report.num_trials = 0;
-    std::vector<point2D_t>matches;
-    matches.reserve(std::min(featPts1.size(), featPts2.size()));
-    for (std::map<point2D_t, Eigen::Vector2d>::const_iterator iter = featPts1.begin(); iter != featPts1.end(); iter++) {
-        if (featPts2.count(iter->first) != 0)
-        {
-            matches.emplace_back(iter->first);
-        }
+    if (featPts1.size()!= featPts2.size())
+    {
+        LOG_ERR_OUT << "featPts1.size()!= featPts2.size()";
+        return report;
     }
 
-    const size_t num_samples = matches.size();
+    const size_t num_samples = featPts1.size();
+    std::vector<size_t>matches(num_samples);
     if (num_samples < Estimator::kMinNumSamples) 
     {
         return report;
     }
-    std::vector<Eigen::Vector2d> X(matches.size());
-    std::vector<Eigen::Vector2d> Y(matches.size());
-    for (size_t i = 0; i < matches.size(); ++i) {
-        X[i] = featPts1[matches[i]];
-        Y[i] = featPts2[matches[i]];
+    std::vector<Eigen::Vector2d> X(num_samples);
+    std::vector<Eigen::Vector2d> Y(num_samples);
+    for (size_t i = 0; i < num_samples; ++i) {
+        X[i] = featPts1[i];
+        Y[i] = featPts2[i];
+        matches[i] = i;
     }
     typename SupportMeasurer::Support best_support;
     typename Estimator::M_t best_model;
@@ -341,7 +339,7 @@ typename LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::Report LORANSAC<E
     std::vector<typename LocalEstimator::M_t> local_models;
     
 
-    int maxTrialsNum = std::min(Combination1(matches.size(), 7), 200); 
+    int maxTrialsNum = std::min(Combination1(num_samples, Estimator::kMinNumSamples), 200);
     for (report.num_trials = 0; report.num_trials < maxTrialsNum;
         ++report.num_trials) 
     {
@@ -394,9 +392,9 @@ typename LORANSAC<Estimator, LocalEstimator, SupportMeasurer>::Report LORANSAC<E
 
                     // Only continue recursive local optimization, if the inlier set
                     // size increased and we thus have a chance to further improve.
-                    if (best_support.num_inliers <= prev_best_num_inliers) {
-                        break;
-                    }
+                    //if (best_support.num_inliers <= prev_best_num_inliers) {
+                    //    break;
+                    //}
 
                     // Swap back the residuals, so we can extract the best inlier
                     // set in the next recursion of local optimization.

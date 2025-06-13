@@ -171,6 +171,8 @@
   <ItemGroup>
     <ClInclude Include="browser.h" />
     <ClInclude Include="camera.h" />
+    <ClInclude Include="essential_matrix_coeffs.h" />
+    <ClInclude Include="essential_matrix_poly.h" />
     <ClInclude Include="estimate.h" />
     <ClInclude Include="image.h" />
     <ClInclude Include="labelme.h" />
