@@ -1,3 +1,5 @@
+#include <unordered_set>
+#include "types.h"
 #include "camera_rig.h"
 #include "log.h"
 #include "misc.h"
@@ -7,7 +9,7 @@ size_t CameraRig::NumCameras() const { return cams_from_rigs_.size(); }
 
 size_t CameraRig::NumSnapshots() const { return snapshots_.size(); }
 
-bool CameraRig::HasCamera(const camera_t camera_id) const {
+bool CameraRig::HasCamera(const camera_t&camera_id) const {
     return cams_from_rigs_.count(camera_id);
 }
 
@@ -70,16 +72,17 @@ void CameraRig::AddSnapshot(const std::vector<image_t>& image_ids) {
     snapshots_.push_back(image_ids);
 }
 
-void CameraRig::Check(const Reconstruction& reconstruction) const {
+void CameraRig::Check(const std::vector<struct Camera>& cameraList,
+    std::vector<class Image>& imageList) const {
     if (!HasCamera(ref_camera_id_))
     {
         LOG_ERR_OUT << "!ref_camera_id_";
         return;
     }
     for (const auto& rig_camera : cams_from_rigs_) {
-        if (!reconstruction.ExistsCamera(rig_camera.first))
+        if (rig_camera.first < 0 || rig_camera.first >= cameraList.size())
         {
-            LOG_ERR_OUT << "!reconstruction.ExistsCamera(rig_camera.first)";
+            LOG_ERR_OUT << "rig_camera.first < 0 || rig_camera.first >= cameraList.size()";
             return;
         }
     }
@@ -98,9 +101,9 @@ void CameraRig::Check(const Reconstruction& reconstruction) const {
         }
         bool has_ref_camera = false;
         for (const auto image_id : snapshot) {
-            if (!reconstruction.ExistsImage(image_id))
+            if (image_id < 0 || image_id >= imageList.size())
             {
-                LOG_ERR_OUT << "!reconstruction.ExistsImage(image_id)";
+                LOG_ERR_OUT << "image_id < 0 || image_id >= imageList.size()";
                 return;
             }
             if (all_image_ids.count(image_id) != 0)
@@ -109,7 +112,7 @@ void CameraRig::Check(const Reconstruction& reconstruction) const {
                 return;
             }
             all_image_ids.insert(image_id);
-            const auto& image = reconstruction.Image(image_id);
+            const auto& image = imageList[image_id];
             if (!HasCamera(image.CameraId()))
             {
                 LOG_ERR_OUT << "!HasCamera(image.CameraId())";
@@ -256,21 +259,6 @@ bool CameraRig::ComputeCamsFromRigs(const Reconstruction& reconstruction) {
 }
 
 Rigid3d CameraRig::ComputeRigFromWorld(
-    const size_t snapshot_idx, const Reconstruction& reconstruction) const {
-    const auto& snapshot = snapshots_.at(snapshot_idx);
-
-    std::vector<Eigen::Quaterniond> rig_from_world_rotations;
-    rig_from_world_rotations.reserve(snapshot.size());
-    Eigen::Vector3d rig_from_world_translations = Eigen::Vector3d::Zero();
-    for (const auto image_id : snapshot) {
-        const auto& image = reconstruction.Image(image_id);
-        const Rigid3d rig_from_world =
-            Inverse(CamFromRig(image.CameraId())) * image.CamFromWorld();
-        rig_from_world_rotations.push_back(rig_from_world.rotation);
-        rig_from_world_translations += rig_from_world.translation;
-    }
-
-    const std::vector<double> rotation_weights(snapshot.size(), 1);
-    return Rigid3d(AverageQuaternions(rig_from_world_rotations, rotation_weights),
-        rig_from_world_translations /= snapshot.size());
+    const size_t snapshot_idx) const {
+    return Rigid3d();
 }

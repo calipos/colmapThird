@@ -9,6 +9,7 @@
 #include "types.h"
 #include "reconstruction.h"
 #include "camera_rig.h"
+#include "image.h"
 // Configuration container to setup bundle adjustment problems.
 class BundleAdjustmentConfig {
 public:
@@ -24,7 +25,7 @@ public:
 
     // Determine the number of residuals for the given reconstruction. The number
     // of residuals equals the number of observations times two.
-    size_t NumResiduals(const Reconstruction& reconstruction) const;
+    size_t NumResiduals(const std::vector<class Image>& imageList) const;
 
     // Add / remove images from the configuration.
     void AddImage(image_t image_id);
@@ -197,13 +198,17 @@ protected:
 std::unique_ptr<BundleAdjuster> CreateDefaultBundleAdjuster(
     BundleAdjustmentOptions options,
     BundleAdjustmentConfig config,
-    Reconstruction& reconstruction);
+    std::vector<struct Camera>&cameraList,
+    std::vector<class Image> &imageList,
+    std::unordered_map<point3D_t, Eigen::Vector3d>&objPts);
 
 std::unique_ptr<BundleAdjuster> CreateRigBundleAdjuster(
     BundleAdjustmentOptions options,
     RigBundleAdjustmentOptions rig_options,
     BundleAdjustmentConfig config,
-    Reconstruction& reconstruction,
+    std::vector<struct Camera>& cameraList,
+    std::vector<class Image>& imageList,
+    std::unordered_map<point3D_t, Eigen::Vector3d>& objPts,
     std::vector<CameraRig>& camera_rigs);
 
 std::unique_ptr<BundleAdjuster> CreatePosePriorBundleAdjuster(
@@ -211,7 +216,9 @@ std::unique_ptr<BundleAdjuster> CreatePosePriorBundleAdjuster(
     PosePriorBundleAdjustmentOptions prior_options,
     BundleAdjustmentConfig config,
     //std::unordered_map<image_t, PosePrior> pose_priors,
-    Reconstruction& reconstruction);
+    std::vector<struct Camera>& cameraList,
+    std::vector<class Image>& imageList,
+    std::unordered_map<point3D_t, Eigen::Vector3d>& objPts);
 
 void PrintSolverSummary(const ceres::Solver::Summary& summary,
     const std::string& header);

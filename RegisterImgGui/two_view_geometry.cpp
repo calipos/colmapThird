@@ -170,11 +170,10 @@ bool EstimateTwoViewGeometryPose(
 int test_geometry()
 {
     //auto prev_camera_= Camera::CreateFromModelId(0,CameraModelId::kPinhole,100,400,300);
-    std::map<Camera, std::vector<Image>> dataset = loadImageData("D:/repo/colmapThird/data", ImageIntrType::SHARED_ALL);
+    std::map<Camera, std::vector<Image>> dataset = loadImageData("../data", ImageIntrType::SHARED_ALL);
     std::vector<Camera>cameraList; std::vector<Image> imageList;
     convertDataset(dataset, cameraList, imageList);
-
-    std::map<point3D_t, Eigen::Vector3d>objPts;
+    std::unordered_map<point3D_t, Eigen::Vector3d>objPts;
     image_t pickedA = 3;
     image_t pickedB = 31;
     {
@@ -226,6 +225,12 @@ int test_geometry()
         ba_config.AddImage(pickedA);
         ba_config.AddImage(pickedB);
         std::unique_ptr<BundleAdjuster> bundle_adjuster;
+
+        ba_config.SetConstantCamPose(pickedA);  // 1st image
+        bundle_adjuster = CreateDefaultBundleAdjuster(std::move(ba_options), std::move(ba_config), cameraList, imageList, objPts);
+
+        auto solverRet = bundle_adjuster->Solve();
+        solverRet.termination_type != ceres::FAILURE;
     }
     return 0;
 }

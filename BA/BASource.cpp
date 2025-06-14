@@ -283,8 +283,20 @@ namespace ba
         bal_problem.saveResultJson(dataPath, colmapObjPts, colmapImgPts, cameras);
     }
 }
+struct x
+{
+    double x;
+};
+struct MyStruct
+{
+    x x()
+    {
+        return x();
+    }
+};
 int main(int argc, char** argv)
 {
+    MyStruct a;
     std::filesystem::path  dataPath = "../data";
     if (argc>1)
     {

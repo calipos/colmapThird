@@ -19,7 +19,7 @@ public:
     size_t NumSnapshots() const;
 
     // Check whether the given camera is part of the rig.
-    bool HasCamera(camera_t camera_id) const;
+    bool HasCamera(const camera_t& camera_id) const;
 
     // Access the reference camera.
     camera_t RefCameraId() const;
@@ -43,7 +43,8 @@ public:
     void AddSnapshot(const std::vector<image_t>& image_ids);
 
     // Check whether the camera rig setup is valid.
-    void Check(const Reconstruction& reconstruction) const;
+    void Check(const std::vector<struct Camera>& cameraList,
+        std::vector<class Image>& imageList) const;
 
     // Get the relative poses of the cameras in the rig.
     const Rigid3d& CamFromRig(camera_t camera_id) const;
@@ -64,8 +65,7 @@ public:
     // Compute the pose of the camera rig. The rig pose is computed as the average
     // of all relative camera poses in the rig and their corresponding image poses
     // in the reconstruction.
-    Rigid3d ComputeRigFromWorld(size_t snapshot_idx,
-        const Reconstruction& reconstruction) const;
+    Rigid3d ComputeRigFromWorld(size_t snapshot_idx) const;
 
 private:
     camera_t ref_camera_id_ = kInvalidCameraId;
