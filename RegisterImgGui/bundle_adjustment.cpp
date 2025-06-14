@@ -483,7 +483,7 @@ void ParameterizePoints(
 
                 if (constant_cam_pose) {
                     problem_->AddResidualBlock(
-                        CreateCameraCostFunction<ReprojErrorConstantPoseCostFunctor>(
+                        CreateCameraCostFunction<ReprojErrorConstantPoseCostFunctor>(         //const T* const point3D, const T* const camera_params,
                             camera.model_id, point2D, image.CamFromWorld()),
                         loss_function_.get(),
                         point3D.data(),
@@ -524,6 +524,10 @@ void ParameterizePoints(
 
             for (auto& image : imageList) 
             {
+                if (image_id)
+                {
+
+                }
                 if (image.featPts.count(point3D_id) > 0)
                 {
                     Camera& camera = cameraList[image.CameraId()];

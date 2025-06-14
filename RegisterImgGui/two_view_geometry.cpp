@@ -224,6 +224,7 @@ int test_geometry()
         BundleAdjustmentConfig ba_config;
         ba_config.AddImage(pickedA);
         ba_config.AddImage(pickedB);
+        for(const auto&d:objPts) ba_config.AddVariablePoint(d.first);
         std::unique_ptr<BundleAdjuster> bundle_adjuster;
 
         ba_config.SetConstantCamPose(pickedA);  // 1st image
