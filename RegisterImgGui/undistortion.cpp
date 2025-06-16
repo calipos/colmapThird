@@ -1,18 +1,19 @@
 #include "undistortion.h"
 #include "colmath.h"
+#include "log.h"
 Camera UndistortCamera(const UndistortCameraOptions& options,
     const Camera& camera) {
-    //THROW_CHECK_GE(options.blank_pixels, 0);
-    //THROW_CHECK_LE(options.blank_pixels, 1);
-    //THROW_CHECK_GT(options.min_scale, 0.0);
-    //THROW_CHECK_LE(options.min_scale, options.max_scale);
-    //THROW_CHECK_NE(options.max_image_size, 0);
-    //THROW_CHECK_GE(options.roi_min_x, 0.0);
-    //THROW_CHECK_GE(options.roi_min_y, 0.0);
-    //THROW_CHECK_LE(options.roi_max_x, 1.0);
-    //THROW_CHECK_LE(options.roi_max_y, 1.0);
-    //THROW_CHECK_LT(options.roi_min_x, options.roi_max_x);
-    //THROW_CHECK_LT(options.roi_min_y, options.roi_max_y);
+    THROW_CHECK_GE(options.blank_pixels, 0);
+    THROW_CHECK_LE(options.blank_pixels, 1);
+    THROW_CHECK_GT(options.min_scale, 0.0);
+    THROW_CHECK_LE(options.min_scale, options.max_scale);
+    THROW_CHECK_NE(options.max_image_size, 0);
+    THROW_CHECK_GE(options.roi_min_x, 0.0);
+    THROW_CHECK_GE(options.roi_min_y, 0.0);
+    THROW_CHECK_LE(options.roi_max_x, 1.0);
+    THROW_CHECK_LE(options.roi_max_y, 1.0);
+    THROW_CHECK_LT(options.roi_min_x, options.roi_max_x);
+    THROW_CHECK_LT(options.roi_min_y, options.roi_max_y);
 
     Camera undistorted_camera;
     undistorted_camera.model_id = PinholeCameraModel::model_id;
