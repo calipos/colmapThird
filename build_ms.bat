@@ -14,9 +14,9 @@ mkdir build
 mkdir install
 
 
-if not exist %pwd%\install\jsoncpp-1.9.6 (
+if not exist %pwd%\install\jsoncpp-1.9.6\Release (
     echo  -----------build jsoncpp-1.9.6----------
-    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\jsoncpp-1.9.6  -S %pwd%\jsoncpp-1.9.6 -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install\jsoncpp-1.9.6
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\jsoncpp-1.9.6  -S %pwd%\jsoncpp-1.9.6 -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install\jsoncpp-1.9.6\Release
     -DJSONCPP_WITH_CMAKE_PACKAGE:BOOL="1" ^
     -DJSONCPP_STATIC_WINDOWS_RUNTIME:BOOL="0" ^
     -DBUILD_OBJECT_LIBS:BOOL="1" ^
@@ -35,7 +35,7 @@ if not exist %pwd%\install\jsoncpp-1.9.6 (
     msbuild %pwd%\build\jsoncpp-1.9.6\INSTALL.vcxproj  -t:Rebuild -p:Configuration=Release
 
     echo  -----------build jsoncpp-1.9.6----------
-    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\jsoncpp-1.9.6  -S %pwd%\jsoncpp-1.9.6 -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install\jsoncpp-1.9.6\debug 
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\jsoncpp-1.9.6  -S %pwd%\jsoncpp-1.9.6 -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install\jsoncpp-1.9.6\Debug 
     -DJSONCPP_WITH_CMAKE_PACKAGE:BOOL="1" ^
     -DJSONCPP_STATIC_WINDOWS_RUNTIME:BOOL="0" ^
     -DBUILD_OBJECT_LIBS:BOOL="1" ^
@@ -81,10 +81,9 @@ if not exist %pwd%\install\METIS-5.2.1.1 (
 )
 rem =======================================================================
 
-if not exist %pwd%\install\glog-0.7.1 (
+if not exist %pwd%\install\glog-0.7.1\Release (
     echo  -----------build glog-0.7.1----------
-    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\glog-0.7.1  -S %pwd%\glog-0.7.1 ^
-    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/glog-0.7.1  ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\glog-0.7.1  -S %pwd%\glog-0.7.1  -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/glog-0.7.1/Release  ^
     -DBUILD_TESTING:BOOL="0" ^
     -DWITH_GFLAGS:BOOL="0"  ^
     -DWITH_THREADS:BOOL="1"  ^
@@ -93,6 +92,17 @@ if not exist %pwd%\install\glog-0.7.1 (
     -DCMAKE_BUILD_TYPE="Release" 
     TIMEOUT /T 1
     msbuild %pwd%\build\glog-0.7.1\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
+    
+    echo  -----------build glog-0.7.1 debug----------
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\glog-0.7.1  -S %pwd%/glog-0.7.1   -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/glog-0.7.1/Debug 
+    -DBUILD_TESTING:BOOL="0" ^
+    -DWITH_GFLAGS:BOOL="0"  ^
+    -DWITH_THREADS:BOOL="1"  ^
+    -DBUILD_TESTING:BOOL="0" ^
+    -DWITH_GTEST:BOOL="0" ^
+    -DCMAKE_BUILD_TYPE="Release" 
+    TIMEOUT /T 1
+    msbuild %pwd%\build\glog-0.7.1\INSTALL.vcxproj -t:Rebuild -p:Configuration=Debug
 )
 rem =======================================================================
 

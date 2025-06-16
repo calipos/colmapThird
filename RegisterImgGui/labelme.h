@@ -1,7 +1,7 @@
 #ifndef _LABELME_H_
 #define _LABELME_H_
+#include <map>
 #include <filesystem>
-#include "json/json.h"
 #include "Eigen/Core"
 namespace labelme
 {

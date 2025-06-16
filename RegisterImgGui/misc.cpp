@@ -106,3 +106,4 @@ void RemoveCommandLineArgument(const std::string& arg, int* argc, char** argv) {
         }
     }
 }
+

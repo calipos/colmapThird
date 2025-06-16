@@ -3,9 +3,11 @@
 #include "scene.h"
 #include "labelme.h"
 #include "camera.h"
+#include "json/json.h"
 std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& dir, const ImageIntrType& type)
 {
 	std::map<std::filesystem::path, std::map<std::string, Eigen::Vector2d>>corners;
+	std::map<std::filesystem::path, std::filesystem::path>picPath;
 	std::map<std::filesystem::path, Eigen::Vector2i>imgSizeWHs;
 	std::map<std::filesystem::path, camera_t>dirFlags;
 	camera_t dirFlag = 0;
@@ -25,6 +27,7 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 				if (readret &&std::filesystem::exists(thisFilename.parent_path()/imgPath))
 				{
 					corners[thisFilename] = cornerInfo;
+					picPath[thisFilename] = thisFilename.parent_path() / imgPath;
 					imgSizeWHs[thisFilename] = imgSizeWH;
 					auto parentDir = thisFilename.parent_path();
 					if (dirFlags.count(parentDir)==0)
@@ -53,8 +56,8 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 		thisImg.SetImageId(image_id++);
 		std::string imgName = path.filename().stem().string();
 		std::string imgDirName = path.parent_path().filename().stem().string();
-		imgName = imgDirName + '@' + imgName;
-		thisImg.SetName(imgName);
+		//imgName = imgDirName + '@' + imgName;
+		thisImg.SetName(picPath[path].string());
 		for (const auto&feat: cornerInfo)
 		{
 			const auto& featName = feat.first;
@@ -112,5 +115,13 @@ bool convertDataset(const std::map<Camera, std::vector<Image>>& d, std::vector<C
 			imageList.emplace_back(d2);
 		}
 	}
+	return true;
+}
+bool writeToJson(const std::filesystem::path& dataDir,
+	const std::vector<Camera>& cameraList,
+	const std::vector<Image>& imageList,
+	const std::unordered_map<point3D_t, Eigen::Vector3d>& objPts,
+	const std::unordered_map < image_t, struct Rigid3d>& poses)
+{
 	return true;
 }

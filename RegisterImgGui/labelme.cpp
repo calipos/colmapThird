@@ -1,5 +1,6 @@
 #include <fstream>
 #include "labelme.h"
+#include "json/json.h"
 #include "log.h"
 
 namespace labelme

@@ -428,12 +428,12 @@ void ParameterizePoints(
             for (const image_t image_id : config_.Images()) {
                 AddImageToProblem(image_id, cameraList, imageList, objPts);
             }
-            for (const auto point3D_id : config_.VariablePoints()) {
-                AddPointToProblem(point3D_id, cameraList, imageList, objPts);
-            }
-            for (const auto point3D_id : config_.ConstantPoints()) {
-                AddPointToProblem(point3D_id, cameraList, imageList, objPts);
-            }
+            //for (const auto point3D_id : config_.VariablePoints()) {
+            //    AddPointToProblem(point3D_id, cameraList, imageList, objPts);
+            //}
+            //for (const auto point3D_id : config_.ConstantPoints()) {
+            //    AddPointToProblem(point3D_id, cameraList, imageList, objPts);
+            //}
 
             ParameterizeCameras(options_, config_, cameraList, imageList, objPts, *problem_);
             ParameterizePoints(config_, cameraList, imageList, objPts, *problem_);
@@ -524,10 +524,6 @@ void ParameterizePoints(
 
             for (auto& image : imageList) 
             {
-                if (image_id)
-                {
-
-                }
                 if (image.featPts.count(point3D_id) > 0)
                 {
                     Camera& camera = cameraList[image.CameraId()];

@@ -225,3 +225,50 @@ Camera Camera::CreateFromModelName(camera_t camera_id,
     return CreateFromModelId(
         camera_id, enumStr2Value<CameraModelId>(model_name.c_str()), focal_length, width, height);
 }
+
+
+void Camera::Rescale(const double scale) {
+    if (scale < 0.)
+    {
+        LOG_ERR_OUT << "scale<0.";
+        return;
+    }
+    const double scale_x = std::round(scale * width) / static_cast<double>(width);
+    const double scale_y =
+        std::round(scale * height) / static_cast<double>(height);
+    width = static_cast<size_t>(std::round(scale * width));
+    height = static_cast<size_t>(std::round(scale * height));
+    SetPrincipalPointX(scale_x * PrincipalPointX());
+    SetPrincipalPointY(scale_y * PrincipalPointY());
+    if (FocalLengthIdxs().size() == 1) {
+        SetFocalLength((scale_x + scale_y) / 2.0 * FocalLength());
+    }
+    else if (FocalLengthIdxs().size() == 2) {
+        SetFocalLengthX(scale_x * FocalLengthX());
+        SetFocalLengthY(scale_y * FocalLengthY());
+    }
+    else {
+        LOG_ERR_OUT << "Camera model must either have 1 or 2 focal length parameters.";
+    }
+}
+
+void Camera::Rescale(const size_t new_width, const size_t new_height) {
+    const double scale_x =
+        static_cast<double>(new_width) / static_cast<double>(width);
+    const double scale_y =
+        static_cast<double>(new_height) / static_cast<double>(height);
+    width = new_width;
+    height = new_height;
+    SetPrincipalPointX(scale_x * PrincipalPointX());
+    SetPrincipalPointY(scale_y * PrincipalPointY());
+    if (FocalLengthIdxs().size() == 1) {
+        SetFocalLength((scale_x + scale_y) / 2.0 * FocalLength());
+    }
+    else if (FocalLengthIdxs().size() == 2) {
+        SetFocalLengthX(scale_x * FocalLengthX());
+        SetFocalLengthY(scale_y * FocalLengthY());
+    }
+    else {
+        LOG_ERR_OUT << "Camera model must either have 1 or 2 focal length parameters.";
+    }
+}

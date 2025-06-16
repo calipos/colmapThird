@@ -174,6 +174,7 @@ int test_geometry()
     std::vector<Camera>cameraList; std::vector<Image> imageList;
     convertDataset(dataset, cameraList, imageList);
     std::unordered_map<point3D_t, Eigen::Vector3d>objPts;
+    std::unordered_map < image_t, struct Rigid3d>poses;
     image_t pickedA = 3;
     image_t pickedB = 31;
     {
@@ -189,6 +190,8 @@ int test_geometry()
         }
         image1.SetCamFromWorld(Rigid3d());
         image2.SetCamFromWorld(two_view_geometry.cam2_from_cam1);
+        poses[pickedA] = Rigid3d();
+        poses[pickedB] = two_view_geometry.cam2_from_cam1;
     } 
     {
         Image& image1 = imageList[pickedA];
@@ -231,7 +234,12 @@ int test_geometry()
         bundle_adjuster = CreateDefaultBundleAdjuster(std::move(ba_options), std::move(ba_config), cameraList, imageList, objPts);
 
         auto solverRet = bundle_adjuster->Solve();
-        solverRet.termination_type != ceres::FAILURE;
-    }
+        //LOG_OUT << image2.CamFromWorld();
+        if (solverRet.termination_type != ceres::CONVERGENCE)
+        {
+            LOG_ERR_OUT << "not convergence!";
+        }
+    } 
     return 0;
 }
+

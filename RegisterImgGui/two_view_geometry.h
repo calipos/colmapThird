@@ -1,6 +1,7 @@
 #pragma once
 #include "types.h"
-
+#include "camera.h"
+#include "image.h"
 struct TwoViewGeometry {
     // The configuration of the two-view geometry.
     enum ConfigurationType {
@@ -44,3 +45,14 @@ struct TwoViewGeometry {
     void Invert();
 };
 
+TwoViewGeometry EstimateCalibratedTwoViewGeometry(
+    const struct Camera& camera1,
+    const class Image& img1,
+    const struct Camera& camera2,
+    const class Image& img2);
+bool EstimateTwoViewGeometryPose(
+    const struct Camera& camera1,
+    const class Image& img1,
+    const struct Camera& camera2,
+    const class Image& img2,
+    TwoViewGeometry* geometry);

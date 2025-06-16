@@ -20,10 +20,10 @@ bool show_main_window = true;
 
 
 extern int test_geometry();
-
+extern int test_incremental(); 
 int main(int, char**)
 {
-    return test_geometry();
+    return test_incremental();
 
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
