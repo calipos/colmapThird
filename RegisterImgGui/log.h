@@ -66,28 +66,28 @@ inline constexpr size_t get_file_name_offset(T(&str)[1])
     return name##Impl<int, int>(v1, v2);                                      \
   }
  
-DEFINE_CHECK_OP_IMPL(Check_EQ, == )
-DEFINE_CHECK_OP_IMPL(Check_NE, != )
-DEFINE_CHECK_OP_IMPL(Check_LE, <= )
-DEFINE_CHECK_OP_IMPL(Check_LT, < )
-DEFINE_CHECK_OP_IMPL(Check_GE, >= )
-DEFINE_CHECK_OP_IMPL(Check_GT, > )
+DEFINE_CHECK_OP_IMPL(Check_EQ_, == )
+DEFINE_CHECK_OP_IMPL(Check_NE_, != )
+DEFINE_CHECK_OP_IMPL(Check_LE_, <= )
+DEFINE_CHECK_OP_IMPL(Check_LT_, < )
+DEFINE_CHECK_OP_IMPL(Check_GE_, >= )
+DEFINE_CHECK_OP_IMPL(Check_GT_, > )
 
 #undef DEFINE_CHECK_OP_IMPL
 
-#  define CHECK_OP_LOG(name, op, val1, val2, log)                              \
+#  define CHECK_OP_LOG(name, op, val1, val2)                              \
     if (nullptr != Check##name##Impl(val1,   val2,)                            \
         LOG_ERR_OUT;
 
-#define THROW_CHECK_OP(name, op, val1, val2) \
-  CHECK_OP_LOG(name, op, val1, val2, colmap::LogMessageFatalThrowDefault)
+#define THROW_CHECK_OP__(name, op, val1, val2) \
+  CHECK_OP_LOG(name, op, val1, val2)
 
-#define THROW_CHECK_EQ(val1, val2) THROW_CHECK_OP(_EQ, ==, val1, val2)
-#define THROW_CHECK_NE(val1, val2) THROW_CHECK_OP(_NE, !=, val1, val2)
-#define THROW_CHECK_LE(val1, val2) THROW_CHECK_OP(_LE, <=, val1, val2)
-#define THROW_CHECK_LT(val1, val2) THROW_CHECK_OP(_LT, <, val1, val2)
-#define THROW_CHECK_GE(val1, val2) THROW_CHECK_OP(_GE, >=, val1, val2)
-#define THROW_CHECK_GT(val1, val2) THROW_CHECK_OP(_GT, >, val1, val2)
+#define THROW_CHECK_EQ(val1, val2) THROW_CHECK_OP__(_EQ_, ==, val1, val2)
+#define THROW_CHECK_NE(val1, val2) THROW_CHECK_OP__(_NE_, !=, val1, val2)
+#define THROW_CHECK_LE(val1, val2) THROW_CHECK_OP__(_LE_, <=, val1, val2)
+#define THROW_CHECK_LT(val1, val2) THROW_CHECK_OP__(_LT_, <, val1, val2)
+#define THROW_CHECK_GE(val1, val2) THROW_CHECK_OP__(_GE_, >=, val1, val2)
+#define THROW_CHECK_GT(val1, val2) THROW_CHECK_OP__(_GT_, >, val1, val2)
 
 #define THROW_CHECK_NOTNULL(val) \
   ThrowCheckNotNull(     \
