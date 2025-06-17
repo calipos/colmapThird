@@ -1,9 +1,15 @@
+#include <fstream>
+#include <unordered_map>
 #include <vector>
 #include "image.h"
 #include "scene.h"
 #include "labelme.h"
 #include "camera.h"
 #include "json/json.h"
+#include "bitmap.h"
+#include "undistortion.h"
+#include "misc.h"
+#include "warp.h"
 std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& dir, const ImageIntrType& type)
 {
 	std::map<std::filesystem::path, std::map<std::string, Eigen::Vector2d>>corners;
@@ -14,6 +20,11 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 	for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ dir })
 	{
 		const auto& thisFilename = dir_entry.path();
+		auto parentName = thisFilename.parent_path().filename().string();
+		if (parentName.compare("result") == 0)
+		{
+			continue;
+		}
 		if (thisFilename.has_extension())
 		{
 			const auto& shortName = thisFilename.filename().stem().string();
@@ -64,7 +75,7 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 			const auto& featPos = feat.second;
 			if (Image::keypointNameToIndx.count(featName)==0)
 			{
-				int featId_ = Image::keypointNameToIndx.size();
+				point2D_t featId_ = Image::keypointNameToIndx.size();
 				Image::keypointNameToIndx[featName] = featId_;
 				Image::keypointIndexToName[featId_] = featName;
 			}
@@ -117,11 +128,92 @@ bool convertDataset(const std::map<Camera, std::vector<Image>>& d, std::vector<C
 	}
 	return true;
 }
-bool writeToJson(const std::filesystem::path& dataDir,
+bool writeResult(const std::filesystem::path& dataDir,
 	const std::vector<Camera>& cameraList,
 	const std::vector<Image>& imageList,
 	const std::unordered_map<point3D_t, Eigen::Vector3d>& objPts,
 	const std::unordered_map < image_t, struct Rigid3d>& poses)
 {
+	if (std::filesystem::exists(dataDir))
+	{
+		removeDirRecursive(dataDir);
+	}
+	std::filesystem::create_directories(dataDir); 
+
+	UndistortCameraOptions undistortion_options;
+	std::unordered_map<camera_t, Camera>undistortedCameraMap;
+	for (const auto&[imgId,Rt]: poses)
+	{
+		const Image& image1 = imageList[imgId];
+		camera_t cameraId = image1.CameraId();
+		std::filesystem::path originalPath(image1.Name());
+		auto subDirName = originalPath.parent_path().filename().string();
+		auto fileName = originalPath.filename().stem().string();
+		auto newImgPath = dataDir / (subDirName + "@" + fileName + ".jpg");
+		auto imgJsonPath = dataDir / (subDirName + "@" + fileName + ".json");
+		if (undistortedCameraMap.count(cameraId)==0)
+		{
+			const Camera& camera1 = cameraList[cameraId];
+			undistortedCameraMap[cameraId] = UndistortCamera(undistortion_options, camera1);
+		}
+
+		const Camera& distorted_camera = cameraList[cameraId];
+		const Camera& undistorted_camera = undistortedCameraMap[cameraId];
+
+		Bitmap distorted_bitmap;
+		distorted_bitmap.Read(image1.Name());
+		Bitmap  undistorted_bitmap;//
+		WarpImageBetweenCameras(distorted_camera,
+			undistorted_camera,
+			distorted_bitmap,
+			&undistorted_bitmap);
+		distorted_bitmap.CloneMetadata(&undistorted_bitmap);
+		undistorted_bitmap.Write(newImgPath.string());
+
+
+		newImgPath = std::filesystem::canonical(newImgPath);
+		Json::Value labelRoot;
+		labelRoot["version"] = Json::Value("1");
+		labelRoot["imagePath"] = Json::Value(newImgPath.string());
+		labelRoot["fx"] = Json::Value(undistorted_camera.params[0]);
+		labelRoot["fy"] = Json::Value(undistorted_camera.params[1]);
+		labelRoot["cx"] = Json::Value(undistorted_camera.params[2]);
+		labelRoot["cy"] = Json::Value(undistorted_camera.params[3]);
+		labelRoot["width"] = Json::Value(undistorted_camera.width);
+		labelRoot["height"] = Json::Value(undistorted_camera.height);
+		Json::Value Qt;
+		Qt.append(Rt.rotation.w());
+		Qt.append(Rt.rotation.x());
+		Qt.append(Rt.rotation.y());
+		Qt.append(Rt.rotation.z());
+		Qt.append(Rt.translation.x());
+		Qt.append(Rt.translation.y());
+		Qt.append(Rt.translation.z());
+		labelRoot["Qt"] = Qt;
+		Json::StyledWriter sw;
+		std::fstream fout(imgJsonPath, std::ios::out);
+		fout << sw.write(labelRoot);
+		fout.close();
+	}
+
+	Json::Value labelRoot;
+	 
+	std::filesystem::path ptsJsonPath = dataDir / "pts.json";
+	for (const auto&[ptId,pt]: objPts)
+	{
+		Json::Value ptNode;
+		const std::string& ptName = Image::keypointIndexToName.at(ptId);
+		ptNode["idx"] = Json::Value(ptId);
+		ptNode["name"] = Json::Value(ptName);
+		ptNode["xyz"] = Json::Value();
+		ptNode["xyz"].append(pt.x());
+		ptNode["xyz"].append(pt.y());
+		ptNode["xyz"].append(pt.z());
+		labelRoot.append(ptNode);
+	}
+	Json::StyledWriter sw;
+	std::fstream fout(ptsJsonPath.string(), std::ios::out);
+	fout << sw.write(labelRoot);
+	fout.close();
 	return true;
 }

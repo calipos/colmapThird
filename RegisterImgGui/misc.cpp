@@ -107,3 +107,42 @@ void RemoveCommandLineArgument(const std::string& arg, int* argc, char** argv) {
     }
 }
 
+bool removeDirRecursive(const std::filesystem::path& dirPath)
+{
+    std::vector<std::filesystem::path>dirnames;
+    dirnames.reserve(32);
+    dirnames.emplace_back(std::filesystem::canonical(dirPath));
+    for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ dirPath })
+    {
+        if (dir_entry.is_directory())
+        {
+            dirnames.emplace_back(std::filesystem::canonical(dir_entry));
+        }
+        else
+        {
+            try
+            {
+                std::filesystem::remove(dir_entry.path());
+            }
+            catch (const std::exception&)
+            {
+                LOG_ERR_OUT << "cannot remove : " << dir_entry.path();
+                return false;
+            }
+        }
+    }
+    std::sort(dirnames.begin(), dirnames.end(), [](const auto& a, const auto& b) {return a.string().length() > b.string().length(); });
+    for (size_t i = 0; i < dirnames.size(); i++)
+    {
+        try
+        {
+            std::filesystem::remove_all(dirnames[i]);
+        }
+        catch (const std::exception&)
+        {
+            LOG_ERR_OUT << "cannot remove : " << dirnames[i];
+            return false;
+        }
+    }
+    return true;
+}

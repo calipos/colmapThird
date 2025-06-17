@@ -186,6 +186,7 @@
     <ClCompile Include="triangulation.cpp" />
     <ClCompile Include="two_view_geometry.cpp" />
     <ClCompile Include="undistortion.cpp" />
+    <ClCompile Include="warp.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="bitmap.h" />
@@ -220,6 +221,7 @@
     <ClInclude Include="two_view_geometry.h" />
     <ClInclude Include="types.h" />
     <ClInclude Include="undistortion.h" />
+    <ClInclude Include="warp.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -89,7 +89,12 @@ DEFINE_CHECK_OP_IMPL_0(Check_GT_0, > )
 #define THROW_CHECK_GT(val1, val2) THROW_CHECK_OP_0(_GT_0, >, val1, val2)
 
 #define THROW_CHECK_NOTNULL(val) \
-  ThrowCheckNotNull(     \
-      __FILE__, __LINE__, "'" #val "' Must be non NULL", (val))
+  ThrowCheckNotNull(__FILE__, __LINE__,  val)
 
+template <typename T>
+void ThrowCheckNotNull(const char* file, int line,  T&& t) {
+    if (t == nullptr) {
+        LOG_ERR_OUT << "Must be non NULL -> " << t;
+    }
+}
 #endif // !_INTEGRATED_SCAN_LOG_TO_STDOUT_H_

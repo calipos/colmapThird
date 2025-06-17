@@ -3,11 +3,12 @@
 #include <vector>
 #include <Eigen/Geometry>
 #include "log.h"
+#include "misc.h"
 #include "types.h"
 #include <ceres/jet.h>
 
 
-#define DEF_CameraModelId_ENUMS  \
+#define MAKE_ENUM_CLASS_OVERLOAD_STREAM  \
     X(kInvalid,                -1 ) \
     X(kSimplePinhole,          0  ) \
     X(kPinhole,                1  ) \
@@ -44,49 +45,12 @@
 
 enum class CameraModelId : int {
 #define X(name, value) name = value,
-    DEF_CameraModelId_ENUMS
+    MAKE_ENUM_CLASS_OVERLOAD_STREAM
 #undef X
 };
 
 
-
-/// enum to string
-template <typename T>
-std::string CameraModelIdToName(T e)
-{
-    switch (e) {
-#define X(name, value) \
-    case T::name:      \
-        return #name;
-        DEF_CameraModelId_ENUMS
-#undef X
-    default:
-        return "Unknown";
-    }
-}
-
-/// string to enum
-template <typename T>
-T enumStr2Enum(const char* enumStr)
-{
-#define X(name, value)               \
-    if (0 == strcmp(enumStr, #name)) \
-        return T::name;
-    DEF_CameraModelId_ENUMS
-#undef X
-        return T::Unknown;
-}
-
-template <typename T = int>
-T enumStr2Value(const char* enumStr)
-{
-#define X(name, value)               \
-    if (0 == strcmp(enumStr, #name)) \
-        return static_cast<T>(value);
-    DEF_CameraModelId_ENUMS
-#undef X
-        return static_cast<T>(T::kInvalid);
-}
+ 
 
 template <typename CameraModel>
 struct BaseCameraModel {
@@ -319,6 +283,8 @@ std::vector<double> CameraModelInitializeParams(CameraModelId model_id,
 
 
 
+const std::string& CameraModelParamsInfo(CameraModelId model_id);
+
 struct Camera {
     // The unique identifier of the camera.
     camera_t camera_id = kInvalidCameraId;
@@ -379,7 +345,10 @@ struct Camera {
     Eigen::Matrix3d CalibrationMatrix() const;
 
     // Get human-readable information about the parameter vector ordering.
-    inline const std::string& ParamsInfo() const;
+    inline const std::string& ParamsInfo() const
+    {
+        return CameraModelParamsInfo(model_id);
+    }
 
     // Concatenate parameters as comma-separated list.
     std::string ParamsToString() const;
@@ -418,6 +387,7 @@ struct Camera {
     inline bool operator<(const Camera& other) const;
 };
 
+const std::string& CameraModelIdToName(const CameraModelId model_id);
 std::ostream& operator<<(std::ostream& stream, const Camera& camera);
 
 
@@ -425,7 +395,6 @@ std::vector<double> CameraModelInitializeParams(CameraModelId model_id,
     double focal_length,
     size_t width,
     size_t height);
-const std::string& CameraModelParamsInfo(CameraModelId model_id);
 span<const size_t> CameraModelFocalLengthIdxs(CameraModelId model_id);
 span<const size_t> CameraModelPrincipalPointIdxs(CameraModelId model_id);
 span<const size_t> CameraModelExtraParamsIdxs(CameraModelId model_id);
@@ -460,7 +429,6 @@ const std::string& Camera::ModelName() const
 {
     return CameraModelIdToName(model_id);
 }
-
 double Camera::FocalLength() const {
     const span<const size_t> idxs = FocalLengthIdxs();
     return params[idxs[0]];

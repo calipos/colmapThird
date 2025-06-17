@@ -92,18 +92,7 @@ std::vector<double> CameraModelInitializeParams(const CameraModelId model_id,
     }
 }
 
-const std::string& CameraModelParamsInfo(const CameraModelId model_id) {
-    switch (model_id) {
-#define CAMERA_MODEL_CASE(CameraModel) \
-  case CameraModel::model_id:          \
-    return CameraModel::params_info;   \
-    break;
-        CAMERA_MODEL_SWITCH_CASES
-#undef CAMERA_MODEL_CASE
-    }
-    const static std::string kEmptyParamsInfo = "";
-    return kEmptyParamsInfo;
-}
+
 
 span<const size_t> CameraModelFocalLengthIdxs(const CameraModelId model_id) {
     switch (model_id) {
@@ -202,7 +191,19 @@ bool CameraModelHasBogusParams(const CameraModelId model_id,
     return false;
 }
 
-
+const std::string& CameraModelParamsInfo(const CameraModelId model_id) 
+{
+    switch (model_id) {
+#define CAMERA_MODEL_CASE(CameraModel) \
+  case CameraModel::model_id:          \
+    return CameraModel::params_info;   \
+    break;
+        CAMERA_MODEL_SWITCH_CASES
+#undef CAMERA_MODEL_CASE
+    }
+    const static std::string kEmptyParamsInfo = "";
+    return kEmptyParamsInfo;
+}
 
 Camera Camera::CreateFromModelId(camera_t camera_id,
     const CameraModelId&model_id,
@@ -223,11 +224,13 @@ Camera Camera::CreateFromModelName(camera_t camera_id,
     const size_t&width,
     const size_t&height) {
     return CreateFromModelId(
-        camera_id, enumStr2Value<CameraModelId>(model_name.c_str()), focal_length, width, height);
+        camera_id, CameraModelNameToId(model_name.c_str()), focal_length, width, height);
 }
 
+std::string Camera::ParamsToString() const { return VectorToCSV(params); }
 
-void Camera::Rescale(const double scale) {
+void Camera::Rescale(const double scale) 
+{
     if (scale < 0.)
     {
         LOG_ERR_OUT << "scale<0.";
@@ -271,4 +274,18 @@ void Camera::Rescale(const size_t new_width, const size_t new_height) {
     else {
         LOG_ERR_OUT << "Camera model must either have 1 or 2 focal length parameters.";
     }
+}
+
+std::ostream& operator<<(std::ostream& stream, const Camera& camera) {
+    const bool valid_model = ExistsCameraModelWithId(camera.model_id);
+    const std::string camera_id_str = camera.camera_id != kInvalidCameraId
+        ? std::to_string(camera.camera_id)
+        : "Invalid";
+    const std::string params_info = valid_model ? camera.ParamsInfo() : "?";
+    const std::string model_name = valid_model ? camera.ModelName() : "Invalid";
+    stream << "Camera(camera_id=" << camera_id_str << ", model=" << model_name
+        << ", width=" << camera.width << ", height=" << camera.height
+        << ", params=[" << camera.ParamsToString() << "] (" << params_info
+        << "))";
+    return stream;
 }

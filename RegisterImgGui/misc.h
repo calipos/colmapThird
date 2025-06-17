@@ -6,7 +6,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
+#include <filesystem>
 #ifndef STRINGIFY
 #define STRINGIFY(s) STRINGIFY_(s)
 #define STRINGIFY_(s) #s
@@ -68,4 +68,5 @@ std::string VectorToCSV(const std::vector<T>& values) {
     buf.resize(buf.size() - 2);
     return buf;
 }
+bool removeDirRecursive(const std::filesystem::path& dirPath);
 #endif // !_MISC_H_

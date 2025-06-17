@@ -114,6 +114,9 @@
     <ClCompile Include="undistortion.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="warp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">
@@ -210,6 +213,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="bitmap.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="warp.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

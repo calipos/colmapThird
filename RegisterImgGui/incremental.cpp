@@ -19,39 +19,38 @@
 #include "undistortion.h"
 int test_bitmap()
 {
-    Bitmap a;
-    a.Read("C:/Users/Administrator/Downloads/image.png");
-    return 0;
-}
-int test_incremental()
-{
-    //test_bitmap();
-    std::vector<image_t>incrementalImages = { 31,3,59,25 };
     std::filesystem::path dataPath = "../data";
     std::map<Camera, std::vector<Image>> dataset = loadImageData(dataPath, ImageIntrType::SHARED_ALL);
     std::vector<Camera>cameraList;
     std::vector<Image> imageList;
     convertDataset(dataset, cameraList, imageList);
+    const Image& image1 = imageList[0];
+    const Camera& camera1 = cameraList[image1.CameraId()];
+    Bitmap distorted_bitmap;
+    distorted_bitmap.Read(image1.Name());
+    UndistortCameraOptions undistortion_options;
+    Camera  undistorted_camera;
+    Bitmap  undistorted_bitmap;// = distorted_bitmap.Clone();
+    UndistortImage(undistortion_options,
+        distorted_bitmap,
+        camera1,
+        &undistorted_bitmap,
+        &undistorted_camera);
+    undistorted_bitmap.Write(image1.Name() + ".jpg");
+    return 0;
+}
+
+int test_incremental()
+{
 
 
-    {
-        const Image& image1 = imageList[0];
-        const Camera& camera1 = cameraList[image1.CameraId()];
-        
-        Bitmap distorted_bitmap;
-        distorted_bitmap.Read(image1.Name());
-        UndistortCameraOptions undistortion_options;
-        Camera  undistorted_camera;
-        Bitmap  undistorted_bitmap;// = distorted_bitmap.Clone();
-        UndistortImage(undistortion_options,
-            distorted_bitmap,
-            camera1,
-            &undistorted_bitmap,
-            &undistorted_camera);
-    }
-
-
-
+    //test_bitmap();
+    std::vector<image_t>incrementalImages = { 0,1,2,3,4 };
+    std::filesystem::path dataPath = "../data2";
+    std::map<Camera, std::vector<Image>> dataset = loadImageData(dataPath, ImageIntrType::SHARED_ALL);
+    std::vector<Camera>cameraList;
+    std::vector<Image> imageList;
+    convertDataset(dataset, cameraList, imageList);
     std::unordered_map<point3D_t, Eigen::Vector3d>objPts;
     std::unordered_map < image_t, struct Rigid3d>poses;
     for (int i = 1; i < incrementalImages.size(); i++)
@@ -125,15 +124,17 @@ int test_incremental()
             ba_config.SetConstantCamPose(incrementalImages[0]);  // 1st image
             bundle_adjuster = CreateDefaultBundleAdjuster(std::move(ba_options), std::move(ba_config), cameraList, imageList, objPts);
 
-            for (int j = 0; j <= i; j++) LOG_OUT << imageList[incrementalImages[j]].CamFromWorld();
+            //for (int j = 0; j <= i; j++) LOG_OUT << imageList[incrementalImages[j]].CamFromWorld();
             auto solverRet = bundle_adjuster->Solve();
-            for (int j = 0; j <= i; j++) LOG_OUT << imageList[incrementalImages[j]].CamFromWorld();
+            for (int j = 0; j < cameraList.size(); j++) LOG_OUT << cameraList[j];
             if (solverRet.termination_type != ceres::CONVERGENCE)
             {
                 LOG_ERR_OUT << "not convergence!";
             }
         }
     }
+
+    writeResult(dataPath/"result", cameraList, imageList, objPts, poses);
 
     return 0;
 }

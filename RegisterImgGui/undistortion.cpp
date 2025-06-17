@@ -1,5 +1,6 @@
 #include "undistortion.h"
 #include "colmath.h"
+#include "warp.h"
 #include "log.h"
 Camera UndistortCamera(const UndistortCameraOptions& options,
     const Camera& camera) {
@@ -189,10 +190,10 @@ void UndistortImage(const UndistortCameraOptions& options,
 
     *undistorted_camera = UndistortCamera(options, distorted_camera);
 
-    //WarpImageBetweenCameras(distorted_camera,
-    //    *undistorted_camera,
-    //    distorted_bitmap,
-    //    undistorted_bitmap);
+    WarpImageBetweenCameras(distorted_camera,
+        *undistorted_camera,
+        distorted_bitmap,
+        undistorted_bitmap);
 
     distorted_bitmap.CloneMetadata(undistorted_bitmap);
 }

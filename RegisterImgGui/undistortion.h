@@ -23,6 +23,7 @@ struct UndistortCameraOptions {
 	double roi_max_x = 1.0;
 	double roi_max_y = 1.0;
 };
+Camera UndistortCamera(const UndistortCameraOptions& options, const Camera& camera);
 // Undistort image such that the viewing geometry of the undistorted image
 // follows a pinhole camera model. See `UndistortCamera` for more details
 // on the undistortion conventions.

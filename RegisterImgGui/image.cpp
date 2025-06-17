@@ -55,8 +55,8 @@ std::pair<bool, Eigen::Vector2d> Image::ProjectPoint(
     return { true, camera_ptr_->ImgFromCam(point3D_in_cam.hnormalized()) };
 }
 
-std::map<std::string, int>Image::keypointNameToIndx;
-std::map<int, std::string>Image::keypointIndexToName;
+std::map<std::string, point2D_t>Image::keypointNameToIndx;
+std::map<point2D_t, std::string>Image::keypointIndexToName;
 std::ostream& operator<<(std::ostream& stream, const Image& image) {
     stream << "Image(image_id="
         << (image.ImageId() != kInvalidImageId
