@@ -215,11 +215,10 @@ def onnx_parser():
     # 4.
     parser_graph_nodes(graph)
 if __name__ == '__main__':
-    onnx_parser()
-    exit(0)
+
     encoder_model_path = "models/sam2_hiera_large_encoder.onnx"
     decoder_model_path = "models/decoder.onnx"
-    netron.start(encoder_model_path)    
+    # netron.start(encoder_model_path)    
 
 
 
