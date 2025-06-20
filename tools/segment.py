@@ -240,14 +240,13 @@ if __name__ == '__main__':
 
 
 
-    point_coords = [np.array([[420, 440]]), np.array([[360, 275], [370, 210]]), np.array([[810, 440]]),
-                    np.array([[920, 314]])]
+    point_coords = [np.array([[673, 284]]), np.array([[819, 586], [1064,635]]), np.array([[870, 496]]),
+                    np.array([[1611,243]])]
     point_labels = [np.array([1]), np.array([1, 1]), np.array([1]), np.array([1])]
 
     for label_id, (point_coord, point_label) in enumerate(zip(point_coords, point_labels)):
         for i in range(point_label.shape[0]):
-            sam2.add_point(
-                (point_coord[i][0], point_coord[i][1]), point_label[i], label_id)
+            sam2.add_point((point_coord[i][0], point_coord[i][1]), point_label[i], label_id)
 
         masks = sam2.get_masks()
 
@@ -256,7 +255,7 @@ if __name__ == '__main__':
 
         cv2.imshow("masked_img", masked_img)
 
-        if cv2.waitKey(1000) & 0xFF == ord('q'):
+        if cv2.waitKey(10) & 0xFF == ord('q'):
             break
 
     cv2.waitKey(0)

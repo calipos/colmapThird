@@ -214,6 +214,30 @@ def cut_subgraph(origin_graph_path, input_node_name_list, output_node_name_list,
 def onnx_datatype_to_npType(data_type):
     if data_type == 1:
         return np.float32
+    elif data_type == 2:
+        return np.uint8
+    elif data_type == 3:
+        return np.int8
+    elif data_type == 4:
+        return np.uint16
+    elif data_type == 5:
+        return np.int16
+    elif data_type == 6:
+        return np.int32
+    elif data_type == 7:
+        return np.int64
+    elif data_type == 8:
+        return np.string_
+    elif data_type == 9:
+        return np.bool_
+    elif data_type == 10:
+        return np.float16
+    elif data_type == 11:
+        return np.float64
+    elif data_type == 12:
+        return np.uint32
+    elif data_type == 14:
+        return np.uint64
     else:
         raise TypeError("don't support data type")
 def shape2tuple(shape):
@@ -249,21 +273,25 @@ def printNet(model):
             node.name, node.op_type, node.input, node.output))
 
     initializer = model.graph.initializer
-    name_lists = ["/image_encoder/neck/position_encoding/Constant_28_output_0",
-                  '/image_encoder/neck/position_encoding/Unsqueeze_8_output_0']
+    # name_lists = ["/image_encoder/neck/position_encoding/Constant_28_output_0",
+    #               '/image_encoder/neck/position_encoding/Unsqueeze_8_output_0']#encoder check
+    # name_lists = ['/Constant_2_output_0',
+    #               'onnx::Unsqueeze_916', '/Constant_5_output_0']#decoder point label
+    name_lists = ['onnx::Expand_2540',
+                  '/Where_6_output_0']  # decoder position embedding
     for i in range(len(initializer)):
-        print(i, '-', initializer[i].name)
-        if i==398:
+        print('** initializer ** ',i, '-', initializer[i].name)
+        if i == 398:  # encoder check
             dtype = initializer[i].data_type
             print(*initializer[i].dims)
             params = np.frombuffer(initializer[i].raw_data, dtype=onnx_datatype_to_npType(dtype))
         if initializer[i].name in name_lists:
-            print(i, '-', initializer[i].name, "\t", end="")
+            print(i, '-', initializer[i].name)
             print('shape = ',*initializer[i].dims)
             dtype = initializer[i].data_type
             params = np.frombuffer(
                 initializer[i].raw_data, dtype=onnx_datatype_to_npType(dtype))
-            print(params, end="\n")
+            print(params)
 
 
 def convert_sam2_hiera_large_encoder_to_opencvOnnx():
@@ -288,16 +316,85 @@ def convert_sam2_hiera_large_encoder_to_opencvOnnx():
     onnx.checker.check_model(model)
     onnx.save(model, 'models/opencv_encoder.onnx')
 
+
+def convert_sam2_decoder_point_label():
+    # sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
+    model = onnx.load('models/decoder.onnx')
+    point_coords = np.array(
+        [[[10., 10.], [500., 400.], [200., 600.], [100., 300.]]]).astype(np.float32)
+    point_labels = np.array([[1, 1,1,1]]).astype(np.float32)
+### anglysis the point coord in ##################################################################
+    cut_subgraph('models/decoder.onnx',
+                 ['point_coords'], ['/ScatterND_1_output_0'], 'pointCoordsIn.onnx')
+    model = onnx.load('pointCoordsIn.onnx')
+    printNet(model)
+    session = onnxruntime.InferenceSession(
+        'pointCoordsIn.onnx', providers=onnxruntime.get_available_providers())
+    pointCoords = session.run(
+        None, {"point_coords": point_coords})
+    print(pointCoords[0].shape)
+    print(pointCoords[0])
+    np.savetxt('outputs.txt', pointCoords[0].squeeze().transpose(1, 0))
+### anglysis the point label in ##################################################################
+    cut_subgraph('models/decoder.onnx',
+                 ['point_labels'], ['/Unsqueeze_8_output_0'], 'pointLabelsIn.onnx')
+    model = onnx.load('pointLabelsIn.onnx')
+    printNet(model)
+    session = onnxruntime.InferenceSession(
+        'pointLabelsIn.onnx', providers=onnxruntime.get_available_providers())
+    pointLabels = session.run(
+        None, {"point_labels": point_labels})
+    print(pointLabels[0].shape)
+    print(pointLabels[0])
+
+### position embeding ##################################################################
+    cut_subgraph('models/decoder.onnx',
+                 ['/ScatterND_1_output_0', '/Unsqueeze_8_output_0'], ['/Concat_10_output_0'], 'positionEmbeding.onnx')
+    model = onnx.load('positionEmbeding.onnx')
+    printNet(model)
+
+    model.graph.node[39].input = ['onnx::Expand_2540', '/Add_9_output_0']
+    model.graph.node.remove(model.graph.node[38])
+    onnx.checker.check_model(model)
+    onnx.save(model, 'positionEmbeding.onnx')
+
+    ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
+        [[[0., 0.]]]).astype(np.float32)), axis=1)/1024.
+    Unsqueeze_8_output_0 = np.expand_dims(np.concatenate(
+        (point_labels, np.array([[-1]]).astype(np.float32)), axis=1), 2)
+    session = onnxruntime.InferenceSession(
+        'positionEmbeding.onnx', providers=onnxruntime.get_available_providers())
+    positionEmbeding = session.run(
+        None, {"/ScatterND_1_output_0": ScatterND_1_output_0, "/Unsqueeze_8_output_0": Unsqueeze_8_output_0})
+    print(positionEmbeding[0].shape)
+    print(positionEmbeding[0])
+    print()
+# [[[4.8828125e-04 4.8828125e-04]
+#   [1.8745117e+00 1.0541992e+00]
+#   [0.0000000e+00 0.0000000e+00]]]
+
+    # session = onnxruntime.InferenceSession(
+    #     'pointLabelsIn.onnx', providers=onnxruntime.get_available_providers())
+    # pointLabels = session.run(
+    #     None, {"point_labels": point_labels})
+    # print(pointLabels[0].shape)
+    # print(pointLabels[0])
+
+
 # cut_subgraph('encoder.onnx', ['image'], ['/image_encoder/neck/position_encoding/Unsqueeze_8_output_0'], 'sub.onnx')
 # save_test_onnx_model()
-# model = onnx.load('encoder.onnx')
+
+# sys.stdout = open('log.txt', 'w')
+# model = onnx.load('models/decoder.onnx')
+# model = onnx.load('models/decoder.onnx')
+# printNet(model)
 # session = onnxruntime.InferenceSession('testNet.onnx', providers=onnxruntime.get_available_providers())
 # inputs = np.ones([1, 64, 64, 1]).astype(np.float32)
 # outputs = session.run(None, {"inputs": inputs})
 
 
-convert_sam2_hiera_large_encoder_to_opencvOnnx()
-
+# convert_sam2_hiera_large_encoder_to_opencvOnnx()
+convert_sam2_decoder_point_label()
 
 exit()
 print(onnx.helper.printable_graph(model.graph))

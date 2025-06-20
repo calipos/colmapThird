@@ -4,7 +4,7 @@ import os
 import numpy as np
 from scipy.spatial.transform import Rotation 
 from pathlib import Path
-import figureMediapipeKeyPts
+# import figureMediapipeKeyPts
 import dlibLandMark
 import landmarkShapeType
 import insightFaceLandmark
@@ -181,9 +181,12 @@ def readFromColmapPointsTxt(ColmapTxtPath):
     return pts.reshape(-1, 3)
 
 def readColmapResult(dataDir):
-    CameraTxt = os.path.join(dataDir, os.path.join('sparse', 'cameras.txt'))
-    imagesTxt = os.path.join(dataDir, os.path.join('sparse', 'images.txt'))
-    points3DTxt = os.path.join(dataDir, os.path.join('sparse', 'points3D.txt'))
+    # CameraTxt = os.path.join(dataDir, os.path.join('sparse', 'cameras.txt'))
+    # imagesTxt = os.path.join(dataDir, os.path.join('sparse', 'images.txt'))
+    # points3DTxt = os.path.join(dataDir, os.path.join('sparse', 'points3D.txt'))
+    CameraTxt = os.path.join(dataDir, 'cameras.txt')
+    imagesTxt = os.path.join(dataDir,   'images.txt')
+    points3DTxt = os.path.join(dataDir,   'points3D.txt')
     if os.path.exists(CameraTxt) and os.path.exists(imagesTxt) and os.path.exists(points3DTxt):
         print('begin...')
     else:
