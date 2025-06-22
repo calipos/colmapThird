@@ -11,7 +11,7 @@ import torch.optim as optim
 from torch.utils import data
 import onnx_graphsurgeon as gs
 import onnxruntime  
-
+import os
 
 class testNet(torch.nn.Module):
     def __init__(self):
@@ -20,59 +20,6 @@ class testNet(torch.nn.Module):
 
     def forward(self, input):
         return input/self.constant1
-
-
-    def test(self, outPath, hdrCollectionRoot, modelPath):
-        outPath = "test"
-        outPath = os.path.join(os.getcwd(), outPath)
-        deleteDirs(outPath)
-        os.makedirs(outPath)
-        collections = get_files(hdrCollectionRoot)
-
-        HdrNetIns = HdrNet3(EXP_CNT, HIST_CNT)
-        HdrNetIns.load_state_dict(torch.load(modelPath))
-        HdrNetIns.eval()
-        s = [x for x in range(0, 256, int(256/HIST_CNT))]
-        s = np.array(s).reshape((HIST_CNT, -1))
-        for testData in collections.keys():
-            dirName = testData.split('_')
-            dirName = dirName[0]+'_'+dirName[1]
-            picDir = os.path.join(hdrCollectionRoot, dirName)
-            for filepath, dirnames, filenames in os.walk(picDir):
-                break
-            picCnt = collections[testData].shape[1]
-
-            thisClusterStamp = testData[len(dirName)+1:]
-            picCluster = []
-            for d in filenames:
-                if (d.startswith(thisClusterStamp)):
-                    split1 = d.split('_')
-                    exp = float(split1[2])
-                    if split1[3] == '-1':
-                        sensity = 1
-                    else:
-                        sensity = float(split1[3][:-4])
-                    picCluster.append((d, exp*sensity))
-            sorted(picCluster, key=lambda exp: exp[1])
-
-            hist = collections[testData][:, [1, 7]].astype(np.float32)
-            imgMean = (np.sum(hist*s, axis=0))/255
-            assert (np.max(imgMean) < 1+1e-7)
-            # idxF = np.eye(EXP_CNT)[expLevel].reshape(-1,EXP_CNT).astype(np.float32)
-            histFeat = np.concatenate(
-                [hist, imgMean.reshape(1, -1)], axis=0).transpose()
-            histFeat = histFeat.reshape(1, 2, -1)
-            output = HdrNetIns(torch.from_numpy(histFeat.copy()).float())
-            pickOut = int(torch.round(output))
-            if pickOut < 0:
-                pickOut = 0
-            if pickOut > 8:
-                pickOut = 8
-            savePath = testData+'-'+str(pickOut)+'.jpg'
-            savePath = os.path.join(outPath, savePath)
-            oldPath = os.path.join(picDir, picCluster[pickOut][0])
-            mycopyfile(oldPath, savePath)
-
 
 def create_model():
     # 使用ONNX helper functions定义两个输入张量'a'和'b'以及一个权重张量'w'
@@ -247,9 +194,9 @@ def printNet(model):
     # print(model.graph.input)
 
     # in a more nicely format
-    for obj in model.graph.input:
-        print("** inputs **  name=%r dtype=%r shape=%r" % (
-            obj.name, obj.type.tensor_type.elem_type,
+    for i,obj in enumerate (model.graph.input):
+        print("** inputs ** %d  name=%r dtype=%r shape=%r" % (
+            i, obj.name, obj.type.tensor_type.elem_type,
             shape2tuple(obj.type.tensor_type.shape)))
 
     # the list of outputs
@@ -318,57 +265,127 @@ def convert_sam2_hiera_large_encoder_to_opencvOnnx():
 
 
 def convert_sam2_decoder_point_label():
-    # sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
+    sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
     model = onnx.load('models/decoder.onnx')
     point_coords = np.array(
         [[[10., 10.], [500., 400.], [200., 600.], [100., 300.]]]).astype(np.float32)
     point_labels = np.array([[1, 1,1,1]]).astype(np.float32)
 ### anglysis the point coord in ##################################################################
-    cut_subgraph('models/decoder.onnx',
-                 ['point_coords'], ['/ScatterND_1_output_0'], 'pointCoordsIn.onnx')
-    model = onnx.load('pointCoordsIn.onnx')
-    printNet(model)
-    session = onnxruntime.InferenceSession(
-        'pointCoordsIn.onnx', providers=onnxruntime.get_available_providers())
-    pointCoords = session.run(
-        None, {"point_coords": point_coords})
-    print(pointCoords[0].shape)
-    print(pointCoords[0])
-    np.savetxt('outputs.txt', pointCoords[0].squeeze().transpose(1, 0))
+    if False:
+        cut_subgraph('models/decoder.onnx',
+                    ['point_coords'], ['/ScatterND_1_output_0'], 'pointCoordsIn.onnx')
+        model = onnx.load('pointCoordsIn.onnx')
+        # onnx.checker.check_model(model)
+        printNet(model)
+        session = onnxruntime.InferenceSession(
+            'pointCoordsIn.onnx', providers=onnxruntime.get_available_providers())
+        pointCoords = session.run(
+            None, {"point_coords": point_coords})
+        print(pointCoords[0].shape)
+        print(pointCoords[0])
+        np.savetxt('outputs.txt', pointCoords[0].squeeze().transpose(1, 0))
 ### anglysis the point label in ##################################################################
-    cut_subgraph('models/decoder.onnx',
-                 ['point_labels'], ['/Unsqueeze_8_output_0'], 'pointLabelsIn.onnx')
-    model = onnx.load('pointLabelsIn.onnx')
-    printNet(model)
-    session = onnxruntime.InferenceSession(
-        'pointLabelsIn.onnx', providers=onnxruntime.get_available_providers())
-    pointLabels = session.run(
-        None, {"point_labels": point_labels})
-    print(pointLabels[0].shape)
-    print(pointLabels[0])
+    if False:
+        cut_subgraph('models/decoder.onnx',
+                    ['point_labels'], ['/Unsqueeze_8_output_0'], 'pointLabelsIn.onnx')
+        model = onnx.load('pointLabelsIn.onnx')
+        printNet(model)
+        session = onnxruntime.InferenceSession(
+            'pointLabelsIn.onnx', providers=onnxruntime.get_available_providers())
+        pointLabels = session.run(
+            None, {"point_labels": point_labels})
+        print(pointLabels[0].shape)
+        print(pointLabels[0])
 
 ### position embeding ##################################################################
-    cut_subgraph('models/decoder.onnx',
-                 ['/ScatterND_1_output_0', '/Unsqueeze_8_output_0'], ['/Concat_10_output_0'], 'positionEmbeding.onnx')
-    model = onnx.load('positionEmbeding.onnx')
-    printNet(model)
+    if False:
+        cut_subgraph('models/decoder.onnx',
+                    ['/ScatterND_1_output_0', '/Unsqueeze_8_output_0'], ['/Concat_10_output_0'], 'positionEmbeding.onnx')
+        model = onnx.load('positionEmbeding.onnx')
+        # onnx.checker.check_model(model)
+        printNet(model)
+        model.graph.node.remove(model.graph.node[39])
+        model.graph.node.remove(model.graph.node[38])
+        model.graph.node.remove(model.graph.node[37])
+        model.graph.node.remove(model.graph.node[36])
+        model.graph.node.remove(model.graph.node[35])
+        model.graph.node.remove(model.graph.node[34])
+        model.graph.node.remove(model.graph.node[33])
+        model.graph.node.remove(model.graph.node[32])
 
-    model.graph.node[39].input = ['onnx::Expand_2540', '/Add_9_output_0']
-    model.graph.node.remove(model.graph.node[38])
-    onnx.checker.check_model(model)
-    onnx.save(model, 'positionEmbeding.onnx')
+        model.graph.initializer.remove(model.graph.initializer[16])
+        model.graph.initializer.remove(model.graph.initializer[15])
+        model.graph.initializer.remove(model.graph.initializer[14])
+        model.graph.initializer.remove(model.graph.initializer[13])
+        model.graph.initializer.remove(model.graph.initializer[12])
+        ConcatNode = onnx.helper.make_node(
+            op_type = 'Concat',
+            inputs = ['onnx::Expand_2540','/Add_9_output_0'],
+            outputs = ['/Concat_10_output_0'],
+            name = '/Concat_10',
+            axis = 1)
+        model.graph.node.append(ConcatNode)
+        # onnx.checker.check_model(model)
+        onnx.save(model, 'positionEmbeding.onnx')
+        printNet(model)
+        print("positionEmbeding")
+        # return
+        ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
+            [[[0., 0.]]]).astype(np.float32)), axis=1)/1024.
+        Unsqueeze_8_output_0 = np.expand_dims(np.concatenate(
+            (point_labels, np.array([[-1]]).astype(np.float32)), axis=1), 2)
+        session = onnxruntime.InferenceSession(
+            'positionEmbeding.onnx', providers=onnxruntime.get_available_providers())
+        positionEmbeding = session.run(
+            None, {"/ScatterND_1_output_0": ScatterND_1_output_0, "/Unsqueeze_8_output_0": Unsqueeze_8_output_0})
+        print(positionEmbeding[0].shape)
+        print(positionEmbeding[0])
+        print()
+### decoderBody ##################################################################
+    if True:
+        cut_subgraph('models/decoder.onnx',['image_embed','high_res_feats_0','high_res_feats_1','/Concat_10_output_0', 'mask_input','has_mask_input','orig_im_size'], ['masks','iou_predictions'], 'decoderBody.onnx')
+        model = onnx.load('decoderBody.onnx')
+        # onnx.checker.check_model(model)
+        printNet(model)
+        
+        
+        Concat_10_output_0_idx = 3 # /Concat_10_output_0  :4 
+        now_name = model.graph.input[Concat_10_output_0_idx].name
+        new_input = helper.make_tensor_value_info('/Concat_10_output_0a',
+                       model.graph.input[Concat_10_output_0_idx].type.tensor_type.elem_type,
+                       [0,256]) #修改模型输出维度
+        model.graph.input.remove(model.graph.input[Concat_10_output_0_idx]) #删除旧节点，
+        model.graph.input.insert(Concat_10_output_0_idx,new_input)      #插入新节点,可以保证之前的顺序
 
-    ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
-        [[[0., 0.]]]).astype(np.float32)), axis=1)/1024.
-    Unsqueeze_8_output_0 = np.expand_dims(np.concatenate(
-        (point_labels, np.array([[-1]]).astype(np.float32)), axis=1), 2)
-    session = onnxruntime.InferenceSession(
-        'positionEmbeding.onnx', providers=onnxruntime.get_available_providers())
-    positionEmbeding = session.run(
-        None, {"/ScatterND_1_output_0": ScatterND_1_output_0, "/Unsqueeze_8_output_0": Unsqueeze_8_output_0})
-    print(positionEmbeding[0].shape)
-    print(positionEmbeding[0])
-    print()
+
+        new_shape = np.array([1,-1,256], dtype='int64')
+
+        shape_tensor = onnx.helper.make_tensor('/Concat_10_output_0_shape',TensorProto.INT64,new_shape.shape, new_shape)
+        shape_node = helper.make_node("Constant",[],['/Concat_10_output_0_shape'],name='/Concat_10_output_0_shape',value=shape_tensor)
+
+        reshape_node = onnx.helper.make_node(
+                'Reshape',
+                inputs=['/Concat_10_output_0a', '/Concat_10_output_0_shape'],
+                outputs=['/Concat_10_output_0'],
+                name='/Concat_10_output_0_reshape'
+            )
+        model.graph.node.insert(36, reshape_node)
+        model.graph.node.insert(36, shape_node)
+
+        onnx.save(model,'decoderBody2.onnx')
+        
+        printNet(model)
+        print()
+        # cut_subgraph('models/decoder.onnx',['mask_input'], ['/mask_downscaling/mask_downscaling.0/Conv_output_0'], 'decoderBody.onnx')
+        # model = onnx.load('decoderBody.onnx')
+        # # onnx.checker.check_model(model)
+        # printNet(model)
+  
+
+
+
+
+
 # [[[4.8828125e-04 4.8828125e-04]
 #   [1.8745117e+00 1.0541992e+00]
 #   [0.0000000e+00 0.0000000e+00]]]
