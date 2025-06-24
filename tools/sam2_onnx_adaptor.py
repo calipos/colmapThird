@@ -21,101 +21,6 @@ class testNet(torch.nn.Module):
     def forward(self, input):
         return input/self.constant1
 
-def create_model():
-    # 使用ONNX helper functions定义两个输入张量'a'和'b'以及一个权重张量'w'
-    a = helper.make_tensor_value_info('a', TensorProto.FLOAT, [1, 3])
-    b = helper.make_tensor_value_info('b', TensorProto.FLOAT, [1, 3])
-    w1 = helper.make_tensor_value_info('w1', TensorProto.FLOAT, [3, 3])
-    w2 = helper.make_tensor_value_info('w2', TensorProto.FLOAT, [3, 2])
-
-    # 为了使事情简单，我们来创建一些初始权重数据
-    # 但是在实际的模型中，应该在训练过程中来更新这些权重值
-    weights1 = helper.make_tensor('w1', TensorProto.FLOAT, [3, 3], [
-                                  1, 2, 3, 4, 5, 6, 7, 8, 9])
-    weights2 = helper.make_tensor('w2', TensorProto.FLOAT, [
-                                  3, 2], [1, 2, 3, 4, 5, 6])
-
-    fc1 = helper.make_node(
-        'Gemm',
-        inputs=['a', 'w1', 'b'],
-        outputs=['h1'],
-        alpha=1.0,
-        beta=1.0,
-        transB=1
-    )
-
-    fc2 = helper.make_node(
-        'Gemm',
-        inputs=['h1', 'w2', 'b'],
-        outputs=['y'],
-        alpha=1.0,
-        beta=1.0,
-        transB=1
-    )
-
-    graph = helper.make_graph(
-        [fc1, fc2],
-        'TwoLayerFC',
-        [a, b, w1, w2],
-        [helper.make_tensor_value_info('y', TensorProto.FLOAT, [1, 2])],
-        value_info=[helper.make_tensor_value_info(
-            'h1', TensorProto.FLOAT, [1, 3])],
-        initializer=[weights1, weights2]
-    )
-
-    model = helper.make_model(graph, producer_name='onnx-example')
-    # The serialization
-    with open("linear_regression.onnx", "wb") as f:
-        f.write(model.SerializeToString())
-    return model
-def create_model2():
-    X = helper.make_tensor_value_info("X", TensorProto.FLOAT, [3, 2])
-    pads = helper.make_tensor_value_info("pads", TensorProto.INT64, [8])  # pads is INT64
-    Y = helper.make_tensor_value_info("Y", TensorProto.FLOAT, [5, 4])
-
-    # Create Pad node with 'value' attribute (not input)
-    node_def = helper.make_node(
-        "Pad",
-        inputs=["X", "pads"],  # Inputs: X and pads (INT64)
-        outputs=["Y"],
-        mode="constant",       # Attribute for padding mode
-        value=0.0              # Attribute for fill value
-    )
-
-    # Build graph and model
-    graph_def = helper.make_graph(
-        [node_def],
-        "test-model",
-        [X, pads],
-        [Y],
-    )
-    model_def = helper.make_model(
-        graph_def,
-        producer_name="onnx-example",
-        opset_imports=[helper.make_opsetid("", 11)]  # OPSET 11 required
-    )
-
-    # Validate the model
-    onnx.checker.check_model(model_def)
-    print("Model is valid!")
-def create_model3():
-    X = helper.make_tensor_value_info('X', TensorProto.FLOAT, [None, None])
-    A = helper.make_tensor_value_info('A', TensorProto.FLOAT, [None, None])
-    B = helper.make_tensor_value_info('B', TensorProto.FLOAT, [None, None])
-    Y = helper.make_tensor_value_info('Y', TensorProto.FLOAT, [None])
-    node1 = helper.make_node('MatMul', ['X', 'A'], ['XA'])
-    node2 = helper.make_node('Add', ['XA', 'B'], ['Y'])
-    graph = helper.make_graph([node1, node2], 'lr', [X, A, B], [Y])
-    onnx_model = helper.make_model(graph)
-    onnx.checker.check_model(onnx_model)
-
-    # The serialization
-    with open("linear_regression.onnx", "wb") as f:
-        f.write(onnx_model.SerializeToString())
-
-    # display
-    print(onnx_model)
-
 def run_Shape_Inference_model():
     # Preprocessing: create a model with two nodes, Y"s shape is unknown
     node1 = helper.make_node("Transpose", ["X"], ["Y"], perm=[1, 0, 2])
@@ -218,9 +123,8 @@ def printNet(model):
         node = model.graph.node[i]
         print("** nodes %d **  name=%r type=%r input=%r output=%r" % (i,
             node.name, node.op_type, node.input, node.output))
-        if i>100:
-            break
-
+        # if i>100:break
+    # return
     initializer = model.graph.initializer
     # name_lists = ["/image_encoder/neck/position_encoding/Constant_28_output_0",
     #               '/image_encoder/neck/position_encoding/Unsqueeze_8_output_0']#encoder check
@@ -272,13 +176,13 @@ def convert_sam2_hiera_large_encoder_to_opencvOnnx():
 
 
 def convert_sam2_decoder_point_label():
-    # sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
+    sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
     model = onnx.load('models/decoder.onnx')
     point_coords = np.array(
         [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
     point_labels = np.array([[1, 1,1,1,-1,1]]).astype(np.float32)
 ### anglysis the point coord in ##################################################################
-    if True:
+    if False:
         cut_subgraph('models/decoder.onnx',
                     ['point_coords'], ['/ScatterND_1_output_0'], 'pointCoordsIn.onnx')
         model = onnx.load('pointCoordsIn.onnx')
@@ -292,7 +196,7 @@ def convert_sam2_decoder_point_label():
         print(pointCoords[0])
         # np.savetxt('outputs.txt', pointCoords[0].squeeze().transpose(1, 0))
 ### anglysis the point label in ##################################################################
-    if True:
+    if False:
         cut_subgraph('models/decoder.onnx',
                     ['point_labels'], ['/Unsqueeze_8_output_0'], 'pointLabelsIn.onnx')
         model = onnx.load('pointLabelsIn.onnx')
@@ -424,10 +328,10 @@ def convert_sam2_decoder_point_label():
 ### decoderBody ##################################################################
     if True:
         cut_subgraph('models/decoder.onnx', ['high_res_feats_0', 'high_res_feats_1', 'image_embed', '/ScatterND_1_output_0',
-                     '/Unsqueeze_8_output_0', 'mask_input', 'has_mask_input', 'orig_im_size'], ['/Equal_6_output_0', '/Not_output_0', 'masks', 'iou_predictions'], 'decoderBody.onnx')
+                     '/Unsqueeze_8_output_0', 'mask_input', 'has_mask_input', 'orig_im_size'], ['masks', 'iou_predictions'], 'decoderBody.onnx')
         model = onnx.load('decoderBody.onnx')
         onnx.checker.check_model(model)
-        printNet(model)
+        # printNet(model)
  
         high_res_feats_0 = np.ones([1, 32, 256, 256]).astype(np.float32)
         high_res_feats_1 = np.ones([1, 64, 128, 128]).astype(np.float32)
@@ -440,18 +344,146 @@ def convert_sam2_decoder_point_label():
         has_mask_input = np.array([0], dtype=np.float32)
         original_size = np.array([1080,1920], dtype=np.int32)
 
+        # session = onnxruntime.InferenceSession(
+        #     'decoderBody.onnx', providers=onnxruntime.get_available_providers())
+        # pointCoords = session.run(
+        #     None, {'high_res_feats_0': high_res_feats_0, 
+        #            'high_res_feats_1': high_res_feats_1,
+        #            'image_embed': image_embed,
+        #            '/ScatterND_1_output_0': ScatterND_1_output_0,
+        #            '/Unsqueeze_8_output_0': Unsqueeze_8_output_0,
+        #            'mask_input': mask_input,
+        #            'has_mask_input': has_mask_input,
+        #            'orig_im_size': original_size})
+
+
+# *************************************
+        value = np.array([-1], dtype=np.float32)  # not
+        neg1 = onnx.numpy_helper.from_array(value, name='neg1')  # not
+        model.graph.initializer.append(neg1)  # not
+        gt_neg1_node = onnx.helper.make_node(
+            op_type='Greater',
+            inputs=['/Expand_8_output_0', 'neg1'],
+            outputs=['/gt_neg1'],
+            name='/gt_neg1')
+        gt_neg1_cast = onnx.helper.make_node(
+            op_type='Cast',
+            inputs=['/gt_neg1'],
+            outputs=['/Cast_4_output_0'],
+            name='/gt_neg1_cast',
+            to=1)
+        model.graph.node.insert(10, gt_neg1_node)  # not
+        model.graph.node.insert(11, gt_neg1_cast)  # not
+        model.graph.node.remove(model.graph.node[13])  # not
+        model.graph.node.remove(model.graph.node[12])  # not
+
+        model.graph.node.remove(model.graph.node[73])   #expand9
+        model.graph.node.remove(model.graph.node[72])  # expand9
+        model.graph.node.remove(model.graph.node[71])  # expand9
+        model.graph.node.remove(model.graph.node[70])   #expand9
+        model.graph.node.remove(model.graph.node[69])   #expand9
+        model.graph.node.remove(model.graph.node[68])   #expand9
+        model.graph.node.remove(model.graph.node[67])  # expand9
+        dtype = model.graph.initializer[31].data_type
+        params = np.frombuffer(
+            model.graph.initializer[31].raw_data, dtype=onnx_datatype_to_npType(dtype))
+        Expand_9_output_0_node = onnx.helper.make_node(
+            op_type='Constant',
+            inputs=[],
+            outputs=['/Expand_9_output_0'],
+            name='/Expand_9_output_0',
+            value=onnx.helper.make_tensor(
+                'value', onnx.TensorProto.FLOAT, [
+                    1, 6,256], params.reshape([1, 6,256])))
+        model.graph.node.insert(67, Expand_9_output_0_node)  # expand9
+
+        # printNet(model)
+        # return
+
+        model.graph.node.remove(model.graph.node[89])  # /transformer/Reshape
+        model.graph.node.remove(model.graph.node[88])  # /transformer/Reshape
+        model.graph.node.remove(model.graph.node[87])  # /transformer/Reshape
+        model.graph.node.remove(model.graph.node[86])  # /transformer/Reshape
+
+        model.graph.node.remove(model.graph.node[80])  # Reshape_9
+        model.graph.node.remove(model.graph.node[79])  # Concat_13
+        model.graph.node.remove(model.graph.node[78])  # Slice_4
+        model.graph.node.remove(model.graph.node[77])  # Shape_23
+        model.graph.node.remove(model.graph.node[76])  # Tile
+        model.graph.node.remove(model.graph.node[75])  # Reshape_8
+        model.graph.node.remove(model.graph.node[74])  # onehot
+        model.graph.node.remove(model.graph.node[73])  # Concat_11
+        model.graph.node.remove(model.graph.node[72])  # Reshape_7
+        model.graph.node.remove(model.graph.node[71])  # Gather_11
+        model.graph.node.remove(model.graph.node[70])  # Shape_21
+        value = np.array([1,256,64*64], dtype=np.int64) 
+        transformer_Reshape_output_0_shape = onnx.numpy_helper.from_array(
+            value, name='transformer_Reshape_output_0_shape')
+        model.graph.initializer.append(
+            transformer_Reshape_output_0_shape)  # not
+        Reshape_9_output_0_node = onnx.helper.make_node(
+            op_type='Reshape',
+            inputs=['/Unsqueeze_11_output_0',
+                    'transformer_Reshape_output_0_shape'],
+            outputs=['/transformer/Reshape_1_output_0'],
+            name='/transformer/Reshape_1')
+        model.graph.node.insert(70, Reshape_9_output_0_node)  
+
+     
+        # Concat_13_output_0_node = onnx.helper.make_node(
+        #     op_type='Constant',
+        #     inputs=[],
+        #     outputs=['/Concat_13_output_0'],
+        #     name='/Concat_13_output_0',
+        #     value=onnx.helper.make_tensor(
+        #         'value', onnx.TensorProto.INT64, [
+        #             4], np.array([1, 256, 64, 64]).astype(np.int64)))
+        # model.graph.node.insert(73, Concat_13_output_0_node)  # Reshape_9
+
+        # transformer_Concat_1_output_0_node = onnx.helper.make_node(
+        #     op_type='Constant',
+        #     inputs=[],
+        #     outputs=['/transformer/Concat_1_output_0'],
+        #     name='/transformer/Concat_1_output_0',
+        #     value=onnx.helper.make_tensor(
+        #         'value', onnx.TensorProto.INT64, [
+        #             3], np.array([1, 256, 64*64]).astype(np.int64)))
+        # # /transformer/Reshape_1
+        # model.graph.node.insert(80, transformer_Concat_1_output_0_node)
+
+        printNet(model)
+
+
+        onnx.checker.check_model(model)
+        model = onnx.shape_inference.infer_shapes(model)        
+        onnx.save(model, 'decoderBody2.onnx')
+        # printNet(model)
+        cut_subgraph('decoderBody2.onnx', ['image_embed', '/ScatterND_1_output_0', '/Unsqueeze_8_output_0', 'mask_input', 'has_mask_input'],
+                     ['/transformer/Transpose_1_output_0', '/transformer/Transpose_output_0'], 'decoderBody2.onnx')
+        model = onnx.load('decoderBody2.onnx')
+        
+        # return
+        # cut_subgraph('decoderBody2.onnx', ['high_res_feats_0', 'high_res_feats_1', 'image_embed', '/ScatterND_1_output_0',
+        #              '/Unsqueeze_8_output_0', 'mask_input', 'has_mask_input', 'orig_im_size'],
+        #              ['/transformer/layers.0/cross_attn_token_to_image/Softmax_output_0', '/transformer/layers.0/cross_attn_token_to_image/Transpose_1_output_0','/transformer/layers.0/cross_attn_token_to_image/MatMul_1_output_0', 'masks', 'iou_predictions'], 'decoderBody2.onnx')
+
         session = onnxruntime.InferenceSession(
-            'decoderBody.onnx', providers=onnxruntime.get_available_providers())
+            'decoderBody2.onnx', providers=onnxruntime.get_available_providers())
         pointCoords = session.run(
-            None, {'high_res_feats_0': high_res_feats_0, 
-                   'high_res_feats_1': high_res_feats_1,
+            None, {
+                   #'high_res_feats_0': high_res_feats_0,
+                   #'high_res_feats_1': high_res_feats_1,
                    'image_embed': image_embed,
                    '/ScatterND_1_output_0': ScatterND_1_output_0,
                    '/Unsqueeze_8_output_0': Unsqueeze_8_output_0,
                    'mask_input': mask_input,
-                   'has_mask_input': has_mask_input,
-                   'orig_im_size': original_size})
+                   'has_mask_input': has_mask_input
+                   #'orig_im_size': original_size
+                   })
+
         print(pointCoords[0].shape)
+        print(pointCoords[0])
+        return
         print(pointCoords[0])
 
 
