@@ -11,13 +11,37 @@
 #include <map>
 #include <unordered_set>
 #include <vector>
+#include "opencv2/dnn/layer.hpp"
 using namespace std;
 using namespace cv;
 
-
-bool generTestBlob(cv::Mat&blob,const cv::dnn::MatShape&shape)
+enum class OnnxType
 {
-    blob.create(shape.size(), &shape[0], CV_32F);
+    onnx_float32 = 1,
+    onnx_uint8 = 2,
+    onnx_int8 = 3,
+    onnx_uint16 = 4,
+    onnx_int16 = 5,
+    onnx_int32 = 6,
+    onnx_int64 = 7,
+    onnx_string = 8,
+    onnx_bool = 9,
+    onnx_float16 = 10,
+    onnx_float64 = 11,
+    onnx_uint32 = 12,
+    onnx_uint64 = 14,
+};
+bool generTestBlob(cv::Mat&blob,const cv::dnn::MatShape&shape, const OnnxType&type= OnnxType::onnx_float32)
+{
+    switch (type)
+    {
+    case OnnxType::onnx_float32:
+        blob.create(shape.size(), &shape[0], CV_32F);
+    case OnnxType::onnx_int64:
+        blob.create(shape.size(), &shape[0], CV_64FC1);
+    default:
+        break;
+    }
     blob.setTo(1);
     return true;
 }
@@ -97,6 +121,27 @@ void printBlob(const cv::Mat& blob)
     std::cout << std::endl;
     return;
 }
+void printInt64Blob(const cv::Mat& blob)
+{
+    cv::dnn::MatShape shape = getBlobShape(blob);
+    int total = 1;
+    for (int c = 0; c < shape.size(); c++)
+    {
+        total *= shape[c];
+    }
+    int slashN = shape.back();
+    for (int i = 0; i < total; i++)
+    {
+        if (i % slashN == 0)
+        {
+            std::cout << std::endl;
+        }
+        std::cout << ((int*)blob.data)[i] << " ";
+    }
+    std::cout << std::endl;
+    return;
+}
+
 int main( int argc, const char** argv )
 {
     const int netImgSize = 1024;
@@ -115,7 +160,6 @@ int main( int argc, const char** argv )
     //getBlobShape(imgEncoderNetOut[0]);
     //getBlobShape(imgEncoderNetOut[1]);
     //getBlobShape(imgEncoderNetOut[2]);
-
 
     cv::Mat high_res_feats_0;
     cv::Mat high_res_feats_1;
@@ -140,25 +184,32 @@ int main( int argc, const char** argv )
     has_mask_input.setTo(0);
     cv::Mat orig_im_size;
     generTestBlob(orig_im_size, { 2 });
+
+    cv::Mat pointSize;
+    generTestBlob(pointSize, { 1 });
+    pointSize.data
+    pointSize.setTo(point_coord.size());
     ((float*)orig_im_size.data)[0] = originalImgSize.width;
     ((float*)orig_im_size.data)[1] = originalImgSize.height;
     {
+        positionEmbedingNet.setInput(pointSize, "pointSize");
         //positionEmbedingNet.setInput(high_res_feats_0, "high_res_feats_0");
         //positionEmbedingNet.setInput(high_res_feats_1, "high_res_feats_1");
-        positionEmbedingNet.setInput(image_embed, "image_embed");
-        positionEmbedingNet.setInput(point_coord_blob, "/ScatterND_1_output_0");
-        positionEmbedingNet.setInput(point_label_blob, "/Unsqueeze_8_output_0");
-        positionEmbedingNet.setInput(mask_input, "mask_input");
-        positionEmbedingNet.setInput(has_mask_input, "has_mask_input");
+        //positionEmbedingNet.setInput(image_embed, "image_embed");
+        //positionEmbedingNet.setInput(point_coord_blob, "/ScatterND_1_output_0");
+        //positionEmbedingNet.setInput(point_label_blob, "/Unsqueeze_8_output_0");
+        //positionEmbedingNet.setInput(mask_input, "mask_input");
+        //positionEmbedingNet.setInput(has_mask_input, "has_mask_input");
         //positionEmbedingNet.setInput(orig_im_size, "orig_im_size");
         std::vector<std::string> layersNames = positionEmbedingNet.getLayerNames();
         std::vector<std::string> unconnectedOutLayersNames = positionEmbedingNet.getUnconnectedOutLayersNames();
         std::vector<std::string> outLayersNames = {
-        "/transformer/Transpose_output_0", };
+        "shape_1_x_8_32"};
         std::vector<cv::Mat> out;
         positionEmbedingNet.forward(out, outLayersNames);
-        printBlob(out[0]);
+        printInt64Blob(out[0]);
         printBlob(out[1]);
+        printBlob(out[2]);
         //printBlob(out[2]);
         //printBlob(out[3]);
         std::cout << "forward ok " << std::endl;
