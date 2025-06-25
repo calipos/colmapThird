@@ -123,8 +123,8 @@ def printNet(model):
         node = model.graph.node[i]
         print("** nodes %d **  name=%r type=%r input=%r output=%r" % (i,
             node.name, node.op_type, node.input, node.output))
-        # if i>100:break
-    # return
+        if i>200:break
+    return
     initializer = model.graph.initializer
     # name_lists = ["/image_encoder/neck/position_encoding/Constant_28_output_0",
     #               '/image_encoder/neck/position_encoding/Unsqueeze_8_output_0']#encoder check
@@ -176,7 +176,7 @@ def convert_sam2_hiera_large_encoder_to_opencvOnnx():
 
 
 def convert_sam2_decoder_point_label():
-    sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
+    # sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
     model = onnx.load('models/decoder.onnx')
     point_coords = np.array(
         [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
@@ -404,7 +404,6 @@ def convert_sam2_decoder_point_label():
         model.graph.node.remove(model.graph.node[88])  # /transformer/Reshape
         model.graph.node.remove(model.graph.node[87])  # /transformer/Reshape
         model.graph.node.remove(model.graph.node[86])  # /transformer/Reshape
-
         model.graph.node.remove(model.graph.node[80])  # Reshape_9
         model.graph.node.remove(model.graph.node[79])  # Concat_13
         model.graph.node.remove(model.graph.node[78])  # Slice_4
@@ -420,7 +419,7 @@ def convert_sam2_decoder_point_label():
         transformer_Reshape_output_0_shape = onnx.numpy_helper.from_array(
             value, name='transformer_Reshape_output_0_shape')
         model.graph.initializer.append(
-            transformer_Reshape_output_0_shape)  # not
+            transformer_Reshape_output_0_shape)
         Reshape_9_output_0_node = onnx.helper.make_node(
             op_type='Reshape',
             inputs=['/Unsqueeze_11_output_0',
@@ -429,40 +428,73 @@ def convert_sam2_decoder_point_label():
             name='/transformer/Reshape_1')
         model.graph.node.insert(70, Reshape_9_output_0_node)  
 
-     
-        # Concat_13_output_0_node = onnx.helper.make_node(
-        #     op_type='Constant',
-        #     inputs=[],
-        #     outputs=['/Concat_13_output_0'],
-        #     name='/Concat_13_output_0',
-        #     value=onnx.helper.make_tensor(
-        #         'value', onnx.TensorProto.INT64, [
-        #             4], np.array([1, 256, 64, 64]).astype(np.int64)))
-        # model.graph.node.insert(73, Concat_13_output_0_node)  # Reshape_9
+        model.graph.node.remove(model.graph.node[74])  # /transformer/Reshape
+        model.graph.node.remove(model.graph.node[73])  # /Shape_24
+        model.graph.node.remove(model.graph.node[72])  # /transformer/Slice
+        model.graph.node.remove(model.graph.node[71])  # /transformer/Concat
+        transformer_Reshape_node = onnx.helper.make_node(
+            op_type='Reshape',
+            inputs=['/Add_11_output_0',
+                    'transformer_Reshape_output_0_shape'],
+            outputs=['/transformer/Reshape_output_0'],
+            name='/transformer/Reshape')
+        model.graph.node.insert(71, transformer_Reshape_node)
+        onnx.checker.check_model(model)
 
-        # transformer_Concat_1_output_0_node = onnx.helper.make_node(
-        #     op_type='Constant',
-        #     inputs=[],
-        #     outputs=['/transformer/Concat_1_output_0'],
-        #     name='/transformer/Concat_1_output_0',
-        #     value=onnx.helper.make_tensor(
-        #         'value', onnx.TensorProto.INT64, [
-        #             3], np.array([1, 256, 64*64]).astype(np.int64)))
-        # # /transformer/Reshape_1
-        # model.graph.node.insert(80, transformer_Concat_1_output_0_node)
+        model.graph.node.remove(model.graph.node[86])  # 0self_attn/Reshape
+        model.graph.node.remove(model.graph.node[85])  # 0self_attn/Concat        
+        model.graph.node.remove(model.graph.node[84])  # 0self_attn/Unsqueeze_1
+        model.graph.node.remove(model.graph.node[83])  # 0self_attn/Unsqueeze
+        model.graph.node.remove(model.graph.node[82])  # 0self_attn/Gather_1
+        model.graph.node.remove(model.graph.node[81])  # 0self_attn/Gather
+        model.graph.node.remove(model.graph.node[80])  # 0self_attn/Shape
+        selfattn_Reshape_output_0_shape_data = np.array([1, -1, 8, 32], dtype=np.int64)
+        selfattn_Reshape_output_0_shape = onnx.numpy_helper.from_array(
+            selfattn_Reshape_output_0_shape_data, name='selfattn_Reshape_output_0_shape')
+        model.graph.initializer.append(selfattn_Reshape_output_0_shape)
+        transformer_layers0_selfattn_Reshape_node = onnx.helper.make_node(
+            op_type='Reshape',
+            inputs=['/transformer/layers.0/self_attn/q_proj/Add_output_0',
+                    'selfattn_Reshape_output_0_shape'],
+            outputs=['/transformer/layers.0/self_attn/Reshape_output_0'],
+            name='/transformer/layers.0/self_attn/Reshape')
+        model.graph.node.insert(80, transformer_layers0_selfattn_Reshape_node)
+        model = onnx.shape_inference.infer_shapes(model)
+        onnx.checker.check_model(model)
+
+        model.graph.node.remove(model.graph.node[95])  # 0self_attn/Reshape
+        model.graph.node.remove(model.graph.node[94])  # 0self_attn/Concat
+        model.graph.node.remove(model.graph.node[93])  # 0self_attn/Unsqueeze_1
+        model.graph.node.remove(model.graph.node[92])  # 0self_attn/Unsqueeze
+        model.graph.node.remove(model.graph.node[91])  # 0self_attn/Gather_1
+        model.graph.node.remove(model.graph.node[90])  # 0self_attn/Gather
+        model.graph.node.remove(model.graph.node[89])  # 0self_attn/Shape
+        selfattn_Reshape2_output_0_shape_data = np.array(
+            [1, -1, 8, 32], dtype=np.int64)
+        selfattn_Reshape2_output_0_shape = onnx.numpy_helper.from_array(
+            selfattn_Reshape2_output_0_shape_data, name='selfattn_Reshape2_output_0_shape')
+        model.graph.initializer.append(selfattn_Reshape2_output_0_shape)
+        transformer_layers0_selfattn_Reshape2_node = onnx.helper.make_node(
+            op_type='Reshape',
+            inputs=['/transformer/layers.0/self_attn/v_proj/Add_output_0',
+                    'selfattn_Reshape2_output_0_shape'],
+            outputs=['/transformer/layers.0/self_attn/Reshape_2_output_0'],
+            name='/transformer/layers.0/self_attn/Reshape_2')
+        model.graph.node.insert(89, transformer_layers0_selfattn_Reshape2_node)
+        model = onnx.shape_inference.infer_shapes(model)
+        onnx.checker.check_model(model)
+
 
         printNet(model)
-
-
-        onnx.checker.check_model(model)
-        model = onnx.shape_inference.infer_shapes(model)        
         onnx.save(model, 'decoderBody2.onnx')
-        # printNet(model)
-        cut_subgraph('decoderBody2.onnx', ['image_embed', '/ScatterND_1_output_0', '/Unsqueeze_8_output_0', 'mask_input', 'has_mask_input'],
-                     ['/transformer/Transpose_1_output_0', '/transformer/Transpose_output_0'], 'decoderBody2.onnx')
-        model = onnx.load('decoderBody2.onnx')
+       
+        cut_subgraph('decoderBody2.onnx', [ '/ScatterND_1_output_0',
+                     '/Unsqueeze_8_output_0'],
+                     ['/transformer/layers.0/self_attn/Concat_1_output_0','/transformer/layers.0/self_attn/Softmax_output_0', '/transformer/layers.0/self_attn/Transpose_1_output_0'], 'decoderBody2.onnx')
+
         
         # return
+        
         # cut_subgraph('decoderBody2.onnx', ['high_res_feats_0', 'high_res_feats_1', 'image_embed', '/ScatterND_1_output_0',
         #              '/Unsqueeze_8_output_0', 'mask_input', 'has_mask_input', 'orig_im_size'],
         #              ['/transformer/layers.0/cross_attn_token_to_image/Softmax_output_0', '/transformer/layers.0/cross_attn_token_to_image/Transpose_1_output_0','/transformer/layers.0/cross_attn_token_to_image/MatMul_1_output_0', 'masks', 'iou_predictions'], 'decoderBody2.onnx')
@@ -473,11 +505,11 @@ def convert_sam2_decoder_point_label():
             None, {
                    #'high_res_feats_0': high_res_feats_0,
                    #'high_res_feats_1': high_res_feats_1,
-                   'image_embed': image_embed,
+                #    'image_embed': image_embed,
                    '/ScatterND_1_output_0': ScatterND_1_output_0,
                    '/Unsqueeze_8_output_0': Unsqueeze_8_output_0,
-                   'mask_input': mask_input,
-                   'has_mask_input': has_mask_input
+                #    'mask_input': mask_input,
+                #    'has_mask_input': has_mask_input
                    #'orig_im_size': original_size
                    })
 
