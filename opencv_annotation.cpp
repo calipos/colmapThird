@@ -12,6 +12,7 @@
 #include <unordered_set>
 #include <vector>
 #include "opencv2/dnn/layer.hpp"
+#include "opencv2/dnn/shape_utils.hpp"
 using namespace std;
 using namespace cv;
 
@@ -37,8 +38,10 @@ bool generTestBlob(cv::Mat&blob,const cv::dnn::MatShape&shape, const OnnxType&ty
     {
     case OnnxType::onnx_float32:
         blob.create(shape.size(), &shape[0], CV_32F);
+        break;
     case OnnxType::onnx_int64:
         blob.create(shape.size(), &shape[0], CV_64FC1);
+        break;
     default:
         break;
     }
@@ -136,14 +139,37 @@ void printInt64Blob(const cv::Mat& blob)
         {
             std::cout << std::endl;
         }
-        std::cout << ((int*)blob.data)[i] << " ";
+        std::cout << ((std::int64_t*)blob.data)[i] << " ";
     }
     std::cout << std::endl;
     return;
 }
-
+int test_dynamic_reshape()
+{
+    cv::Mat input;
+    generTestBlob(input, { 1, 3,2 });
+    float* p = (float*)input.data;
+    p[0] = 1;
+    p[1] = 2;
+    p[2] = 3;
+    p[3] = 4;
+    p[4] = 5;
+    p[5] = 6;
+    cv::dnn::Net testNet = cv::dnn::readNetFromONNX("D:/repo/colmapThird/test.onnx");
+    testNet.setInput(input, "input");
+    std::vector<std::string> layersNames = testNet.getLayerNames();
+    std::vector<std::string> unconnectedOutLayersNames = testNet.getUnconnectedOutLayersNames();
+    std::vector<std::string> outLayersNames = {
+    "output","outputReshape"};
+    std::vector<cv::Mat> out;
+    testNet.forward(out, outLayersNames);
+    printBlob(out[0]);
+    printBlob(out[1]);
+    return 0;
+}
 int main( int argc, const char** argv )
 {
+    //return test_dynamic_reshape();
     const int netImgSize = 1024;
     //cv::dnn::Net imgEncoderNet = cv::dnn::readNetFromONNX("D:/repo/colmapThird/opencv_encoder.onnx");
     //int sz[] = { 1,3,netImgSize,netImgSize };
@@ -184,33 +210,27 @@ int main( int argc, const char** argv )
     has_mask_input.setTo(0);
     cv::Mat orig_im_size;
     generTestBlob(orig_im_size, { 2 });
-
-    cv::Mat pointSize;
-    generTestBlob(pointSize, { 1 });
-    pointSize.data
-    pointSize.setTo(point_coord.size());
     ((float*)orig_im_size.data)[0] = originalImgSize.width;
     ((float*)orig_im_size.data)[1] = originalImgSize.height;
     {
-        positionEmbedingNet.setInput(pointSize, "pointSize");
         //positionEmbedingNet.setInput(high_res_feats_0, "high_res_feats_0");
         //positionEmbedingNet.setInput(high_res_feats_1, "high_res_feats_1");
         //positionEmbedingNet.setInput(image_embed, "image_embed");
-        //positionEmbedingNet.setInput(point_coord_blob, "/ScatterND_1_output_0");
-        //positionEmbedingNet.setInput(point_label_blob, "/Unsqueeze_8_output_0");
+        positionEmbedingNet.setInput(point_coord_blob, "/ScatterND_1_output_0");
+        positionEmbedingNet.setInput(point_label_blob, "/Unsqueeze_8_output_0");
         //positionEmbedingNet.setInput(mask_input, "mask_input");
         //positionEmbedingNet.setInput(has_mask_input, "has_mask_input");
         //positionEmbedingNet.setInput(orig_im_size, "orig_im_size");
         std::vector<std::string> layersNames = positionEmbedingNet.getLayerNames();
         std::vector<std::string> unconnectedOutLayersNames = positionEmbedingNet.getUnconnectedOutLayersNames();
         std::vector<std::string> outLayersNames = {
-        "shape_1_x_8_32"};
+        "/transformer/layers.0/self_attn/MatMul_1_output_0"};
         std::vector<cv::Mat> out;
         positionEmbedingNet.forward(out, outLayersNames);
-        printInt64Blob(out[0]);
-        printBlob(out[1]);
-        printBlob(out[2]);
+        printBlob(out[0]);
+        //printBlob(out[1]);
         //printBlob(out[2]);
+        //printBlob(out[3]);
         //printBlob(out[3]);
         std::cout << "forward ok " << std::endl;
     }

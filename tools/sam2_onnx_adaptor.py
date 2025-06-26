@@ -12,6 +12,7 @@ from torch.utils import data
 import onnx_graphsurgeon as gs
 import onnxruntime  
 import os
+import pnnx
 
 class testNet(torch.nn.Module):
     def __init__(self):
@@ -176,7 +177,7 @@ def convert_sam2_hiera_large_encoder_to_opencvOnnx():
 
 
 def convert_sam2_decoder_point_label():
-    sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
+    # sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
     model = onnx.load('models/decoder.onnx')
     point_coords = np.array(
         [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
@@ -332,7 +333,7 @@ def convert_sam2_decoder_point_label():
         model = onnx.load('decoderBody.onnx')
         onnx.checker.check_model(model)
 
-        pointSize = np.array([point_coords.shape[1]], dtype=np.int64)
+        pointSize = np.array([point_coords.shape[1]], dtype=np.float32)
         high_res_feats_0 = np.ones([1, 32, 256, 256]).astype(np.float32)
         high_res_feats_1 = np.ones([1, 64, 128, 128]).astype(np.float32)
         image_embed = np.ones([1, 256, 64, 64]).astype(np.float32)
@@ -344,73 +345,119 @@ def convert_sam2_decoder_point_label():
         has_mask_input = np.array([0], dtype=np.float32)
         original_size = np.array([1080,1920], dtype=np.int32)
 
-        # session = onnxruntime.InferenceSession(
-        #     'decoderBody.onnx', providers=onnxruntime.get_available_providers())
-        # pointCoords = session.run(
-        #     None, {'high_res_feats_0': high_res_feats_0, 
-        #            'high_res_feats_1': high_res_feats_1,
-        #            'image_embed': image_embed,
-        #            '/ScatterND_1_output_0': ScatterND_1_output_0,
-        #            '/Unsqueeze_8_output_0': Unsqueeze_8_output_0,
-        #            'mask_input': mask_input,
-        #            'has_mask_input': has_mask_input,
-        #            'orig_im_size': original_size})
-
+        for index, eachNode in enumerate(model.graph.input):
+            now_name = model.graph.input[index].name
+            if now_name == '/ScatterND_1_output_0':
+                model.graph.input.remove(model.graph.input[index])
+                ScatterND_1_output_0_node = helper.make_tensor_value_info(
+                    '/ScatterND_1_output_0', TensorProto.FLOAT, [1, -1, 2])
+                model.graph.input.insert(index, ScatterND_1_output_0_node)
+                print('change the ScatterND_1_output_0 input node')
+            # if now_name == '/Unsqueeze_8_output_0':
+            #     model.graph.input.remove(model.graph.input[index])
+            #     Unsqueeze_8_output_0_node = helper.make_tensor_value_info(
+            #         '/Unsqueeze_8_output_0', TensorProto.FLOAT, [1, -1, 2])
+            #     model.graph.input.insert(index, Unsqueeze_8_output_0_node)
+            #     print('change the Unsqueeze_8_output_0 input node')
+            #     break
 
 # *************************************
-        new_input = helper.make_tensor_value_info(
-            "pointSize", onnx.TensorProto.INT64, [1])
-        model.graph.input.append(new_input)
-        innerPointCntBaseValue = np.array([7], dtype=np.int64)  # 7
-        innerPointCntBase = onnx.numpy_helper.from_array(
-            innerPointCntBaseValue, name='innerPointCntBase')  # 7
-        model.graph.initializer.append(innerPointCntBase)  # 7
-        innerPointCnt = onnx.helper.make_node(
-            op_type='Add',
-            inputs=['innerPointCntBase', 'pointSize'],
-            outputs=['innerPointCnt'],
-            name='innerPointCnt')
-        model.graph.node.insert(0,innerPointCnt) 
-        const1value = np.array([1], dtype=np.int64)  # 1
-        const1 = onnx.numpy_helper.from_array(const1value, name='const1')  # 1
+        nodeBaseShift=0
+
+        # new_input = helper.make_tensor_value_info(
+        #     "pointSize", onnx.TensorProto.FLOAT, [1])
+        # model.graph.input.append(new_input)
+        # constNumbers = onnx.numpy_helper.from_array(
+        #     np.arange(0+7, 256+7, 1, np.int64), name='constNumbers')  # [1,256]
+        # model.graph.initializer.append(constNumbers)  # [1,256]
+        # innerPointCast = onnx.helper.make_node(
+        #     op_type='Cast',
+        #     inputs=['pointSize'],
+        #     outputs=['innerPointCast'],
+        #     name='innerPointCast',
+        #     to=7)
+        # model.graph.node.insert(nodeBaseShift, innerPointCast)
+        # nodeBaseShift+=1
+        # innerPointCastPick = onnx.helper.make_node(
+        #     op_type='Gather',
+        #     inputs=['constNumbers', 'innerPointCast'],
+        #     outputs=['innerPointCastPick'],
+        #     name='innerPointCastPick')
+        # model.graph.node.insert(nodeBaseShift, innerPointCastPick)
+        # nodeBaseShift += 1
+
+        # innerPointCntBaseValue = np.array([7], dtype=np.int64)  # 7
+        # innerPointCntBase = onnx.numpy_helper.from_array(
+        #     innerPointCntBaseValue, name='innerPointCntBase')  # 7
+        # model.graph.initializer.append(innerPointCntBase)  # 7
+        # innerPointCntAdd7 = onnx.helper.make_node(
+        #     op_type='Add',
+        #     inputs=['innerPointCntBase', 'innerPointCastPick'],
+        #     outputs=['innerPointCntAdd7'],
+        #     name='innerPointCntAdd7')
+        # model.graph.node.insert(2, innerPointCntAdd7)
+        # nodeBaseShift += 1
+
+
+
+
+        const1 = onnx.numpy_helper.from_array(
+            np.array([1]).astype(np.int64), name='const1')  # 1
         model.graph.initializer.append(const1)  # 1
-        const8value = np.array([8], dtype=np.int64)  # 8
-        const8 = onnx.numpy_helper.from_array(const8value, name='const8')  # 8
+        const_1 = onnx.numpy_helper.from_array(
+            np.array([-1]).astype(np.int64), name='const_1')  # -1
+        model.graph.initializer.append(const_1)  # -1
+        const8 = onnx.numpy_helper.from_array(
+            np.array([8]).astype(np.int64), name='const8')  # 8
         model.graph.initializer.append(const8)  # 8
-        const32value = np.array([32], dtype=np.int64)  # 32
         const32 = onnx.numpy_helper.from_array(
-            const32value, name='const32')  # 32
+            np.array([32]).astype(np.int64), name='const32')  # 32
         model.graph.initializer.append(const32)  # 32
+        constOnes256f = onnx.numpy_helper.from_array(
+            np.ones([1, 1, 256]).astype(np.float32), name='constOnes256f')  # constOnes256f
+        model.graph.initializer.append(constOnes256f)  # 32
+
+        pointInShapeLayer = onnx.helper.make_node(
+            op_type='Shape',
+            inputs=['/ScatterND_1_output_0'],
+            outputs=['pointInShape'],
+            name='pointInShapeLayer')
+        pointCntLayer = onnx.helper.make_node(
+            op_type='Gather',
+            inputs=['pointInShape', 'const1'],
+            outputs=['pointCnt'],
+            name='pointCntLayer')
         shape_1_x_8_32 = onnx.helper.make_node(
             op_type='Concat',
-            inputs=['const1', 'innerPointCnt', 'const8', 'const32'],
+            inputs=['const1', 'pointCnt', 'const8', 'const32'],
             outputs=['shape_1_x_8_32'],
             name='shape_1_x_8_32',
             axis=0)
-        model.graph.node.insert(1, shape_1_x_8_32)  # shape_1_x_8_32_Node
 
-        # model = onnx.shape_inference.infer_shapes(model)
-        # onnx.checker.check_model(model)
-        # onnx.save(model, 'decoderBody2.onnx')
-        # printNet(model)
-        # cut_subgraph('decoderBody2.onnx', [ 'pointSize'],
-        #              ['shape_1_x_8_32'], 'decoderBody2.onnx')
-        # session = onnxruntime.InferenceSession(
-        #     'decoderBody2.onnx', providers=onnxruntime.get_available_providers())
-        # pointCoords = session.run(
-        #     None, {
-        #         'pointSize': pointSize,
-        #     })
-        # print(pointCoords[0].shape)
-        # print(pointCoords[0])
-        # return
+        # shape_1_x_8_32_Node
+        model.graph.node.insert(nodeBaseShift, pointInShapeLayer)
+        nodeBaseShift += 1
+        # shape_1_x_8_32_Node
+        model.graph.node.insert(nodeBaseShift, pointCntLayer)
+        nodeBaseShift += 1
+        # shape_1_x_8_32_Node
+        model.graph.node.insert(nodeBaseShift, shape_1_x_8_32)
+        nodeBaseShift += 1
 
+        model.graph.node.remove(model.graph.node[8+nodeBaseShift])  # not
+        model.graph.node.remove(model.graph.node[7+nodeBaseShift])  # not
+        Expand_8_output_0_node = onnx.helper.make_node(
+            op_type='MatMul',
+            inputs=['/Unsqueeze_8_output_0', 'constOnes256f'],
+            outputs=['/Expand_8_output_0'],
+            name='/Expand_8_output_0_node')
+        model.graph.node.insert(7+nodeBaseShift, Expand_8_output_0_node)  # not
 
         value = np.array([-1], dtype=np.float32)  # not
         neg1 = onnx.numpy_helper.from_array(value, name='neg1')  # not
         model.graph.initializer.append(neg1)  # not
-        model.graph.node.remove(model.graph.node[13])  # not
-        model.graph.node.remove(model.graph.node[12])  # not
+        model.graph.node.remove(model.graph.node[10+nodeBaseShift])  # not
+        model.graph.node.remove(model.graph.node[9+nodeBaseShift])  # not
         gt_neg1_node = onnx.helper.make_node(
             op_type='Greater',
             inputs=['/Expand_8_output_0', 'neg1'],
@@ -422,18 +469,21 @@ def convert_sam2_decoder_point_label():
             outputs=['/Cast_4_output_0'],
             name='/gt_neg1_cast',
             to=1)
-        model.graph.node.insert(12, gt_neg1_node)  # not
-        model.graph.node.insert(13, gt_neg1_cast)  # not
+        model.graph.node.insert(9+nodeBaseShift, gt_neg1_node)  # not
+        model.graph.node.insert(10+nodeBaseShift, gt_neg1_cast)  # not
 
 
 
-        model.graph.node.remove(model.graph.node[75])   #expand9
-        model.graph.node.remove(model.graph.node[74])  # expand9
-        model.graph.node.remove(model.graph.node[73])  # expand9
-        model.graph.node.remove(model.graph.node[72])   #expand9
-        model.graph.node.remove(model.graph.node[71])   #expand9
-        model.graph.node.remove(model.graph.node[70])   #expand9
-        model.graph.node.remove(model.graph.node[69])  # expand9
+
+
+
+        model.graph.node.remove(model.graph.node[72+nodeBaseShift])  # expand9
+        model.graph.node.remove(model.graph.node[71+nodeBaseShift])  # expand9
+        model.graph.node.remove(model.graph.node[70+nodeBaseShift])  # expand9
+        model.graph.node.remove(model.graph.node[69+nodeBaseShift])  # expand9
+        model.graph.node.remove(model.graph.node[68+nodeBaseShift])  # expand9
+        model.graph.node.remove(model.graph.node[67+nodeBaseShift])  # expand9
+        model.graph.node.remove(model.graph.node[66+nodeBaseShift])  # expand9
         
         dtype = model.graph.initializer[31].data_type
         params = np.frombuffer(
@@ -446,24 +496,29 @@ def convert_sam2_decoder_point_label():
             value=onnx.helper.make_tensor(
                 'value', onnx.TensorProto.FLOAT, [
                     1, 6,256], params.reshape([1, 6,256])))
-        model.graph.node.insert(67, Expand_9_output_0_node)  # expand9
+        model.graph.node.insert(
+            64+nodeBaseShift, Expand_9_output_0_node)  # expand9
 
-
-        model.graph.node.remove(model.graph.node[91])  # /transformer/Reshape
-        model.graph.node.remove(model.graph.node[90])  # /transformer/Reshape
-        model.graph.node.remove(model.graph.node[89])  # /transformer/Reshape
-        model.graph.node.remove(model.graph.node[88])  # /transformer/Reshape
-        model.graph.node.remove(model.graph.node[82])  # Reshape_9
-        model.graph.node.remove(model.graph.node[81])  # Concat_13
-        model.graph.node.remove(model.graph.node[80])  # Slice_4
-        model.graph.node.remove(model.graph.node[79])  # Shape_23
-        model.graph.node.remove(model.graph.node[78])  # Tile
-        model.graph.node.remove(model.graph.node[77])  # Reshape_8
-        model.graph.node.remove(model.graph.node[76])  # onehot
-        model.graph.node.remove(model.graph.node[75])  # Concat_11
-        model.graph.node.remove(model.graph.node[74])  # Reshape_7
-        model.graph.node.remove(model.graph.node[73])  # Gather_11
-        model.graph.node.remove(model.graph.node[72])  # Shape_21
+        # /transformer/Reshape
+        model.graph.node.remove(model.graph.node[88+nodeBaseShift])
+        # /transformer/Reshape
+        model.graph.node.remove(model.graph.node[87+nodeBaseShift])
+        # /transformer/Reshape
+        model.graph.node.remove(model.graph.node[86+nodeBaseShift])
+        model.graph.node.remove(model.graph.node[85+nodeBaseShift])  # /transformer/Reshape
+        model.graph.node.remove(
+            model.graph.node[79+nodeBaseShift])  # Reshape_9
+        model.graph.node.remove(
+            model.graph.node[78+nodeBaseShift])  # Concat_13
+        model.graph.node.remove(model.graph.node[77+nodeBaseShift])  # Slice_4
+        model.graph.node.remove(model.graph.node[76+nodeBaseShift])  # Shape_23
+        model.graph.node.remove(model.graph.node[75+nodeBaseShift])  # Tile
+        model.graph.node.remove(model.graph.node[74+nodeBaseShift])  # Reshape_8
+        model.graph.node.remove(model.graph.node[73+nodeBaseShift])  # onehot
+        model.graph.node.remove(model.graph.node[72+nodeBaseShift])  # Concat_11
+        model.graph.node.remove(model.graph.node[71+nodeBaseShift])  # Reshape_7
+        model.graph.node.remove(model.graph.node[70+nodeBaseShift])  # Gather_11
+        model.graph.node.remove(model.graph.node[69+nodeBaseShift])  # Shape_21
         value = np.array([1, 256, 64*64], dtype=np.int64)
         transformer_Reshape_output_0_shape = onnx.numpy_helper.from_array(
             value, name='transformer_Reshape_output_0_shape')
@@ -475,29 +530,36 @@ def convert_sam2_decoder_point_label():
                     'transformer_Reshape_output_0_shape'],
             outputs=['/transformer/Reshape_1_output_0'],
             name='/transformer/Reshape_1')
-        model.graph.node.insert(72, Reshape_9_output_0_node)  
+        model.graph.node.insert(69+nodeBaseShift, Reshape_9_output_0_node)
 
-        model.graph.node.remove(model.graph.node[76])  # /Shape_24
-        model.graph.node.remove(model.graph.node[75])  # /transformer/Slice
-        model.graph.node.remove(model.graph.node[74])  # /transformer/Concat
-        model.graph.node.remove(model.graph.node[73])  # /transformer/Reshape
+        model.graph.node.remove(
+            model.graph.node[73+nodeBaseShift])  # /Shape_24
+        model.graph.node.remove(
+            model.graph.node[72+nodeBaseShift])  # /transformer/Slice
+        # /transformer/Concat
+        model.graph.node.remove(model.graph.node[71+nodeBaseShift])
+        # /transformer/Reshape
+        model.graph.node.remove(model.graph.node[70+nodeBaseShift])
         transformer_Reshape_node = onnx.helper.make_node(
             op_type='Reshape',
             inputs=['/Add_11_output_0',
                     'transformer_Reshape_output_0_shape'],
             outputs=['/transformer/Reshape_output_0'],
             name='/transformer/Reshape')
-        model.graph.node.insert(73, transformer_Reshape_node)
+        model.graph.node.insert(70+nodeBaseShift, transformer_Reshape_node)
         onnx.checker.check_model(model)
 
-
-        model.graph.node.remove(model.graph.node[88])  # 0self_attn/Reshape
-        model.graph.node.remove(model.graph.node[87])  # 0self_attn/Concat        
-        model.graph.node.remove(model.graph.node[86])  # 0self_attn/Unsqueeze_1
-        model.graph.node.remove(model.graph.node[85])  # 0self_attn/Unsqueeze
-        model.graph.node.remove(model.graph.node[84])  # 0self_attn/Gather_1
-        model.graph.node.remove(model.graph.node[83])  # 0self_attn/Gather
-        model.graph.node.remove(model.graph.node[82])  # 0self_attn/Shape
+        model.graph.node.remove(
+            model.graph.node[85+nodeBaseShift])  # 0self_attn/Reshape
+        model.graph.node.remove(
+            model.graph.node[84+nodeBaseShift])  # 0self_attn/Concat
+        model.graph.node.remove(model.graph.node[83+nodeBaseShift])  # 0self_attn/Unsqueeze_1
+        # 0self_attn/Unsqueeze
+        model.graph.node.remove(model.graph.node[82+nodeBaseShift])
+        model.graph.node.remove(model.graph.node[81+nodeBaseShift])  # 0self_attn/Gather_1
+        model.graph.node.remove(model.graph.node[80+nodeBaseShift])  # 0self_attn/Gather
+        model.graph.node.remove(
+            model.graph.node[79+nodeBaseShift])  # 0self_attn/Shape
 
         transformer_layers0_selfattn_Reshape_node = onnx.helper.make_node(
             op_type='Reshape',
@@ -505,68 +567,83 @@ def convert_sam2_decoder_point_label():
                     'shape_1_x_8_32'],
             outputs=['/transformer/layers.0/self_attn/Reshape_output_0'],
             name='/transformer/layers.0/self_attn/Reshape')
-        model.graph.node.insert(82, transformer_layers0_selfattn_Reshape_node)
+        model.graph.node.insert(
+            79+nodeBaseShift, transformer_layers0_selfattn_Reshape_node)
         model = onnx.shape_inference.infer_shapes(model)
         onnx.checker.check_model(model)
 
-        model.graph.node.remove(model.graph.node[90])  # 0self_attn/Reshape
-        model.graph.node.remove(model.graph.node[89])  # 0self_attn/Concat
-        model.graph.node.remove(model.graph.node[88])  # 0self_attn/Unsqueeze_1
-        model.graph.node.remove(model.graph.node[87])  # 0self_attn/Unsqueeze
-        model.graph.node.remove(model.graph.node[86])  # 0self_attn/Gather_1
-        model.graph.node.remove(model.graph.node[85])  # 0self_attn/Gather
-        model.graph.node.remove(model.graph.node[84])  # 0self_attn/Shape
+        model.graph.node.remove(
+            model.graph.node[87+nodeBaseShift])  # 0self_attn/Reshape
+        model.graph.node.remove(
+            model.graph.node[86+nodeBaseShift])  # 0self_attn/Concat
+        model.graph.node.remove(model.graph.node[85+nodeBaseShift])  # 0self_attn/Unsqueeze_1
+        model.graph.node.remove(model.graph.node[84+nodeBaseShift])  # 0self_attn/Unsqueeze
+        # 0self_attn/Gather_1
+        model.graph.node.remove(model.graph.node[83+nodeBaseShift])
+        model.graph.node.remove(
+            model.graph.node[82+nodeBaseShift])  # 0self_attn/Gather
+        model.graph.node.remove(model.graph.node[81+nodeBaseShift])  # 0self_attn/Shape
         transformer_layers0_selfattn_Reshape1_node = onnx.helper.make_node(
             op_type='Reshape',
             inputs=['/transformer/layers.0/self_attn/k_proj/Add_output_0',
                     'shape_1_x_8_32'],
             outputs=['/transformer/layers.0/self_attn/Reshape_1_output_0'],
             name='/transformer/layers.0/self_attn/Reshape_1')
-        model.graph.node.insert(84, transformer_layers0_selfattn_Reshape1_node)
+        model.graph.node.insert(
+            81+nodeBaseShift, transformer_layers0_selfattn_Reshape1_node)
         model = onnx.shape_inference.infer_shapes(model)
         onnx.checker.check_model(model)
 
-
-        model.graph.node.remove(model.graph.node[91])  # 0self_attn/Reshape
-        model.graph.node.remove(model.graph.node[90])  # 0self_attn/Concat
-        model.graph.node.remove(model.graph.node[89])  # 0self_attn/Unsqueeze_1
-        model.graph.node.remove(model.graph.node[88])  # 0self_attn/Unsqueeze
-        model.graph.node.remove(model.graph.node[87])  # 0self_attn/Gather_1
-        model.graph.node.remove(model.graph.node[86])  # 0self_attn/Gather
-        model.graph.node.remove(model.graph.node[85])  # 0self_attn/Shape
+        model.graph.node.remove(
+            model.graph.node[88+nodeBaseShift])  # 0self_attn/Reshape
+        model.graph.node.remove(
+            model.graph.node[87+nodeBaseShift])  # 0self_attn/Concat
+        model.graph.node.remove(model.graph.node[86+nodeBaseShift])  # 0self_attn/Unsqueeze_1
+        # 0self_attn/Unsqueeze
+        model.graph.node.remove(model.graph.node[85+nodeBaseShift])
+        model.graph.node.remove(model.graph.node[84+nodeBaseShift])  # 0self_attn/Gather_1
+        model.graph.node.remove(model.graph.node[83+nodeBaseShift])  # 0self_attn/Gather
+        model.graph.node.remove(
+            model.graph.node[82+nodeBaseShift])  # 0self_attn/Shape
         transformer_layers0_selfattn_Reshape2_node = onnx.helper.make_node(
             op_type='Reshape',
             inputs=['/transformer/layers.0/self_attn/v_proj/Add_output_0',
                     'shape_1_x_8_32'],
             outputs=['/transformer/layers.0/self_attn/Reshape_2_output_0'],
             name='/transformer/layers.0/self_attn/Reshape_2')
-        model.graph.node.insert(85, transformer_layers0_selfattn_Reshape2_node)
+        model.graph.node.insert(
+            82+nodeBaseShift, transformer_layers0_selfattn_Reshape2_node)
         model = onnx.shape_inference.infer_shapes(model)
         onnx.checker.check_model(model)
 
-        model.graph.node.remove(model.graph.node[93])  # Sqrt_1
-        model.graph.node.remove(model.graph.node[91])  # Div_3
-        model.graph.node.remove(model.graph.node[90])  # Sqrt
-        model.graph.node.remove(model.graph.node[89])  # Cast_6
-        model.graph.node.remove(model.graph.node[88])  # Slice
-        model.graph.node.remove(model.graph.node[87])  # Shape_9
+        model.graph.node.remove(model.graph.node[90+nodeBaseShift])  # Sqrt_1
+        model.graph.node.remove(model.graph.node[88+nodeBaseShift])  # Div_3
+        model.graph.node.remove(model.graph.node[87+nodeBaseShift])  # Sqrt
+        model.graph.node.remove(model.graph.node[86+nodeBaseShift])  # Cast_6
+        model.graph.node.remove(model.graph.node[85+nodeBaseShift])  # Slice
+        model.graph.node.remove(model.graph.node[84+nodeBaseShift])  # Shape_9
         transformer_layers0_selfattn_Sqrt_1_node = onnx.helper.make_node(
             op_type='Constant',
             inputs=[],
             outputs=['/transformer/layers.0/self_attn/Sqrt_1_output_0'],
             name='/transformer/layers.0/self_attn/Sqrt_1',
             value=onnx.helper.make_tensor('value', onnx.TensorProto.FLOAT, [1], np.array([np.sqrt(1/np.sqrt(32.))])))
-        model.graph.node.insert(87,transformer_layers0_selfattn_Sqrt_1_node)
+        model.graph.node.insert(
+            84+nodeBaseShift, transformer_layers0_selfattn_Sqrt_1_node)
 
 
         model = onnx.shape_inference.infer_shapes(model)
         onnx.checker.check_model(model)
         onnx.save(model, 'decoderBody2.onnx')
+        cut_subgraph('decoderBody2.onnx', ['/ScatterND_1_output_0', '/Unsqueeze_8_output_0'],
+                     ['/transformer/layers.0/self_attn/Softmax_output_0', '/transformer/layers.0/self_attn/Transpose_1_output_0'], 'decoderBody2.onnx')
 
-        cut_subgraph('decoderBody2.onnx', [ 'pointSize'],
-                     ['shape_1_x_8_32'], 'decoderBody2.onnx')
 
+        model = onnx.load('decoderBody2.onnx')
+        model = onnx.shape_inference.infer_shapes(model)
+        onnx.checker.check_model(model)
         printNet(model)
+
 
         # cut_subgraph('decoderBody2.onnx', ['high_res_feats_0', 'high_res_feats_1', 'image_embed', '/ScatterND_1_output_0',
         #              '/Unsqueeze_8_output_0', 'mask_input', 'has_mask_input', 'orig_im_size'],
@@ -576,12 +653,11 @@ def convert_sam2_decoder_point_label():
             'decoderBody2.onnx', providers=onnxruntime.get_available_providers())
         pointCoords = session.run(
             None, {
-                    'pointSize': pointSize,
                 #    'high_res_feats_0': high_res_feats_0,
                 #    'high_res_feats_1': high_res_feats_1,
                 #    'image_embed': image_embed,
-                #    '/ScatterND_1_output_0': ScatterND_1_output_0,
-                #    '/Unsqueeze_8_output_0': Unsqueeze_8_output_0,
+                   '/ScatterND_1_output_0': ScatterND_1_output_0,
+                   '/Unsqueeze_8_output_0': Unsqueeze_8_output_0,
                 #    'mask_input': mask_input,
                 #    'has_mask_input': has_mask_input,
                 #    'orig_im_size': original_size
@@ -700,35 +776,97 @@ def convert_sam2_decoder_point_label():
         # # onnx.checker.check_model(model)
         # printNet(model)
   
+def creat_simple_net():
+    input = helper.make_tensor_value_info('input', TensorProto.FLOAT, [1,-1,2])
+    output = helper.make_tensor_value_info('output', TensorProto.FLOAT, [1, -1,256])
+    w1 = onnx.numpy_helper.from_array(np.random.rand(2, 256).astype(np.float32), name='w1')  # [2,256]
+    layer1 = onnx.helper.make_node(
+        op_type='MatMul',
+        inputs=['input','w1'],
+        outputs=['output'],
+        name='layer1')
+
+    graph = onnx.helper.make_graph(
+        [layer1],
+        'TwoLayerFC',
+        [input],
+        [output],
+        initializer=[w1]
+    )
+    model = helper.make_model(graph, producer_name='onnx-example')
+    onnx.checker.check_model(model)
+
+
+def test_dynamic_reshape():
+    # input = helper.make_tensor_value_info(
+    #     'input', TensorProto.FLOAT, [1, -1, 2])
+    # output = helper.make_tensor_value_info(
+    #     'output', TensorProto.FLOAT, [1, -1, 256])
+    # outputReshape = helper.make_tensor_value_info(
+    #     'outputReshape', TensorProto.FLOAT, [1,-1,8,32])
+    # w1 = onnx.numpy_helper.from_array(np.random.rand(
+    #     2, 256).astype(np.float32), name='w1')  # [2,256]
+    # const1 = onnx.numpy_helper.from_array(
+    #     np.array([1]).astype(np.int64), name='const1')  # [2,256]
+    # const8 = onnx.numpy_helper.from_array(
+    #     np.array([8]).astype(np.int64), name='const8')  # [2,256]
+    # const32 = onnx.numpy_helper.from_array(
+    #     np.array([32]).astype(np.int64), name='const32')  # [2,256]
+    # layer1 = onnx.helper.make_node(
+    #     op_type='MatMul',
+    #     inputs=['input', 'w1'],
+    #     outputs=['output'],
+    #     name='layer1')
+    # MulShapeLayer = onnx.helper.make_node(
+    #     op_type='Shape',
+    #     inputs=['output'],
+    #     outputs=['outShape'],
+    #     name='MulShapeLayer')
+    # getPtsCntLayer = onnx.helper.make_node(
+    #     op_type='Gather',
+    #     inputs=['outShape', 'const1'],
+    #     outputs=['PtsCnt'],
+    #     name='getPtsCntLayer')
+    # concatShapeLayer = onnx.helper.make_node(
+    #     op_type='Concat',
+    #     inputs=['const1', 'PtsCnt', 'const8', 'const32'],
+    #     outputs=['concatShape'],
+    #     name='concatShapeLayer',
+    #     axis=0)
+    # reshapeLayer = onnx.helper.make_node(
+    #     op_type='Reshape',
+    #     inputs=['output', 'concatShape'],
+    #     outputs=['outputReshape'],
+    #     name='reshapeLayerLayer')
+    # graph = onnx.helper.make_graph(
+    #     [layer1, MulShapeLayer, getPtsCntLayer, concatShapeLayer, reshapeLayer],
+    #     'TwoLayerFC',
+    #     [input],
+    #     [output, outputReshape],
+    #     initializer=[w1, const1,const8,const32]
+    # )
+    # model = helper.make_model(graph, producer_name='onnx-example')
+    # model = onnx.shape_inference.infer_shapes(model)
+    # onnx.checker.check_model(model)
+    # model.ir_version = 10
+    # model.opset_import[0].version = 21
+    # printNet(model)
+    # onnx.save(model, 'test.onnx')
 
 
 
+    model = onnx.load('test.onnx')
+    onnx.checker.check_model(model)
+    printNet(model)
+    session = onnxruntime.InferenceSession('test.onnx', providers=onnxruntime.get_available_providers())
+    coordPts = np.array([1, 2, 3, 4, 5, 6]).astype(np.float32).reshape(1, 3, 2)
+    out = session.run(None, {'input': coordPts})
+    print(out[0].shape)
+    print(out[0])
 
 
-# [[[4.8828125e-04 4.8828125e-04]
-#   [1.8745117e+00 1.0541992e+00]
-#   [0.0000000e+00 0.0000000e+00]]]
 
-    # session = onnxruntime.InferenceSession(
-    #     'pointLabelsIn.onnx', providers=onnxruntime.get_available_providers())
-    # pointLabels = session.run(
-    #     None, {"point_labels": point_labels})
-    # print(pointLabels[0].shape)
-    # print(pointLabels[0])
-
-
-# cut_subgraph('encoder.onnx', ['image'], ['/image_encoder/neck/position_encoding/Unsqueeze_8_output_0'], 'sub.onnx')
-# save_test_onnx_model()
-
-# sys.stdout = open('log.txt', 'w')
-# model = onnx.load('models/decoder.onnx')
-# model = onnx.load('models/decoder.onnx')
-# printNet(model)
-# session = onnxruntime.InferenceSession('testNet.onnx', providers=onnxruntime.get_available_providers())
-# inputs = np.ones([1, 64, 64, 1]).astype(np.float32)
-# outputs = session.run(None, {"inputs": inputs})
-
-
+# test_dynamic_reshape()
 # convert_sam2_hiera_large_encoder_to_opencvOnnx()
 convert_sam2_decoder_point_label()
 
