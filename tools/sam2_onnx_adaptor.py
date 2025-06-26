@@ -12,7 +12,6 @@ from torch.utils import data
 import onnx_graphsurgeon as gs
 import onnxruntime  
 import os
-import pnnx
 
 class testNet(torch.nn.Module):
     def __init__(self):
@@ -175,8 +174,37 @@ def convert_sam2_hiera_large_encoder_to_opencvOnnx():
     onnx.checker.check_model(model)
     onnx.save(model, 'models/opencv_encoder.onnx')
 
+def test_forward():
+    point_coords = np.array(
+        [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
+    point_labels = np.array([[1, 1,1,1,-1,1]]).astype(np.float32)
+    ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
+            [[[0., 0.]]]).astype(np.float32)), axis=1)/1024.
+    Unsqueeze_8_output_0 = np.expand_dims(np.concatenate(
+            (point_labels, np.array([[-1]]).astype(np.float32)), axis=1), 2)        
+    cut_subgraph('decoderBody.onnx', 
+                 ['/ScatterND_1_output_0', '/Unsqueeze_8_output_0'],
+                 ['/transformer/layers.0/self_attn/Softmax_output_0', '/transformer/layers.0/self_attn/Transpose_1_output_0'], 
+                 'decoderBody2.onnx')
+    session = onnxruntime.InferenceSession('decoderBody2.onnx', providers=onnxruntime.get_available_providers())
+    pointCoords = session.run(
+        None, {
+            #    'high_res_feats_0': high_res_feats_0,
+            #    'high_res_feats_1': high_res_feats_1,
+            #    'image_embed': image_embed,
+                '/ScatterND_1_output_0': ScatterND_1_output_0,
+                '/Unsqueeze_8_output_0': Unsqueeze_8_output_0,
+            #    'mask_input': mask_input,
+            #    'has_mask_input': has_mask_input,
+            #    'orig_im_size': original_size
+                })
 
+    print(pointCoords[0].shape)
+    print(pointCoords[0])
+    return
 def convert_sam2_decoder_point_label():
+    checkmodel=False
+    inferShapes=False
     # sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
     model = onnx.load('models/decoder.onnx')
     point_coords = np.array(
@@ -187,7 +215,7 @@ def convert_sam2_decoder_point_label():
         cut_subgraph('models/decoder.onnx',
                     ['point_coords'], ['/ScatterND_1_output_0'], 'pointCoordsIn.onnx')
         model = onnx.load('pointCoordsIn.onnx')
-        onnx.checker.check_model(model)
+        if checkmodel:onnx.checker.check_model(model)
         printNet(model)
         session = onnxruntime.InferenceSession(
             'pointCoordsIn.onnx', providers=onnxruntime.get_available_providers())
@@ -201,7 +229,7 @@ def convert_sam2_decoder_point_label():
         cut_subgraph('models/decoder.onnx',
                     ['point_labels'], ['/Unsqueeze_8_output_0'], 'pointLabelsIn.onnx')
         model = onnx.load('pointLabelsIn.onnx')
-        onnx.checker.check_model(model)
+        if checkmodel:onnx.checker.check_model(model)
         printNet(model)
         session = onnxruntime.InferenceSession(
             'pointLabelsIn.onnx', providers=onnxruntime.get_available_providers())
@@ -219,7 +247,7 @@ def convert_sam2_decoder_point_label():
                         '/transformer/layers.0/self_attn/v_proj/Add_output_0'
                         ], 'positionEmbeding.onnx')
         model = onnx.load('positionEmbeding.onnx')
-        onnx.checker.check_model(model)
+        if checkmodel:onnx.checker.check_model(model)
 
         model.graph.node.remove(model.graph.node[39])
         model.graph.node.remove(model.graph.node[38])
@@ -242,7 +270,7 @@ def convert_sam2_decoder_point_label():
             name = '/Concat_10',
             axis = 1)
         model.graph.node.insert(32,ConcatNode)
-        # onnx.checker.check_model(model)
+        if checkmodel: onnx.checker.check_model(model)
         onnx.save(model, 'positionEmbeding.onnx')
         printNet(model)
         print("positionEmbeding")
@@ -270,7 +298,7 @@ def convert_sam2_decoder_point_label():
                       '/transformer/layers.0/self_attn/Reshape_2_output_0'
                       ], 'positionEmbeding.onnx')
         model = onnx.load('positionEmbeding.onnx')
-        onnx.checker.check_model(model)
+        if checkmodel:onnx.checker.check_model(model)
         ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
             [[[0., 0.]]]).astype(np.float32)), axis=1)/1024.
         Unsqueeze_8_output_0 = np.expand_dims(np.concatenate(
@@ -308,7 +336,7 @@ def convert_sam2_decoder_point_label():
             name='/Concat_10',
             axis=1)
         model.graph.node.insert(32, ConcatNode)
-        # onnx.checker.check_model(model)
+        if checkmodel: onnx.checker.check_model(model)
         onnx.save(model, 'positionEmbeding.onnx')
         printNet(model)
         print("positionEmbeding")
@@ -331,7 +359,7 @@ def convert_sam2_decoder_point_label():
         cut_subgraph('models/decoder.onnx', ['high_res_feats_0', 'high_res_feats_1', 'image_embed', '/ScatterND_1_output_0',
                      '/Unsqueeze_8_output_0', 'mask_input', 'has_mask_input', 'orig_im_size'], ['masks', 'iou_predictions'], 'decoderBody.onnx')
         model = onnx.load('decoderBody.onnx')
-        onnx.checker.check_model(model)
+        if checkmodel: onnx.checker.check_model(model)
 
         pointSize = np.array([point_coords.shape[1]], dtype=np.float32)
         high_res_feats_0 = np.ones([1, 32, 256, 256]).astype(np.float32)
@@ -353,13 +381,13 @@ def convert_sam2_decoder_point_label():
                     '/ScatterND_1_output_0', TensorProto.FLOAT, [1, -1, 2])
                 model.graph.input.insert(index, ScatterND_1_output_0_node)
                 print('change the ScatterND_1_output_0 input node')
-            # if now_name == '/Unsqueeze_8_output_0':
-            #     model.graph.input.remove(model.graph.input[index])
-            #     Unsqueeze_8_output_0_node = helper.make_tensor_value_info(
-            #         '/Unsqueeze_8_output_0', TensorProto.FLOAT, [1, -1, 2])
-            #     model.graph.input.insert(index, Unsqueeze_8_output_0_node)
-            #     print('change the Unsqueeze_8_output_0 input node')
-            #     break
+            if now_name == '/Unsqueeze_8_output_0':
+                model.graph.input.remove(model.graph.input[index])
+                Unsqueeze_8_output_0_node = helper.make_tensor_value_info(
+                    '/Unsqueeze_8_output_0', TensorProto.FLOAT, [1, -1, 1])
+                model.graph.input.insert(index, Unsqueeze_8_output_0_node)
+                print('change the Unsqueeze_8_output_0 input node')
+                break
 
 # *************************************
         nodeBaseShift=0
@@ -452,6 +480,7 @@ def convert_sam2_decoder_point_label():
             outputs=['/Expand_8_output_0'],
             name='/Expand_8_output_0_node')
         model.graph.node.insert(7+nodeBaseShift, Expand_8_output_0_node)  # not
+
 
         value = np.array([-1], dtype=np.float32)  # not
         neg1 = onnx.numpy_helper.from_array(value, name='neg1')  # not
@@ -547,7 +576,7 @@ def convert_sam2_decoder_point_label():
             outputs=['/transformer/Reshape_output_0'],
             name='/transformer/Reshape')
         model.graph.node.insert(70+nodeBaseShift, transformer_Reshape_node)
-        onnx.checker.check_model(model)
+        if checkmodel:  onnx.checker.check_model(model)
 
         model.graph.node.remove(
             model.graph.node[85+nodeBaseShift])  # 0self_attn/Reshape
@@ -569,8 +598,8 @@ def convert_sam2_decoder_point_label():
             name='/transformer/layers.0/self_attn/Reshape')
         model.graph.node.insert(
             79+nodeBaseShift, transformer_layers0_selfattn_Reshape_node)
-        model = onnx.shape_inference.infer_shapes(model)
-        onnx.checker.check_model(model)
+        if inferShapes:model = onnx.shape_inference.infer_shapes(model)
+        if checkmodel:  onnx.checker.check_model(model)
 
         model.graph.node.remove(
             model.graph.node[87+nodeBaseShift])  # 0self_attn/Reshape
@@ -591,8 +620,8 @@ def convert_sam2_decoder_point_label():
             name='/transformer/layers.0/self_attn/Reshape_1')
         model.graph.node.insert(
             81+nodeBaseShift, transformer_layers0_selfattn_Reshape1_node)
-        model = onnx.shape_inference.infer_shapes(model)
-        onnx.checker.check_model(model)
+        if inferShapes:model = onnx.shape_inference.infer_shapes(model)
+        if checkmodel:  onnx.checker.check_model(model)
 
         model.graph.node.remove(
             model.graph.node[88+nodeBaseShift])  # 0self_attn/Reshape
@@ -613,8 +642,8 @@ def convert_sam2_decoder_point_label():
             name='/transformer/layers.0/self_attn/Reshape_2')
         model.graph.node.insert(
             82+nodeBaseShift, transformer_layers0_selfattn_Reshape2_node)
-        model = onnx.shape_inference.infer_shapes(model)
-        onnx.checker.check_model(model)
+        if inferShapes:model = onnx.shape_inference.infer_shapes(model)
+        if checkmodel:  onnx.checker.check_model(model)
 
         model.graph.node.remove(model.graph.node[90+nodeBaseShift])  # Sqrt_1
         model.graph.node.remove(model.graph.node[88+nodeBaseShift])  # Div_3
@@ -632,16 +661,18 @@ def convert_sam2_decoder_point_label():
             84+nodeBaseShift, transformer_layers0_selfattn_Sqrt_1_node)
 
 
-        model = onnx.shape_inference.infer_shapes(model)
-        onnx.checker.check_model(model)
+        if inferShapes:model = onnx.shape_inference.infer_shapes(model)
+        if checkmodel:  onnx.checker.check_model(model)
         onnx.save(model, 'decoderBody2.onnx')
         cut_subgraph('decoderBody2.onnx', ['/ScatterND_1_output_0', '/Unsqueeze_8_output_0'],
-                     ['/transformer/layers.0/self_attn/Softmax_output_0', '/transformer/layers.0/self_attn/Transpose_1_output_0'], 'decoderBody2.onnx')
-
+                     #['/transformer/layers.0/self_attn/Softmax_output_0', '/transformer/layers.0/self_attn/Transpose_1_output_0'], 
+                     ['/transformer/layers.0/self_attn/Softmax_output_0'], 
+                     'decoderBody2.onnx')
+#name='/transformer/layers.0/self_attn/MatMul_1' type='MatMul' input= output=['/transformer/layers.0/self_attn/MatMul_1_output_0']
 
         model = onnx.load('decoderBody2.onnx')
-        model = onnx.shape_inference.infer_shapes(model)
-        onnx.checker.check_model(model)
+        if inferShapes: model = onnx.shape_inference.infer_shapes(model)
+        if checkmodel:  onnx.checker.check_model(model)
         printNet(model)
 
 
@@ -864,11 +895,12 @@ def test_dynamic_reshape():
     print(out[0].shape)
     print(out[0])
 
-
-
+convert_sam2_decoder_point_label()
+test_forward()
+exit()
 # test_dynamic_reshape()
 # convert_sam2_hiera_large_encoder_to_opencvOnnx()
-convert_sam2_decoder_point_label()
+
 
 exit()
 print(onnx.helper.printable_graph(model.graph))
