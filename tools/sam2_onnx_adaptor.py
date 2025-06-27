@@ -203,9 +203,9 @@ def test_forward():
     print(pointCoords[0])
     return
 def convert_sam2_decoder_point_label():
-    checkmodel=False
-    inferShapes=False
-    # sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
+    checkmodel=True
+    inferShapes = True
+    sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
     model = onnx.load('models/decoder.onnx')
     point_coords = np.array(
         [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
@@ -391,10 +391,12 @@ def convert_sam2_decoder_point_label():
 
 # *************************************
         nodeBaseShift=0
-
+        inputArrayPlus6 = helper.make_tensor_value_info(
+            'inputArrayPlus6', TensorProto.FLOAT, [1, -1, 1]) 
+        model.graph.input.append(inputArrayPlus6)
         # new_input = helper.make_tensor_value_info(
         #     "pointSize", onnx.TensorProto.FLOAT, [1])
-        # model.graph.input.append(new_input)
+        # model.graph.input.append(inputArrayPlus6)
         # constNumbers = onnx.numpy_helper.from_array(
         #     np.arange(0+7, 256+7, 1, np.int64), name='constNumbers')  # [1,256]
         # model.graph.initializer.append(constNumbers)  # [1,256]
@@ -441,9 +443,18 @@ def convert_sam2_decoder_point_label():
         const32 = onnx.numpy_helper.from_array(
             np.array([32]).astype(np.int64), name='const32')  # 32
         model.graph.initializer.append(const32)  # 32
+        const256 = onnx.numpy_helper.from_array(
+            np.array([256]).astype(np.int64), name='const256')  # 256
+        model.graph.initializer.append(const256)  # 32
         constOnes256f = onnx.numpy_helper.from_array(
             np.ones([1, 1, 256]).astype(np.float32), name='constOnes256f')  # constOnes256f
-        model.graph.initializer.append(constOnes256f)  # 32
+        model.graph.initializer.append(constOnes256f)  # constOnes256f
+        array6 = onnx.numpy_helper.from_array(
+            np.ones([1, 6, 2]).astype(np.float32), name='array6')  # array6
+        model.graph.initializer.append(array6)  # 6
+        ones13 = onnx.numpy_helper.from_array(
+            np.ones([1, 8, 13, 1]).astype(np.float32), name='ones13')  # ones13
+        model.graph.initializer.append(ones13)  # ones13
 
         pointInShapeLayer = onnx.helper.make_node(
             op_type='Shape',
@@ -455,21 +466,57 @@ def convert_sam2_decoder_point_label():
             inputs=['pointInShape', 'const1'],
             outputs=['pointCnt'],
             name='pointCntLayer')
-        shape_1_x_8_32 = onnx.helper.make_node(
+        shape_1_p_8_32 = onnx.helper.make_node(
             op_type='Concat',
             inputs=['const1', 'pointCnt', 'const8', 'const32'],
-            outputs=['shape_1_x_8_32'],
-            name='shape_1_x_8_32',
+            outputs=['shape_1_p_8_32'],
+            name='shape_1_p_8_32',
+            axis=0)
+        
+ 
+        arrayPlus6ShapeNode = onnx.helper.make_node(
+            op_type='Shape',
+            inputs=['inputArrayPlus6'],
+            outputs=['arrayPlus6Shape'],
+            name='arrayPlus6Shape')
+        arrayPlus6CntNode = onnx.helper.make_node(
+            op_type='Gather',
+            inputs=['arrayPlus6Shape', 'const1'],
+            outputs=['arrayPlus6Cnt'],
+            name='arrayPlus6Cnt')
+        shape_1_p6_8_32 = onnx.helper.make_node(
+            op_type='Concat',
+            inputs=['const1', 'arrayPlus6Cnt', 'const8', 'const32'],
+            outputs=['shape_1_p6_8_32'],
+            name='shape_1_p6_8_32',
+            axis=0)
+        shape_1_p6_256 = onnx.helper.make_node(
+            op_type='Concat',
+            inputs=['const1', 'arrayPlus6Cnt', 'const256'],
+            outputs=['shape_1_p6_256'],
+            name='shape_1_p6_256',
             axis=0)
 
-        # shape_1_x_8_32_Node
+        # shape_1_p_8_32_Node
         model.graph.node.insert(nodeBaseShift, pointInShapeLayer)
         nodeBaseShift += 1
-        # shape_1_x_8_32_Node
+        # shape_1_p_8_32_Node
         model.graph.node.insert(nodeBaseShift, pointCntLayer)
         nodeBaseShift += 1
-        # shape_1_x_8_32_Node
-        model.graph.node.insert(nodeBaseShift, shape_1_x_8_32)
+        # shape_1_p_8_32_Node
+        model.graph.node.insert(nodeBaseShift, shape_1_p_8_32)
+        nodeBaseShift += 1  
+        # shape_1_p6_8_32_Node
+        model.graph.node.insert(nodeBaseShift, arrayPlus6ShapeNode)
+        nodeBaseShift += 1
+        # shape_1_p6_8_32_Node
+        model.graph.node.insert(nodeBaseShift, arrayPlus6CntNode)
+        nodeBaseShift += 1
+        # shape_1_p6_8_32_Node
+        model.graph.node.insert(nodeBaseShift, shape_1_p6_8_32)
+        nodeBaseShift += 1
+        # shape_1_p_256_Node
+        model.graph.node.insert(nodeBaseShift, shape_1_p6_256)
         nodeBaseShift += 1
 
         model.graph.node.remove(model.graph.node[8+nodeBaseShift])  # not
@@ -502,9 +549,7 @@ def convert_sam2_decoder_point_label():
         model.graph.node.insert(10+nodeBaseShift, gt_neg1_cast)  # not
 
 
-
-
-
+  
 
         model.graph.node.remove(model.graph.node[72+nodeBaseShift])  # expand9
         model.graph.node.remove(model.graph.node[71+nodeBaseShift])  # expand9
@@ -593,7 +638,7 @@ def convert_sam2_decoder_point_label():
         transformer_layers0_selfattn_Reshape_node = onnx.helper.make_node(
             op_type='Reshape',
             inputs=['/transformer/layers.0/self_attn/q_proj/Add_output_0',
-                    'shape_1_x_8_32'],
+                    'shape_1_p6_8_32'],
             outputs=['/transformer/layers.0/self_attn/Reshape_output_0'],
             name='/transformer/layers.0/self_attn/Reshape')
         model.graph.node.insert(
@@ -615,7 +660,7 @@ def convert_sam2_decoder_point_label():
         transformer_layers0_selfattn_Reshape1_node = onnx.helper.make_node(
             op_type='Reshape',
             inputs=['/transformer/layers.0/self_attn/k_proj/Add_output_0',
-                    'shape_1_x_8_32'],
+                    'shape_1_p6_8_32'],
             outputs=['/transformer/layers.0/self_attn/Reshape_1_output_0'],
             name='/transformer/layers.0/self_attn/Reshape_1')
         model.graph.node.insert(
@@ -637,7 +682,7 @@ def convert_sam2_decoder_point_label():
         transformer_layers0_selfattn_Reshape2_node = onnx.helper.make_node(
             op_type='Reshape',
             inputs=['/transformer/layers.0/self_attn/v_proj/Add_output_0',
-                    'shape_1_x_8_32'],
+                    'shape_1_p6_8_32'],
             outputs=['/transformer/layers.0/self_attn/Reshape_2_output_0'],
             name='/transformer/layers.0/self_attn/Reshape_2')
         model.graph.node.insert(
@@ -661,14 +706,79 @@ def convert_sam2_decoder_point_label():
             84+nodeBaseShift, transformer_layers0_selfattn_Sqrt_1_node)
 
 
+
+        model.graph.node.remove(model.graph.node[102+nodeBaseShift])#Reshape_3
+        model.graph.node.remove(
+            model.graph.node[101+nodeBaseShift])  # Concat_3
+        model.graph.node.remove(
+            model.graph.node[100+nodeBaseShift])  # Unsqueeze_11
+        model.graph.node.remove(
+            model.graph.node[99+nodeBaseShift])  # Unsqueeze_10
+        model.graph.node.remove(
+            model.graph.node[98+nodeBaseShift])  # Unsqueeze_9
+        model.graph.node.remove(model.graph.node[97+nodeBaseShift])  # Mul_2
+        model.graph.node.remove(
+            model.graph.node[95+nodeBaseShift])  # Gather_12
+        model.graph.node.remove(model.graph.node[94+nodeBaseShift]) #Gather_11
+        model.graph.node.remove(model.graph.node[93+nodeBaseShift])#Gather_10
+        model.graph.node.remove(model.graph.node[92+nodeBaseShift])  # Gather_9
+        model.graph.node.remove(model.graph.node[91+nodeBaseShift]) #Shape_10
+        transformer_layers0_selfattn_Reshape_3_node = onnx.helper.make_node(
+            op_type='Reshape',
+            inputs=['/transformer/layers.0/self_attn/Transpose_3_output_0',
+                    'shape_1_p6_256'],
+            outputs=['/transformer/layers.0/self_attn/Reshape_3_output_0'],
+            name='/transformer/layers.0/self_attn/Reshape_3')
+        model.graph.node.insert(
+            92+nodeBaseShift, transformer_layers0_selfattn_Reshape_3_node)
+        if inferShapes:
+            model = onnx.shape_inference.infer_shapes(model)
+        if checkmodel:
+            onnx.checker.check_model(model)
+
+
+
+        # model.graph.node.remove(model.graph.node[89+nodeBaseShift])  # Softmax
+        # MatMul_output_0_exp_node = onnx.helper.make_node(
+        #     op_type='Exp',
+        #     inputs=['/transformer/layers.0/self_attn/MatMul_output_0'],
+        #     outputs=['/transformer/layers.0/self_attn/MatMul_output_0_exp'],
+        #     name='MatMul_output_0_exp_node')
+        # MatMul_output_0_exp_sum_node = onnx.helper.make_node(
+        #     op_type='MatMul',
+        #     inputs=['/transformer/layers.0/self_attn/MatMul_output_0_exp', 'ones13'],
+        #     outputs=['/transformer/layers.0/self_attn/MatMul_output_0_exp_sum'],
+        #     name='MatMul_output_0_exp_sum_node')
+        # transformer_layers0_selfattn_Softmax_node = onnx.helper.make_node(
+        #     op_type='Div',
+        #     inputs=['/transformer/layers.0/self_attn/MatMul_output_0_exp',
+        #             '/transformer/layers.0/self_attn/MatMul_output_0_exp_sum'],
+        #     outputs=['/transformer/layers.0/self_attn/Softmax_output_0'],
+        #     name='transformer_layers0_selfattn_Softmax_node')
+        # model.graph.node.insert(
+        #     89+nodeBaseShift, transformer_layers0_selfattn_Softmax_node)
+        # model.graph.node.insert(
+        #     89+nodeBaseShift, MatMul_output_0_exp_sum_node)
+        # model.graph.node.insert(
+        #     89+nodeBaseShift, MatMul_output_0_exp_node)
+
+
+
+
         if inferShapes:model = onnx.shape_inference.infer_shapes(model)
         if checkmodel:  onnx.checker.check_model(model)
         onnx.save(model, 'decoderBody2.onnx')
-        cut_subgraph('decoderBody2.onnx', ['/ScatterND_1_output_0', '/Unsqueeze_8_output_0'],
-                     #['/transformer/layers.0/self_attn/Softmax_output_0', '/transformer/layers.0/self_attn/Transpose_1_output_0'], 
-                     ['/transformer/layers.0/self_attn/Softmax_output_0'], 
+        cut_subgraph('decoderBody2.onnx', 
+                    ['image_embed', '/ScatterND_1_output_0', '/Unsqueeze_8_output_0', 'inputArrayPlus6', 'mask_input', 'has_mask_input'],
+                     #['/transformer/layers.0/self_attn/Reshape_output_0','/transformer/layers.0/self_attn/Reshape_1_output_0'],
+                     ['/transformer/layers.0/cross_attn_token_to_image/MatMul_1_output_0',
+                        '/transformer/layers.0/cross_attn_token_to_image/Transpose_3_output_0',
+                        '/transformer/layers.0/cross_attn_token_to_image/Concat_3_output_0',
+                        '/transformer/layers.0/cross_attn_token_to_image/Shape_10_output_0'],
                      'decoderBody2.onnx')
-#name='/transformer/layers.0/self_attn/MatMul_1' type='MatMul' input= output=['/transformer/layers.0/self_attn/MatMul_1_output_0']
+        model = onnx.load('decoderBody2.onnx')
+        printNet(model)
+  
 
         model = onnx.load('decoderBody2.onnx')
         if inferShapes: model = onnx.shape_inference.infer_shapes(model)
@@ -684,18 +794,27 @@ def convert_sam2_decoder_point_label():
             'decoderBody2.onnx', providers=onnxruntime.get_available_providers())
         pointCoords = session.run(
             None, {
+                'inputArrayPlus6': np.concatenate((Unsqueeze_8_output_0, np.ones([1, 6, 1]).astype(Unsqueeze_8_output_0.dtype)), axis=1),
                 #    'high_res_feats_0': high_res_feats_0,
                 #    'high_res_feats_1': high_res_feats_1,
-                #    'image_embed': image_embed,
+                   'image_embed': image_embed,
                    '/ScatterND_1_output_0': ScatterND_1_output_0,
                    '/Unsqueeze_8_output_0': Unsqueeze_8_output_0,
-                #    'mask_input': mask_input,
-                #    'has_mask_input': has_mask_input,
+                   'mask_input': mask_input,
+                   'has_mask_input': has_mask_input,
                 #    'orig_im_size': original_size
                    })
 
-        print(pointCoords[0].shape)
         print(pointCoords[0])
+        print(pointCoords[0].shape)
+        print(pointCoords[1])
+        print(pointCoords[1].shape)
+        print(pointCoords[2])
+        print(pointCoords[2].shape)
+        print(pointCoords[3])
+        print(pointCoords[3].shape)
+        # print(pointCoords[4])
+        # print(pointCoords[4].shape)
         return
         print(pointCoords[0])
 
@@ -896,7 +1015,7 @@ def test_dynamic_reshape():
     print(out[0])
 
 convert_sam2_decoder_point_label()
-test_forward()
+# test_forward()
 exit()
 # test_dynamic_reshape()
 # convert_sam2_hiera_large_encoder_to_opencvOnnx()

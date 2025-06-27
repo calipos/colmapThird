@@ -144,6 +144,30 @@ void printInt64Blob(const cv::Mat& blob)
     std::cout << std::endl;
     return;
 }
+void checkSoftmax(const cv::Mat&blob)
+{
+    cv::dnn::MatShape shape = getBlobShape(blob);
+    int dim0 = 1;
+    int dim1 = shape.back();
+    for (int i = 0; i < shape.size()-1; i++)
+    {
+        dim0 *= shape[i];
+    }
+    std::vector<double>checkVALUE(dim0,0);
+    int idx = 0;
+    const float* data = (const float*)blob.data;
+    for (int i = 0; i < dim0; i++)
+    {
+        for (int j = 0; j < dim1; j++)
+        {
+            checkVALUE[i] += data[idx];
+            idx++;
+        }
+    }
+
+
+    return;
+}
 int test_dynamic_reshape()
 {
     cv::Mat input;
@@ -201,7 +225,9 @@ int main( int argc, const char** argv )
 
     cv::Mat point_coord_blob;
     cv::Mat point_label_blob;
+    cv::Mat inputArrayPlus6;
     generPositionBlob(point_coord, point_label, point_coord_blob, point_label_blob, netImgSize);
+    generTestBlob(inputArrayPlus6, { 1,static_cast<int>(point_coord.size())+6,1 });
     cv::Mat mask_input;
     generTestBlob(mask_input, { 1, 1, 1024 / 4, 1024 / 4 });
     mask_input.setTo(0);
@@ -217,6 +243,7 @@ int main( int argc, const char** argv )
         //positionEmbedingNet.setInput(high_res_feats_1, "high_res_feats_1");
         //positionEmbedingNet.setInput(image_embed, "image_embed");
         positionEmbedingNet.setInput(point_coord_blob, "/ScatterND_1_output_0");
+        positionEmbedingNet.setInput(inputArrayPlus6, "inputArrayPlus6");
         positionEmbedingNet.setInput(point_label_blob, "/Unsqueeze_8_output_0");
         //positionEmbedingNet.setInput(mask_input, "mask_input");
         //positionEmbedingNet.setInput(has_mask_input, "has_mask_input");
@@ -224,14 +251,19 @@ int main( int argc, const char** argv )
         std::vector<std::string> layersNames = positionEmbedingNet.getLayerNames();
         std::vector<std::string> unconnectedOutLayersNames = positionEmbedingNet.getUnconnectedOutLayersNames();
         std::vector<std::string> outLayersNames = {
-        "/transformer/layers.0/self_attn/MatMul_1_output_0"};
+            //"/transformer/layers.0/self_attn/MatMul_output_0",
+            //"/transformer/layers.0/self_attn/MatMul_output_0_exp",
+            //"/transformer/layers.0/self_attn/MatMul_output_0_exp_sum",
+            "/transformer/layers.0/Add_2_output_0"
+        };
         std::vector<cv::Mat> out;
         positionEmbedingNet.forward(out, outLayersNames);
         printBlob(out[0]);
-        //printBlob(out[1]);
-        //printBlob(out[2]);
-        //printBlob(out[3]);
-        //printBlob(out[3]);
+        printBlob(out[1]);
+        //checkSoftmax(out[1]);
+        printBlob(out[2]);
+        printBlob(out[3]);
+        printBlob(out[4]);
         std::cout << "forward ok " << std::endl;
     }
 
