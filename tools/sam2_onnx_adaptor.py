@@ -205,7 +205,9 @@ def test_forward():
 def convert_sam2_decoder_point_label():
     checkmodel=True
     inferShapes = True
-    sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
+    inputPointSize=-1# 6+1
+    inputPointSizePlus6=-1# 6+inputPointSize
+    # sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
     model = onnx.load('models/decoder.onnx')
     point_coords = np.array(
         [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
@@ -378,13 +380,13 @@ def convert_sam2_decoder_point_label():
             if now_name == '/ScatterND_1_output_0':
                 model.graph.input.remove(model.graph.input[index])
                 ScatterND_1_output_0_node = helper.make_tensor_value_info(
-                    '/ScatterND_1_output_0', TensorProto.FLOAT, [1, -1, 2])
+                    '/ScatterND_1_output_0', TensorProto.FLOAT, [1, inputPointSize, 2])
                 model.graph.input.insert(index, ScatterND_1_output_0_node)
                 print('change the ScatterND_1_output_0 input node')
             if now_name == '/Unsqueeze_8_output_0':
                 model.graph.input.remove(model.graph.input[index])
                 Unsqueeze_8_output_0_node = helper.make_tensor_value_info(
-                    '/Unsqueeze_8_output_0', TensorProto.FLOAT, [1, -1, 1])
+                    '/Unsqueeze_8_output_0', TensorProto.FLOAT, [1, inputPointSize, 1])
                 model.graph.input.insert(index, Unsqueeze_8_output_0_node)
                 print('change the Unsqueeze_8_output_0 input node')
                 break
@@ -392,7 +394,7 @@ def convert_sam2_decoder_point_label():
 # *************************************
         nodeBaseShift=0
         inputArrayPlus6 = helper.make_tensor_value_info(
-            'inputArrayPlus6', TensorProto.FLOAT, [1, -1, 1]) 
+            'inputArrayPlus6', TensorProto.FLOAT, [1, inputPointSizePlus6, 1])
         model.graph.input.append(inputArrayPlus6)
         # new_input = helper.make_tensor_value_info(
         #     "pointSize", onnx.TensorProto.FLOAT, [1])
@@ -771,12 +773,12 @@ def convert_sam2_decoder_point_label():
         cut_subgraph('decoderBody2.onnx', 
                     ['image_embed', '/ScatterND_1_output_0', '/Unsqueeze_8_output_0', 'inputArrayPlus6', 'mask_input', 'has_mask_input'],
                      #['/transformer/layers.0/self_attn/Reshape_output_0','/transformer/layers.0/self_attn/Reshape_1_output_0'],
-                     ['/transformer/layers.0/cross_attn_token_to_image/MatMul_1_output_0',
-                        '/transformer/layers.0/cross_attn_token_to_image/Transpose_3_output_0',
-                        '/transformer/layers.0/cross_attn_token_to_image/Concat_3_output_0',
-                        '/transformer/layers.0/cross_attn_token_to_image/Shape_10_output_0'],
+                     ['/transformer/layers.0/Add_2_output_0'],
                      'decoderBody2.onnx')
         model = onnx.load('decoderBody2.onnx')
+        if inferShapes:model = onnx.shape_inference.infer_shapes(model)
+        if checkmodel:  onnx.checker.check_model(model)
+        onnx.save(model, 'decoderBody2.onnx')
         printNet(model)
   
 
@@ -811,10 +813,6 @@ def convert_sam2_decoder_point_label():
         print(pointCoords[1].shape)
         print(pointCoords[2])
         print(pointCoords[2].shape)
-        print(pointCoords[3])
-        print(pointCoords[3].shape)
-        # print(pointCoords[4])
-        # print(pointCoords[4].shape)
         return
         print(pointCoords[0])
 
