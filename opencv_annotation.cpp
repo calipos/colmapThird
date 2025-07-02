@@ -104,22 +104,76 @@ cv::dnn::MatShape getBlobShape(const cv::Mat& blob)
     std::cout << std::endl;
     return shapeRet;
 }
+std::vector<int>getDenominators(const cv::dnn::MatShape& shape)
+{
+    std::vector<int>denominators(shape.size(),1);
+    for (int i = shape.size() - 2; i >= 0; i--)
+    {
+        denominators[i] = denominators[i+1] * shape[i + 1];
+    }
+    denominators.back() = 1;
+    return denominators;
+}
+std::vector<int>getPos(const int& idx, const std::vector<int>&denominators)
+{
+    std::vector<int>pos(denominators.size(),0);
+    pos[0] = idx;
+    for (size_t i = 0; i < denominators.size(); i++)
+    {
+        if (i+1< denominators.size())
+        {
+            pos[i+1]= pos[i] % denominators[i];
+        } 
+        pos[i] /= denominators[i];
+    }
+    return pos;
+}
 void printBlob(const cv::Mat& blob)
 {
     cv::dnn::MatShape shape = getBlobShape(blob);
+    std::vector<int>denominators = getDenominators(shape);
     int total = 1;
     for (int c = 0; c < shape.size(); c++)
     {
         total *= shape[c];
     }
-    int slashN = shape.back();
+    int lineCnt = shape.back();
+    bool slashN = true;
     for (int i = 0; i < total; i++)
     {
-        if (i % slashN == 0)
+        if (i % lineCnt == 0 && i > 0&& slashN)
         {
             std::cout << std::endl;
         }
-        std::cout << ((float*)blob.data)[i] << " ";        
+        std::vector<int>pos = getPos(i, denominators);
+        int showFlag = 0;
+        for (size_t j = 0; j < shape.size(); j++)
+        {
+            if (shape[j] > 10 && (pos[j] == 4 || pos[j] == (shape[j] - 4)))
+            {
+                showFlag = 1;
+                break;
+            }
+            if (shape[j]>10 && pos[j]>4&& pos[j]< (shape[j]-4))
+            {
+                showFlag = 2;
+                break;
+            }
+        }
+        if (showFlag == 0)
+        {
+            std::cout << ((float*)blob.data)[i] << " ";
+            slashN = true;
+        }
+        else if (showFlag == 1)
+        {
+            std::cout << " ... ";
+            slashN = true;
+        }
+        else if (showFlag == 2)
+        {
+            slashN = false;
+        }
     }
     std::cout << std::endl;
     return;
@@ -241,20 +295,20 @@ int main( int argc, const char** argv )
     {
         //positionEmbedingNet.setInput(high_res_feats_0, "high_res_feats_0");
         //positionEmbedingNet.setInput(high_res_feats_1, "high_res_feats_1");
-        //positionEmbedingNet.setInput(image_embed, "image_embed");
-        positionEmbedingNet.setInput(point_coord_blob, "/ScatterND_1_output_0");
-        positionEmbedingNet.setInput(inputArrayPlus6, "inputArrayPlus6");
-        positionEmbedingNet.setInput(point_label_blob, "/Unsqueeze_8_output_0");
-        //positionEmbedingNet.setInput(mask_input, "mask_input");
-        //positionEmbedingNet.setInput(has_mask_input, "has_mask_input");
+        positionEmbedingNet.setInput(image_embed, "image_embed");
+        //positionEmbedingNet.setInput(point_coord_blob, "/ScatterND_1_output_0");
+        //positionEmbedingNet.setInput(inputArrayPlus6, "inputArrayPlus6");
+        //positionEmbedingNet.setInput(point_label_blob, "/Unsqueeze_8_output_0");
+        positionEmbedingNet.setInput(mask_input, "mask_input");
+        positionEmbedingNet.setInput(has_mask_input, "has_mask_input");
         //positionEmbedingNet.setInput(orig_im_size, "orig_im_size");
         std::vector<std::string> layersNames = positionEmbedingNet.getLayerNames();
         std::vector<std::string> unconnectedOutLayersNames = positionEmbedingNet.getUnconnectedOutLayersNames();
         std::vector<std::string> outLayersNames = {
-            //"/transformer/layers.0/self_attn/MatMul_output_0",
-            //"/transformer/layers.0/self_attn/MatMul_output_0_exp",
-            //"/transformer/layers.0/self_attn/MatMul_output_0_exp_sum",
-            "/transformer/layers.0/Add_2_output_0"
+            "/transformer/layers.0/cross_attn_token_to_image/Transpose_1_output_0",
+            //"/transformer/layers.0/self_attn/Softmax_output_0",
+            //"/transformer/layers.0/self_attn/Transpose_1_output_0",
+            //"transformer/layers.0/self_attn/MatMul_1_output_0"
         };
         std::vector<cv::Mat> out;
         positionEmbedingNet.forward(out, outLayersNames);
