@@ -12,10 +12,26 @@ from torch.utils import data
 import onnx_graphsurgeon as gs
 import onnxruntime  
 import os
-# ['image_embed', '/ScatterND_1_output_0','/Unsqueeze_8_output_0',  'mask_input', 'has_mask_input']
-shared_input = ['image_embed',   'mask_input', 'has_mask_input']
+shared_input = ['image_embed', '/ScatterND_1_output_0','/Unsqueeze_8_output_0',  'mask_input', 'has_mask_input']
 shared_out = [
-    '/transformer/layers.0/cross_attn_token_to_image/MatMul_1_output_0']
+    '/transformer/layers.0/self_attn/Softmax_output_0','/transformer/layers.0/self_attn/Transpose_1_output_0'
+    #'/transformer/layers.0/cross_attn_token_to_image/MatMul_1_output_0'
+    ]
+checkmodel=False
+inferShapes = False
+point_coords = np.array(
+    [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
+point_labels = np.array([[1, 1,1,1,-1,1]]).astype(np.float32)
+ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
+        [[[0., 0.]]]).astype(np.float32)), axis=1)/1024.
+Unsqueeze_8_output_0 = np.expand_dims(np.concatenate(
+        (point_labels, np.array([[-1]]).astype(np.float32)), axis=1), 2)       
+high_res_feats_0 = np.ones([1, 32, 256, 256]).astype(np.float32)
+high_res_feats_1 = np.ones([1, 64, 128, 128]).astype(np.float32)
+image_embed = np.ones([1, 256, 64, 64]).astype(np.float32)
+mask_input = np.zeros((1, 1, 1024//4,1024//4), dtype=np.float32)
+has_mask_input = np.array([0], dtype=np.float32)
+original_size = np.array([1080,1920], dtype=np.int32)
 class testNet(torch.nn.Module):
     def __init__(self):
         super(testNet, self).__init__()
@@ -177,26 +193,13 @@ def convert_sam2_hiera_large_encoder_to_opencvOnnx():
 
 def test_forward():
     # sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
-    point_coords = np.array(
-        [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
-    point_labels = np.array([[1, 1,1,1,-1,1]]).astype(np.float32)
-    ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
-            [[[0., 0.]]]).astype(np.float32)), axis=1)/1024.
-    Unsqueeze_8_output_0 = np.expand_dims(np.concatenate(
-            (point_labels, np.array([[-1]]).astype(np.float32)), axis=1), 2)       
-    high_res_feats_0 = np.ones([1, 32, 256, 256]).astype(np.float32)
-    high_res_feats_1 = np.ones([1, 64, 128, 128]).astype(np.float32)
-    image_embed = np.ones([1, 256, 64, 64]).astype(np.float32)
-    mask_input = np.zeros((1, 1, 1024//4,1024//4), dtype=np.float32)
-    has_mask_input = np.array([0], dtype=np.float32)
-    original_size = np.array([1080,1920], dtype=np.int32)
     cut_subgraph('models/decoder.onnx',
                  shared_input,
                  shared_out,
                  'decoderBody2.onnx')
     model = onnx.load('decoderBody2.onnx')
-    model = onnx.shape_inference.infer_shapes(model)
-    onnx.checker.check_model(model)
+    if inferShapes:model = onnx.shape_inference.infer_shapes(model)
+    if checkmodel:onnx.checker.check_model(model)
     session = onnxruntime.InferenceSession('decoderBody2.onnx', providers=onnxruntime.get_available_providers())
     datain={}
     if 'image_embed' in shared_input:
@@ -214,14 +217,13 @@ def test_forward():
     pointCoords = session.run(
         None, datain)
 
-    print(pointCoords[0].shape)
-    print(pointCoords[0])
+    for i in range(len(shared_out)):
+        print(pointCoords[i].shape)
+        print(pointCoords[i])
     # print(pointCoords[1].shape)
     # print(pointCoords[1])
     return
 def convert_sam2_decoder_point_label():
-    checkmodel=True
-    inferShapes = True
     inputPointSize=-1# 6+1
     inputPointSizePlus6=-1# 6+inputPointSize
     sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
@@ -294,10 +296,6 @@ def convert_sam2_decoder_point_label():
         printNet(model)
         print("positionEmbeding")
         # return
-        ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
-            [[[0., 0.]]]).astype(np.float32)), axis=1)/1024.
-        Unsqueeze_8_output_0 = np.expand_dims(np.concatenate(
-            (point_labels, np.array([[-1]]).astype(np.float32)), axis=1), 2)
         session = onnxruntime.InferenceSession(
             'positionEmbeding.onnx', providers=onnxruntime.get_available_providers())
         positionEmbeding = session.run(
@@ -318,10 +316,6 @@ def convert_sam2_decoder_point_label():
                       ], 'positionEmbeding.onnx')
         model = onnx.load('positionEmbeding.onnx')
         if checkmodel:onnx.checker.check_model(model)
-        ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
-            [[[0., 0.]]]).astype(np.float32)), axis=1)/1024.
-        Unsqueeze_8_output_0 = np.expand_dims(np.concatenate(
-            (point_labels, np.array([[-1]]).astype(np.float32)), axis=1), 2)
         session = onnxruntime.InferenceSession(
             'positionEmbeding.onnx', providers=onnxruntime.get_available_providers())
         positionEmbeding = session.run(
@@ -360,10 +354,6 @@ def convert_sam2_decoder_point_label():
         printNet(model)
         print("positionEmbeding")
         # return
-        ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
-            [[[0., 0.]]]).astype(np.float32)), axis=1)/1024.
-        Unsqueeze_8_output_0 = np.expand_dims(np.concatenate(
-            (point_labels, np.array([[-1]]).astype(np.float32)), axis=1), 2)
         session = onnxruntime.InferenceSession(
             'positionEmbeding.onnx', providers=onnxruntime.get_available_providers())
         positionEmbeding = session.run(
@@ -379,19 +369,6 @@ def convert_sam2_decoder_point_label():
                      '/Unsqueeze_8_output_0', 'mask_input', 'has_mask_input', 'orig_im_size'], ['masks', 'iou_predictions'], 'decoderBody.onnx')
         model = onnx.load('decoderBody.onnx')
         if checkmodel: onnx.checker.check_model(model)
-
-        pointSize = np.array([point_coords.shape[1]], dtype=np.float32)
-        high_res_feats_0 = np.ones([1, 32, 256, 256]).astype(np.float32)
-        high_res_feats_1 = np.ones([1, 64, 128, 128]).astype(np.float32)
-        image_embed = np.ones([1, 256, 64, 64]).astype(np.float32)
-        ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
-            [[[0., 0.]]]).astype(np.float32)), axis=1)/1024.
-        Unsqueeze_8_output_0 = np.expand_dims(np.concatenate(
-            (point_labels, np.array([[-1]]).astype(np.float32)), axis=1), 2)
-        mask_input = np.zeros((1, 1, 1024//4,1024//4), dtype=np.float32)
-        has_mask_input = np.array([0], dtype=np.float32)
-        original_size = np.array([1080,1920], dtype=np.int32)
-
         for index, eachNode in enumerate(model.graph.input):
             now_name = model.graph.input[index].name
             if now_name == '/ScatterND_1_output_0':
@@ -469,8 +446,11 @@ def convert_sam2_decoder_point_label():
             np.array([128]).astype(np.int64), name='const128')  # 128
         model.graph.initializer.append(const128)  # 128
         shape_1_4096_8_16 = onnx.numpy_helper.from_array(
-            np.array([1,4096,8,16]).astype(np.int64), name='shape_1_4096_8_16')  # 128
-        model.graph.initializer.append(shape_1_4096_8_16)  # 128
+            np.array([1,4096,8,16]).astype(np.int64), name='shape_1_4096_8_16')  # 1_4096_8_16
+        model.graph.initializer.append(shape_1_4096_8_16)  # 1_4096_8_16
+        shape_1_256_4096 = onnx.numpy_helper.from_array(
+            np.array([1,256,4096]).astype(np.int64), name='shape_1_256_4096')  # 1_4096_8_16
+        model.graph.initializer.append(shape_1_256_4096)  # 1_256_4096
         constOnes256f = onnx.numpy_helper.from_array(
             np.ones([1, 1, 256]).astype(np.float32), name='constOnes256f')  # constOnes256f
         model.graph.initializer.append(constOnes256f)  # constOnes256f
@@ -813,7 +793,40 @@ def convert_sam2_decoder_point_label():
         model.graph.node.insert(
             removeIndexlist[-1], transformer_layers0_cross_attn_Reshape2_node)
 
+        printNet(model)
 
+        removelist = [
+            '/Shape_21',
+            '/Gather_11',
+            '/Reshape_7',
+            '/Concat_11',
+            '/OneHot',
+            '/Reshape_8',
+            '/Tile',
+            '/Shape_23',
+            '/Slice_4',
+            '/Concat_13',
+            '/Reshape_9',
+            '/transformer/Shape_1',
+            '/transformer/Slice_1',
+            '/transformer/Concat_1',
+            '/transformer/Reshape_1']
+        removeIndexlist = []
+        for i, node in enumerate(model.graph.node):
+            if node.name in removelist:
+                removeIndexlist.append(i)
+        removeIndexlist.sort(reverse=True)
+        for removeI in removeIndexlist:
+            model.graph.node.remove(model.graph.node[removeI])
+        transformer_Reshape_1_node = onnx.helper.make_node(
+            op_type='Reshape',
+            inputs=['/Unsqueeze_11_output_0','shape_1_256_4096'],
+            outputs=['/transformer/Reshape_1_output_0'],
+            name='/transformer/Reshape_1_output_0')
+        model.graph.node.insert(
+            removeIndexlist[-1], transformer_Reshape_1_node)
+
+    
 
         if inferShapes:model = onnx.shape_inference.infer_shapes(model)
         if checkmodel:  onnx.checker.check_model(model)
@@ -850,10 +863,9 @@ def convert_sam2_decoder_point_label():
             'decoderBody2.onnx', providers=onnxruntime.get_available_providers())
         pointCoords = session.run(
             None, datain)
-        print(pointCoords[0])
-        print(pointCoords[0].shape)
-        # print(pointCoords[1])
-        # print(pointCoords[1].shape)
+        for i in range(len(shared_out)):
+            print(pointCoords[i].shape)
+            print(pointCoords[i])
         return
         print(pointCoords[0])
 
