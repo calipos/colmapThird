@@ -139,6 +139,8 @@ void printBlob(const cv::Mat& blob)
     }
     int lineCnt = shape.back();
     bool slashN = true;
+    int dotCount = 0;
+    int dotCountMax = 10;
     for (int i = 0; i < total; i++)
     {
         if (i % lineCnt == 0 && i > 0 && slashN)
@@ -162,12 +164,17 @@ void printBlob(const cv::Mat& blob)
         }
         if (showFlag == 0)
         {
+            dotCount = 0;
             std::cout << ((float*)blob.data)[i] << " ";
             slashN = true;
         }
         else if (showFlag == 1)
         {
-            std::cout << " ... ";
+            if (dotCount< dotCountMax)
+            {
+                std::cout << " ... ";
+                dotCount += 1;
+            }
             slashN = true;
         }
         else if (showFlag == 2)
@@ -273,7 +280,7 @@ int main(int argc, const char** argv)
     generTestBlob(image_embed, { 1, 256, 64, 64 });
 
     cv::Size originalImgSize(1920, 1080);
-    cv::dnn::Net positionEmbedingNet = cv::dnn::readNetFromONNX("D:/repo/colmap-third/decoderBody2.onnx");
+    cv::dnn::Net positionEmbedingNet = cv::dnn::readNetFromONNX("D:/repo/colmapThird/decoderBody2.onnx");
     std::vector<cv::Vec2f>point_coord = { {10., 10.} ,{500., 400.},{200., 600.},{100., 300.},{200., 300.},{1,1} };
     std::vector<float>point_label = { 1,1,1,1,-1 ,1 };
 
@@ -287,28 +294,25 @@ int main(int argc, const char** argv)
     mask_input.setTo(0);
     cv::Mat has_mask_input;
     generTestBlob(has_mask_input, { 1 });
-    has_mask_input.setTo(0);
+    has_mask_input.setTo(1);
     cv::Mat orig_im_size;
     generTestBlob(orig_im_size, { 2 });
     ((float*)orig_im_size.data)[0] = originalImgSize.width;
     ((float*)orig_im_size.data)[1] = originalImgSize.height;
     {
-        //positionEmbedingNet.setInput(high_res_feats_0, "high_res_feats_0");
-        //positionEmbedingNet.setInput(high_res_feats_1, "high_res_feats_1");
+        positionEmbedingNet.setInput(high_res_feats_0, "high_res_feats_0");
+        positionEmbedingNet.setInput(high_res_feats_1, "high_res_feats_1");
         positionEmbedingNet.setInput(image_embed, "image_embed");
         positionEmbedingNet.setInput(point_coord_blob, "/ScatterND_1_output_0");
         positionEmbedingNet.setInput(inputArrayPlus6, "inputArrayPlus6");
         positionEmbedingNet.setInput(point_label_blob, "/Unsqueeze_8_output_0");
         positionEmbedingNet.setInput(mask_input, "mask_input");
         positionEmbedingNet.setInput(has_mask_input, "has_mask_input");
-        //positionEmbedingNet.setInput(orig_im_size, "orig_im_size");
+        positionEmbedingNet.setInput(orig_im_size, "orig_im_size");
         std::vector<std::string> layersNames = positionEmbedingNet.getLayerNames();
         std::vector<std::string> unconnectedOutLayersNames = positionEmbedingNet.getUnconnectedOutLayersNames();
         std::vector<std::string> outLayersNames = {
-            //"/transformer/layers.0/self_attn/MatMul_1_output_0",
-            "/transformer/layers.0/self_attn/Softmax_output_0",
-            "/transformer/layers.0/self_attn/Transpose_1_output_0",
-            //"transformer/layers.0/self_attn/MatMul_1_output_0"
+            "/transformer/final_attn_token_to_image/MatMul_1_output_0"
         };
         std::vector<cv::Mat> out;
         positionEmbedingNet.forward(out, outLayersNames);
