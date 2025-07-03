@@ -20,14 +20,15 @@ shared_input = [
     '/Unsqueeze_8_output_0', 
     'mask_input', 
     'has_mask_input',
-    'orig_im_size'
+    # 'orig_im_size'
     ]
 shared_out = [
-    'masks', 'iou_predictions', 
-    '/Slice_7_output_0', '/Flatten_1_output_0'
+    #'masks', 'iou_predictions'
+    '/Reshape_12_output_0','/iou_prediction_head/Sigmoid_output_0',
+    '/Slice_8_output_0','/Shape_37_output_0','/Shape_37_output_0'
     ]
-checkmodel=True
-inferShapes = True
+checkmodel = False
+inferShapes = False
 point_coords = np.array(
     [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
 point_labels = np.array([[1, 1,1,1,-1,1]]).astype(np.float32)
@@ -209,11 +210,11 @@ def test_forward():
     cut_subgraph('models/decoder.onnx',
                  shared_input,
                  shared_out,
-                 'decoderBody2.onnx')
-    model = onnx.load('decoderBody2.onnx')
+                 'decoderBody_.onnx')
+    model = onnx.load('decoderBody_.onnx')
     if inferShapes:model = onnx.shape_inference.infer_shapes(model)
     if checkmodel:onnx.checker.check_model(model)
-    session = onnxruntime.InferenceSession('decoderBody2.onnx', providers=onnxruntime.get_available_providers())
+    session = onnxruntime.InferenceSession('decoderBody_.onnx', providers=onnxruntime.get_available_providers())
     datain={}
     if 'image_embed' in shared_input:
         datain['image_embed'] = image_embed
@@ -1167,7 +1168,7 @@ def convert_sam2_decoder_point_label():
         removeIndexlist.sort(reverse=True)
         for removeI in removeIndexlist:
             model.graph.node.remove(model.graph.node[removeI])
-        layers1_final_attn_token_to_image_Reshape_node = onnx.helper.make_node(
+        final_attn_token_to_image_Reshape_node = onnx.helper.make_node(
             op_type='Reshape',
             inputs=['/transformer/final_attn_token_to_image/q_proj/Add_output_0',
                     'shape_1_p6_8_16'],
@@ -1175,7 +1176,38 @@ def convert_sam2_decoder_point_label():
                 '/transformer/final_attn_token_to_image/Reshape_output_0'],
             name='/transformer/final_attn_token_to_image/Reshape')
         model.graph.node.insert(
-            removeIndexlist[-1], layers1_final_attn_token_to_image_Reshape_node)
+            removeIndexlist[-1], final_attn_token_to_image_Reshape_node)
+ 
+
+        removelist = [
+            '/transformer/final_attn_token_to_image/Shape_10',
+            '/transformer/final_attn_token_to_image/Gather_9',
+            '/transformer/final_attn_token_to_image/Gather_10',
+            '/transformer/final_attn_token_to_image/Gather_11',
+            '/transformer/final_attn_token_to_image/Gather_12',
+            '/transformer/final_attn_token_to_image/Mul_2',
+            '/transformer/final_attn_token_to_image/Unsqueeze_9',
+            '/transformer/final_attn_token_to_image/Unsqueeze_10',
+            '/transformer/final_attn_token_to_image/Unsqueeze_11',
+            '/transformer/final_attn_token_to_image/Concat_3',
+            '/transformer/final_attn_token_to_image/Reshape_3']
+        removeIndexlist = []
+        for i, node in enumerate(model.graph.node):
+            if node.name in removelist:
+                removeIndexlist.append(i)
+        removeIndexlist.sort(reverse=True)
+        for removeI in removeIndexlist:
+            model.graph.node.remove(model.graph.node[removeI])
+        final_attn_token_to_image_Reshape_3_node = onnx.helper.make_node(
+            op_type='Reshape',
+            inputs=['/transformer/final_attn_token_to_image/Transpose_3_output_0',
+                    'shape_1_p6_128'],
+            outputs=[
+                '/transformer/final_attn_token_to_image/Reshape_3_output_0'],
+            name='/transformer/final_attn_token_to_image/Reshape_3')
+        model.graph.node.insert(
+            removeIndexlist[-1]+1, final_attn_token_to_image_Reshape_3_node)
+
 
         removelist = [
             '/Shape_28',
@@ -1200,26 +1232,6 @@ def convert_sam2_decoder_point_label():
         model.graph.node.insert(
             removeIndexlist[-1]+2, Reshape_12_node)
 
-        removelist = [
-            '/Shape_32',
-            '/Gather_25',
-            '/Range_4']
-        removeIndexlist = []
-        for i, node in enumerate(model.graph.node):
-            if node.name in removelist:
-                removeIndexlist.append(i)
-        removeIndexlist.sort(reverse=True)
-        for removeI in removeIndexlist:
-            model.graph.node.remove(model.graph.node[removeI])
-        Range_4_output_0_node = onnx.helper.make_node(
-            op_type='Constant',
-            inputs=[],
-            outputs=['/Range_4_output_0'],
-            name='/Range_4_output_0',
-            value=onnx.helper.make_tensor(
-                'value', onnx.TensorProto.INT64, [
-                    1], np.array([0]).astype(np.int64)))
-        model.graph.node.insert(removeIndexlist[-1], Range_4_output_0_node)
 
 
         if inferShapes:
@@ -1354,7 +1366,7 @@ def test_dynamic_reshape():
 if __name__=='__main__':
     # test_dynamic_reshape()
     test_forward()
-    convert_sam2_decoder_point_label()
+    # convert_sam2_decoder_point_label()
     exit()
 
 # convert_sam2_hiera_large_encoder_to_opencvOnnx()

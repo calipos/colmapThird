@@ -32,6 +32,13 @@ enum class OnnxType
     onnx_uint32 = 12,
     onnx_uint64 = 14,
 };
+template<typename dtype>
+struct Blob
+{
+    OnnxType type;
+    std::vector<dtype>data;
+    cv::dnn::MatShape shape;
+};
 bool generTestBlob(cv::Mat& blob, const cv::dnn::MatShape& shape, const OnnxType& type = OnnxType::onnx_float32)
 {
     switch (type)
@@ -102,9 +109,7 @@ cv::dnn::MatShape getBlobShape(const cv::Mat& blob)
     for (size_t i = 0; i < dim; i++)
     {
         shapeRet[i] = shape[i];
-        std::cout << shape[i] << " ";
     }
-    std::cout << std::endl;
     return shapeRet;
 }
 std::vector<int>getDenominators(const cv::dnn::MatShape& shape)
@@ -173,7 +178,7 @@ void printBlob(const cv::Mat& blob)
         }
         else if (showFlag == 1)
         {
-            if (dotCount< dotCountMax)
+            if (dotCount < dotCountMax)
             {
                 std::cout << " ... ";
                 dotCount += 1;
@@ -255,6 +260,17 @@ int test_dynamic_reshape()
     printBlob(out[1]);
     return 0;
 }
+
+
+int decoderTails(const int& originalImgHeight, const int& originalImgWidth, const cv::Mat& Reshape_12_output_0, const cv::Mat& iou_prediction_head_Sigmoid_output_0)
+{
+    const auto& out1 = Reshape_12_output_0;
+    const auto& out2 = iou_prediction_head_Sigmoid_output_0;
+    Blob
+    cv::dnn::MatShape shape1 = getBlobShape(out1);
+    return 0;
+}
+
 int main(int argc, const char** argv)
 {
     //return test_dynamic_reshape();
@@ -283,7 +299,7 @@ int main(int argc, const char** argv)
     generTestBlob(image_embed, { 1, 256, 64, 64 });
 
     cv::Size originalImgSize(1920, 1080);
-    cv::dnn::Net positionEmbedingNet = cv::dnn::readNetFromONNX("D:/repo/colmapThird/decoderBody2.onnx");
+    cv::dnn::Net positionEmbedingNet = cv::dnn::readNetFromONNX("D:/repo/colmap-third/decoderBody2.onnx");
     std::vector<cv::Vec2f>point_coord = { {10., 10.} ,{500., 400.},{200., 600.},{100., 300.},{200., 300.},{1,1} };
     std::vector<float>point_label = { 1,1,1,1,-1 ,1 };
 
@@ -311,28 +327,19 @@ int main(int argc, const char** argv)
         positionEmbedingNet.setInput(point_label_blob, "/Unsqueeze_8_output_0");
         positionEmbedingNet.setInput(mask_input, "mask_input");
         positionEmbedingNet.setInput(has_mask_input, "has_mask_input");
-        positionEmbedingNet.setInput(orig_im_size, "orig_im_size");
+        //positionEmbedingNet.setInput(orig_im_size, "orig_im_size");
         std::vector<std::string> layersNames = positionEmbedingNet.getLayerNames();
         std::vector<std::string> unconnectedOutLayersNames = positionEmbedingNet.getUnconnectedOutLayersNames();
         std::vector<std::string> outLayersNames = {
-            "masks","iou_predictions"
+            "/Reshape_12_output_0","/iou_prediction_head/Sigmoid_output_0"
         };
         std::vector<cv::Mat> out;
         positionEmbedingNet.forward(out, outLayersNames);
-        printBlob(out[0]);
-        printBlob(out[1]);
-        //checkSoftmax(out[1]);
-        printBlob(out[2]);
-        printBlob(out[3]);
-        printBlob(out[4]);
+        //printBlob(out[0]);
+        //printBlob(out[1]); 
         std::cout << "forward ok " << std::endl;
+        decoderTails(1920, 1080, out[0], out[1]);
     }
-
-    cv::dnn::Net pointLabelsInNet = cv::dnn::readNetFromONNX("D:/repo/colmapThird/pointLabelsIn.onnx");
-
-    std::string paramPath = "D:/repo/colmapThird/positionEmbeding.onnx";
-    std::cout << 123 << std::endl;
-    cv::dnn::Net net = cv::dnn::readNetFromONNX(paramPath);
 
 
 
