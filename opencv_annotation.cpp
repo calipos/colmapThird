@@ -42,6 +42,9 @@ bool generTestBlob(cv::Mat& blob, const cv::dnn::MatShape& shape, const OnnxType
     case OnnxType::onnx_int64:
         blob.create(shape.size(), &shape[0], CV_64FC1);
         break;
+    case OnnxType::onnx_int32:
+        blob.create(shape.size(), &shape[0], CV_32SC1);
+        break;
     default:
         break;
     }
@@ -296,9 +299,9 @@ int main(int argc, const char** argv)
     generTestBlob(has_mask_input, { 1 });
     has_mask_input.setTo(1);
     cv::Mat orig_im_size;
-    generTestBlob(orig_im_size, { 2 });
-    ((float*)orig_im_size.data)[0] = originalImgSize.width;
-    ((float*)orig_im_size.data)[1] = originalImgSize.height;
+    generTestBlob(orig_im_size, { 2 }, OnnxType::onnx_int32);
+    ((int*)orig_im_size.data)[0] = originalImgSize.width;
+    ((int*)orig_im_size.data)[1] = originalImgSize.height;
     {
         positionEmbedingNet.setInput(high_res_feats_0, "high_res_feats_0");
         positionEmbedingNet.setInput(high_res_feats_1, "high_res_feats_1");
@@ -312,7 +315,7 @@ int main(int argc, const char** argv)
         std::vector<std::string> layersNames = positionEmbedingNet.getLayerNames();
         std::vector<std::string> unconnectedOutLayersNames = positionEmbedingNet.getUnconnectedOutLayersNames();
         std::vector<std::string> outLayersNames = {
-            "/transformer/final_attn_token_to_image/MatMul_1_output_0"
+            "masks","iou_predictions"
         };
         std::vector<cv::Mat> out;
         positionEmbedingNet.forward(out, outLayersNames);

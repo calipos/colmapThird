@@ -23,7 +23,8 @@ shared_input = [
     'orig_im_size'
     ]
 shared_out = [
-    'masks', 'iou_predictions'
+    'masks', 'iou_predictions', 
+    '/Slice_7_output_0', '/Flatten_1_output_0'
     ]
 checkmodel=True
 inferShapes = True
@@ -40,6 +41,7 @@ image_embed = np.ones([1, 256, 64, 64]).astype(np.float32)
 mask_input = np.zeros((1, 1, 1024//4,1024//4), dtype=np.float32)
 has_mask_input = np.array([1], dtype=np.float32)
 orig_im_size = np.array([1080, 1920], dtype=np.int32)
+
 class testNet(torch.nn.Module):
     def __init__(self):
         super(testNet, self).__init__()
@@ -162,10 +164,6 @@ def printNet(model):
     name_lists = ['mask_decoder.transformer.layers.0.norm1.weight']  # onehot
     for i in range(len(initializer)):
         print('** initializer ** ',i, '-', initializer[i].name)
-        if i == 398:  # encoder check
-            dtype = initializer[i].data_type
-            print(*initializer[i].dims)
-            params = np.frombuffer(initializer[i].raw_data, dtype=onnx_datatype_to_npType(dtype))
         if initializer[i].name in name_lists:
             print(i, '-', initializer[i].name)
             print('shape dim= ',*initializer[i].dims)
@@ -405,6 +403,12 @@ def convert_sam2_decoder_point_label():
                     'has_mask_input', TensorProto.FLOAT, [1])
                 model.graph.input.insert(index, has_mask_input_node)
                 print('change the has_mask_input input node')
+            # if now_name == 'orig_im_size':
+            #     model.graph.input.remove(model.graph.input[index])
+            #     orig_img_wh_size_node = helper.make_tensor_value_info(
+            #         'orig_img_wh_size', TensorProto.FLOAT, [2])
+            #     model.graph.input.insert(index, orig_img_wh_size_node)
+            #     print('change the orig_im_size input node')
 # *************************************
 
 
@@ -450,7 +454,7 @@ def convert_sam2_decoder_point_label():
 
         neg1 = onnx.numpy_helper.from_array(
             np.array([-1]).astype(np.float32), name='neg1')  # -1 float
-        model.graph.initializer.append(neg1)  # 1
+        model.graph.initializer.append(neg1)  # -1 float
         const1 = onnx.numpy_helper.from_array(
             np.array([1]).astype(np.int64), name='const1')  # 1
         model.graph.initializer.append(const1)  # 1
@@ -473,8 +477,11 @@ def convert_sam2_decoder_point_label():
             np.array([1,4096,8,16]).astype(np.int64), name='shape_1_4096_8_16')  # 1_4096_8_16
         model.graph.initializer.append(shape_1_4096_8_16)  # 1_4096_8_16
         shape_1_256_4096 = onnx.numpy_helper.from_array(
-            np.array([1,256,4096]).astype(np.int64), name='shape_1_256_4096')  # 1_4096_8_16
+            np.array([1, 256, 4096]).astype(np.int64), name='shape_1_256_4096')  # 1_256_4096
         model.graph.initializer.append(shape_1_256_4096)  # 1_256_4096
+        shape_1__1_256_256 = onnx.numpy_helper.from_array(
+            np.array([1, -1, 256, 256]).astype(np.int64), name='shape_1__1_256_256')  # shape_1__1_256_256
+        model.graph.initializer.append(shape_1__1_256_256)  # shape_1__1_256_256        
         constOnes256f = onnx.numpy_helper.from_array(
             np.ones([1, 1, 256]).astype(np.float32), name='constOnes256f')  # constOnes256f
         model.graph.initializer.append(constOnes256f)  # constOnes256f
@@ -1169,6 +1176,50 @@ def convert_sam2_decoder_point_label():
             name='/transformer/final_attn_token_to_image/Reshape')
         model.graph.node.insert(
             removeIndexlist[-1], layers1_final_attn_token_to_image_Reshape_node)
+
+        removelist = [
+            '/Shape_28',
+            '/Gather_21',
+            '/Unsqueeze_20',
+            '/Concat_17',
+            '/Reshape_12']
+        removeIndexlist = []
+        for i, node in enumerate(model.graph.node):
+            if node.name in removelist:
+                removeIndexlist.append(i)
+        removeIndexlist.sort(reverse=True)
+        for removeI in removeIndexlist:
+            model.graph.node.remove(model.graph.node[removeI])
+        Reshape_12_node = onnx.helper.make_node(
+            op_type='Reshape',
+            inputs=['/MatMul_1_output_0',
+                    'shape_1__1_256_256'],
+            outputs=[
+                '/Reshape_12_output_0'],
+            name='/Reshape_12')
+        model.graph.node.insert(
+            removeIndexlist[-1]+2, Reshape_12_node)
+
+        removelist = [
+            '/Shape_32',
+            '/Gather_25',
+            '/Range_4']
+        removeIndexlist = []
+        for i, node in enumerate(model.graph.node):
+            if node.name in removelist:
+                removeIndexlist.append(i)
+        removeIndexlist.sort(reverse=True)
+        for removeI in removeIndexlist:
+            model.graph.node.remove(model.graph.node[removeI])
+        Range_4_output_0_node = onnx.helper.make_node(
+            op_type='Constant',
+            inputs=[],
+            outputs=['/Range_4_output_0'],
+            name='/Range_4_output_0',
+            value=onnx.helper.make_tensor(
+                'value', onnx.TensorProto.INT64, [
+                    1], np.array([0]).astype(np.int64)))
+        model.graph.node.insert(removeIndexlist[-1], Range_4_output_0_node)
 
 
         if inferShapes:
