@@ -24,11 +24,11 @@ shared_input = [
     ]
 shared_out = [
     #'masks', 'iou_predictions'
-    '/Reshape_12_output_0','/iou_prediction_head/Sigmoid_output_0',
-    '/Slice_8_output_0','/Shape_37_output_0','/Shape_37_output_0'
+    '/Reshape_12_output_0', '/GreaterOrEqual_output_0', '/iou_prediction_head/Sigmoid_output_0','/ArgMax_output_0',
+    # '/Gather_31_output_0', '/Shape_36_output_0'
     ]
-checkmodel = False
-inferShapes = False
+checkmodel = True
+inferShapes = True
 point_coords = np.array(
     [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
 point_labels = np.array([[1, 1,1,1,-1,1]]).astype(np.float32)
@@ -235,9 +235,11 @@ def test_forward():
     pointCoords = session.run(
         None, datain)
 
-    for i in range(len(shared_out)):
+    for i in range(len(shared_out)):        
+        print(shared_out[i])
         print(pointCoords[i].shape)
         print(pointCoords[i])
+        print(" ")
     # print(pointCoords[1].shape)
     # print(pointCoords[1])
     return
@@ -381,8 +383,8 @@ def convert_sam2_decoder_point_label():
 ### decoderBody ##################################################################
     if True:
         cut_subgraph('models/decoder.onnx', ['high_res_feats_0', 'high_res_feats_1', 'image_embed', '/ScatterND_1_output_0',
-                     '/Unsqueeze_8_output_0', 'mask_input', 'has_mask_input', 'orig_im_size'], ['masks', 'iou_predictions'], 'decoderBody.onnx')
-        model = onnx.load('decoderBody.onnx')
+                     '/Unsqueeze_8_output_0', 'mask_input', 'has_mask_input', 'orig_im_size'], ['masks', 'iou_predictions'], 'models/opencv_decoder.onnx')
+        model = onnx.load('models/opencv_decoder.onnx')
         if checkmodel: onnx.checker.check_model(model)
         for index, eachNode in enumerate(model.graph.input):
             now_name = model.graph.input[index].name
@@ -1237,15 +1239,15 @@ def convert_sam2_decoder_point_label():
         if inferShapes:
             model = onnx.shape_inference.infer_shapes(model)
         if checkmodel:  onnx.checker.check_model(model)
-        onnx.save(model, 'decoderBody2.onnx')
+        onnx.save(model, 'models/opencv_decoder.onnx')
         shared_input_temp = shared_input
         if '/Unsqueeze_8_output_0' in shared_input_temp:
             shared_input_temp = shared_input_temp+['inputArrayPlus6']
-        cut_subgraph('decoderBody2.onnx', 
+        cut_subgraph('models/opencv_decoder.onnx',
                      shared_input_temp,
                      shared_out,
-                     'decoderBody2.onnx')
-        model = onnx.load('decoderBody2.onnx')
+                     'models/opencv_decoder.onnx')
+        model = onnx.load('models/opencv_decoder.onnx')
         if inferShapes: model = onnx.shape_inference.infer_shapes(model)
         if checkmodel:  onnx.checker.check_model(model)
         printNet(model)
@@ -1270,7 +1272,7 @@ def convert_sam2_decoder_point_label():
         if 'orig_im_size' in shared_input_temp:
             datain['orig_im_size'] = orig_im_size
         session = onnxruntime.InferenceSession(
-            'decoderBody2.onnx', providers=onnxruntime.get_available_providers())
+            'models/opencv_decoder.onnx', providers=onnxruntime.get_available_providers())
         pointCoords = session.run(
             None, datain)
         for i in range(len(shared_out)):
@@ -1364,20 +1366,9 @@ def test_dynamic_reshape():
     print(out[0])
 
 if __name__=='__main__':
-    # test_dynamic_reshape()
-    test_forward()
-    # convert_sam2_decoder_point_label()
-    exit()
-
-# convert_sam2_hiera_large_encoder_to_opencvOnnx()
-
-
-exit()
-print(onnx.helper.printable_graph(model.graph))
-print(model)
+    # convert_sam2_hiera_large_encoder_to_opencvOnnx()
+    # test_forward()
+    convert_sam2_decoder_point_label()
 
 
 
-# 检查模型并打印
-onnx.checker.check_model(model)
-print(onnx.helper.printable_graph(model.graph))
