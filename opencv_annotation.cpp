@@ -2,7 +2,6 @@
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
-#include <opencv2/videoio.hpp>
 #include <opencv2/imgproc.hpp>
 #include "opencv2/dnn.hpp"
 //#include "opencv2/calib3d.hpp"
@@ -11,6 +10,7 @@
 #include <iostream>
 #include <map>
 #include <unordered_set>
+#include <chrono>
 #include <vector>
 #include "opencv2/dnn/dnn.hpp"
 #include "opencv2/dnn/layer.hpp"
@@ -65,7 +65,7 @@ public:
     {
         return data;
     }
-    bool setOtherData(dtype*otherData)
+    bool setOtherData(dtype* otherData)
     {
         if (needManualDestroy && data != nullptr)
         {
@@ -131,7 +131,7 @@ public:
     }
     Blob sliceSecondDimStep1(const int& start, const int& end)
     {
-        if( shape[0]!=1)
+        if (shape[0] != 1)
         {
             std::cout << "slice param not support!" << std::endl;
             return Blob<dtype>();
@@ -142,12 +142,12 @@ public:
             return Blob<dtype>();
         }
         int dataTotalCnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
-        int startPos = start*dataTotalCnt / shape[0] / shape[1];
+        int startPos = start * dataTotalCnt / shape[0] / shape[1];
         Blob<dtype> ret;
-        ret.type = getType() ;
+        ret.type = getType();
         ret.data = &data[startPos];
         ret.shape = shape;
-        ret.shape[1] = (end<= shape[1]? end: shape[1]) - start;
+        ret.shape[1] = (end <= shape[1] ? end : shape[1]) - start;
         return ret;
     }
     Blob flattenAxis2()
@@ -158,7 +158,7 @@ public:
         {
             dim1 *= shape[i];
         }
-        int dim2 = totalCnt/dim1;
+        int dim2 = totalCnt / dim1;
         Blob<dtype> ret;
         ret.data = data;
         ret.type = getType();
@@ -182,15 +182,15 @@ public:
                 multi *= newShape[i];
             }
         }
-        if (neg_1_count>1)
+        if (neg_1_count > 1)
         {
             std::cout << "slice param error!" << std::endl;
             return Blob<dtype>();
         }
         cv::dnn::MatShape shape2 = newShape;
-        if (neg_1_count==1)
+        if (neg_1_count == 1)
         {
-            shape2[neg_1_pos] = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>()) /multi;
+            shape2[neg_1_pos] = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>()) / multi;
         }
         Blob<dtype> ret;
         ret.type = getType();
@@ -199,7 +199,7 @@ public:
         return ret;
     }
     bool needManualDestroy{ false };
-    void operator=(const Blob<dtype>&other)
+    void operator=(const Blob<dtype>& other)
     {
         type = other.type;
         data = other.data;
@@ -218,10 +218,10 @@ public:
         type = other.type;
         shape = other.shape;
         int totalCnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
-        if (totalCnt>0)
-        { 
+        if (totalCnt > 0)
+        {
             data = new dtype[totalCnt];
-            memcpy(data, other.data,sizeof(dtype)* totalCnt);
+            memcpy(data, other.data, sizeof(dtype) * totalCnt);
         }
         needManualDestroy = true;
     }
@@ -240,21 +240,21 @@ public:
         ret.data = data;
         ret.shape = shape;
         ret.type = getType();
-        ret.shape.insert(ret.shape.begin() + dim,1);
+        ret.shape.insert(ret.shape.begin() + dim, 1);
         return ret;
     }
-    Blob expandLike(const cv::dnn::MatShape&shapeLike)
+    Blob expandLike(const cv::dnn::MatShape& shapeLike)
     {
         const Blob& dataSrc = *this;
         const cv::dnn::MatShape& dataSrcShape = dataSrc.getShape();
-        if (dataSrcShape.size()> shapeLike.size())
+        if (dataSrcShape.size() > shapeLike.size())
         {
             std::cout << "slice param error!" << std::endl;
             return Blob<dtype>();
         }
         for (size_t i = 0; i < dataSrcShape.size(); i++)
         {
-            if (dataSrcShape[i]!= shapeLike[i])
+            if (dataSrcShape[i] != shapeLike[i])
             {
                 std::cout << "slice param error!" << std::endl;
                 return Blob<dtype>();
@@ -267,7 +267,7 @@ public:
         ret.setOtherData(new dtype[totalCnt]);
         ret.needManualDestroy = true;
         int outerLoop = std::accumulate(dataSrcShape.begin(), dataSrcShape.end(), 1, std::multiplies<int>());
-        int innerLoop = totalCnt/ outerLoop;
+        int innerLoop = totalCnt / outerLoop;
         int idx = 0;
         for (int i = 0; i < outerLoop; i++)
         {
@@ -280,26 +280,26 @@ public:
         }
         return ret;
     }
-    Blob gatherDim0(const std::vector<int>&gatherAxis)
+    Blob gatherDim0(const std::vector<int>& gatherAxis)
     {
-        if (gatherAxis.size()==0)
+        if (gatherAxis.size() == 0)
         {
             std::cout << "gatherDim0 param error!" << std::endl;
             return Blob<dtype>();
         }
-        if (gatherAxis.size()==1)
+        if (gatherAxis.size() == 1)
         {
             int totalCnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
-            int startPos = totalCnt/shape[0]*gatherAxis[0];
+            int startPos = totalCnt / shape[0] * gatherAxis[0];
             Blob<dtype> ret;
             ret.type = getType();
-            ret.data = data+ startPos;
+            ret.data = data + startPos;
             ret.shape = shape;
             ret.shape[0] = 1;
             return ret;
         }
         else
-        { 
+        {
             std::cout << "gatherDim0 param not support yet!" << std::endl;
             return Blob<dtype>();
         }
@@ -372,7 +372,7 @@ public:
         }
     }
     std::vector<dtype>convertToVec()
-    { 
+    {
         int dataTotalCnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
         std::vector<dtype> ret(dataTotalCnt);
         memcpy(&ret[0], data, sizeof(dtype) * dataTotalCnt);
@@ -531,7 +531,7 @@ void printBlob(const cv::Mat& blob)
         }
         else if (showFlag == 1)
         {
-            if (dotCount< dotCountMax)
+            if (dotCount < dotCountMax)
             {
                 std::cout << " ... ";
                 dotCount += 1;
@@ -616,13 +616,13 @@ int test_dynamic_reshape()
 
 //"/Reshape_12_output_0", "/GreaterOrEqual_output_0","/iou_prediction_head/Sigmoid_output_0",  "/ArgMax_output_0"
 int decoderTails(const int& originalImgHeight, const int& originalImgWidth,
-    const cv::Mat& Reshape_12_output_0_, const cv::Mat& GreaterOrEqual_output_0_, const cv::Mat& iou_prediction_head_Sigmoid_output_0_, const cv::Mat& ArgMax_output_0_,cv::Mat& mask,std::vector<float>&iou_predictions)
+    const cv::Mat& Reshape_12_output_0_, const cv::Mat& GreaterOrEqual_output_0_, const cv::Mat& iou_prediction_head_Sigmoid_output_0_, const cv::Mat& ArgMax_output_0_, cv::Mat& mask, std::vector<float>& iou_predictions)
 {
     Blob<float> Reshape_12_output_0(Reshape_12_output_0_);
     Blob<float> GreaterOrEqual_output_0(GreaterOrEqual_output_0_);
     Blob<float> iou_prediction_head_Sigmoid_output_0(iou_prediction_head_Sigmoid_output_0_);
     Blob<float> ArgMax_output_0(ArgMax_output_0_);//onnx out int64,but in opencv the data is float still
-    auto Slice_8_output_0 = Reshape_12_output_0.sliceSecondDimStep1(0,1);
+    auto Slice_8_output_0 = Reshape_12_output_0.sliceSecondDimStep1(0, 1);
     const cv::dnn::MatShape& Shape_37 = Slice_8_output_0.getShape();
     auto Expand_10_output_0 = GreaterOrEqual_output_0.expandLike(Shape_37);
 
@@ -635,7 +635,7 @@ int decoderTails(const int& originalImgHeight, const int& originalImgWidth,
     auto Slice_9_output_0 = iou_prediction_head_Sigmoid_output_0.sliceSecondDimStep1(0, 1);
     auto Shape_39_output_0 = Slice_9_output_0.getShape();
     auto Expand_11_output_0 = GreaterOrEqual_output_0.expandLike(Shape_39_output_0);
-    
+
 
     const auto& Shape_32_output_0 = Slice_7_output_0.getShape();
     const int& Gather_25_output_0 = Shape_32_output_0[0];
@@ -656,7 +656,7 @@ int decoderTails(const int& originalImgHeight, const int& originalImgWidth,
     Blob<float>Gather_29_output_0 = Flatten_output_0.gatherDim0(Add_14_output_0);
     Blob<float>Reshape_14_output_0 = Gather_29_output_0.reshape(Concat_19_output_0);
     Blob<float>Unsqueeze_26_output_0 = Reshape_14_output_0.unsqueeze(1);
-    auto& Where_8_output_0 = Slice_8_output_0.whereInplaceAndClip(Expand_10_output_0, Unsqueeze_26_output_0,-32,32);
+    auto& Where_8_output_0 = Slice_8_output_0.whereInplaceAndClip(Expand_10_output_0, Unsqueeze_26_output_0, -32, 32);
     mask = Where_8_output_0.convertToMat(256, 256, originalImgHeight, originalImgWidth);
 
     Blob<float>Gather_31_output_0 = Flatten_1_output_0.gatherDim0(Add_15_output_0);
@@ -666,22 +666,28 @@ int decoderTails(const int& originalImgHeight, const int& originalImgWidth,
     return 0;
 }
 int main(int argc, const char** argv)
-{ 
+{
 
-    cv::Mat img = cv::imread("D:/ucl360/UCL360Calib/CameraCalibGui/pro45/out/1_-180.bmp");
-    cv::Size originalImgSize= img.size();
+    cv::Mat img = cv::imread("D:/ucl360/UCL360Calib/CameraCalibGui/pro33/out/1_-96.bmp");
+    cv::Size originalImgSize = img.size();
     cv::Scalar mean(0.485 * 255, 0.456 * 255, 0.406 * 255);
     cv::Mat imgBlob = cv::dnn::blobFromImage(img, 1. / 57.12, cv::Size(1024, 1024), mean, true);
+    std::cout<<"load img." << std::endl;
     //return test_dynamic_reshape();
     const int netImgSize = 1024;
-    cv::dnn::Net imgEncoderNet = cv::dnn::readNetFromONNX("D:/repo/colmapThird/models/opencv_encoder.onnx");
+    cv::dnn::Net imgEncoderNet = cv::dnn::readNetFromONNX("D:/repo/colmap-third/models/opencv_encoder.onnx");
+    std::cout << "load EncoderNet." << std::endl;
     int sz[] = { 1,3,netImgSize,netImgSize };
 
     imgEncoderNet.setPreferableBackend(cv::dnn::DNN_TARGET_CPU);
     imgEncoderNet.setInput(imgBlob);
     std::vector<cv::Mat> imgEncoderNetOut;
     std::vector<std::string> outLayersNames = { "high_res_feats_0","high_res_feats_1","image_embed" };
+    auto start1 = std::chrono::steady_clock::now();
     imgEncoderNet.forward(imgEncoderNetOut, outLayersNames);  // crash here
+    auto end1 = std::chrono::steady_clock::now();
+    auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+    std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
     std::cout << "encode forward ok " << std::endl;
 
 
@@ -690,10 +696,10 @@ int main(int argc, const char** argv)
     cv::Mat& image_embed = imgEncoderNetOut[2];
 
 
-    cv::dnn::Net positionDecoderNet = cv::dnn::readNetFromONNX("D:/repo/colmapThird/models/opencv_decoder.onnx");
+    cv::dnn::Net positionDecoderNet = cv::dnn::readNetFromONNX("D:/repo/colmap-third/models/opencv_decoder.onnx");
     //std::vector<cv::Vec2f>point_coord = { {10., 10.} ,{500., 400.},{200., 600.},{100., 300.},{200., 300.},{1,1} };
     //std::vector<float>point_label = { 1,1,1,1,-1 ,1 };
-    std::vector<cv::Vec2f>point_coord = { {1161,301} };
+    std::vector<cv::Vec2f>point_coord = { {983,679} };
     std::vector<float>point_label = { 1 };
 
     positionDecoderNet.setPreferableBackend(cv::dnn::DNN_TARGET_CPU);
@@ -730,19 +736,23 @@ int main(int argc, const char** argv)
                 "/Reshape_12_output_0","/GreaterOrEqual_output_0","/iou_prediction_head/Sigmoid_output_0","/ArgMax_output_0"
         };
         std::vector<cv::Mat> out;
+        auto start2 = std::chrono::steady_clock::now();
         positionDecoderNet.forward(out, outLayersNames);
+        auto end2 = std::chrono::steady_clock::now();
+        auto elapsed2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - start2).count();
+        std::cout << "Elapsed time: " << elapsed2 << " ms" << std::endl;
         //printBlob(out[0]);
         //printBlob(out[1]);
         //printBlob(out[2]);
         //printBlob(out[3]);
         std::cout << "forward ok " << std::endl;
-        decoderTails(1080,1920, out[0], out[1], out[2], out[3], mask, iou_predictions);
+        decoderTails(1080, 1920, out[0], out[1], out[2], out[3], mask, iou_predictions);
         std::cout << "done " << std::endl;
 
         cv::Mat asd2;
         cv::threshold(mask, asd2, 0, 255, cv::THRESH_BINARY);
         asd2.convertTo(asd2, CV_8UC1);
-        cv::imwrite("D:/repo/colmapThird/mask.png",asd2);
+        cv::imwrite("D:/repo/colmap-third/mask.png", asd2);
     }
 
 

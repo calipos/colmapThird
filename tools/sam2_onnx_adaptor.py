@@ -200,7 +200,8 @@ def convert_sam2_hiera_large_encoder_to_opencvOnnx():
     )
     model.graph.initializer.remove(model.graph.initializer[618])
     model.graph.node.insert(618, new_node)
-    onnx.checker.check_model(model)
+    if inferShapes:model = onnx.shape_inference.infer_shapes(model)
+    if checkmodel:onnx.checker.check_model(model)
     onnx.save(model, 'models/opencv_encoder.onnx')
 
 
@@ -1309,47 +1310,35 @@ def test_dynamic_reshape():
     input = helper.make_tensor_value_info(
         'input', TensorProto.FLOAT, [ -1, 2])
     output = helper.make_tensor_value_info(
-        'output', TensorProto.FLOAT, [ -1, 256])
+        'output', TensorProto.FLOAT, [ -1, 128])
     concatShape = helper.make_tensor_value_info(
         'concatShape', TensorProto.INT64, [3])
     outputReshape = helper.make_tensor_value_info(
-        'outputReshape', TensorProto.FLOAT, [-1,8,32])
+        'outputReshape', TensorProto.FLOAT, [-1,8,16])
     w1 = onnx.numpy_helper.from_array(np.random.rand(
-        2, 256).astype(np.float32), name='w1')  # [2,256]
-    const1 = onnx.numpy_helper.from_array(
-        np.array([1]).astype(np.int64), name='const1')  # 1
-    const_1 = onnx.numpy_helper.from_array(
-        np.array([3]).astype(np.int64), name='const_1')  # -1
-    const8 = onnx.numpy_helper.from_array(
-        np.array([8]).astype(np.int64), name='const8')  # 8
-    const32 = onnx.numpy_helper.from_array(
-        np.array([32]).astype(np.int64), name='const32')  # 32
+        2, 128).astype(np.float32), name='w1')  # [2,16]
+    targetShape = onnx.numpy_helper.from_array(
+        np.array([-1,8,16]).astype(np.int64), name='targetShape')  # 1
     layer1 = onnx.helper.make_node(
         op_type='MatMul',
         inputs=['input', 'w1'],
         outputs=['output'],
-        name='layer1')
-    concatShapeLayer = onnx.helper.make_node(
-        op_type='Concat',
-        inputs=['const_1', 'const8', 'const32'],
-        outputs=['concatShape'],
-        name='concatShapeLayer',
-        axis=0)
+        name='output')
     reshapeLayer = onnx.helper.make_node(
         op_type='Reshape',
-        inputs=['output', 'concatShape'],
+        inputs=['output', 'targetShape'],
         outputs=['outputReshape'],
-        name='reshapeLayerLayer')
+        name='outputReshape')
     graph = onnx.helper.make_graph(
-        [layer1, concatShapeLayer, reshapeLayer],
+        [layer1, reshapeLayer],
         'TwoLayerFC',
         [input],
         [outputReshape],
-        initializer=[w1, const1, const_1, const8, const32]
+        initializer=[w1, targetShape]
     )
     model = helper.make_model(graph, producer_name='onnx-example')
     # model = onnx.shape_inference.infer_shapes(model)
-    onnx.checker.check_model(model)
+    # onnx.checker.check_model(model)
     model.ir_version = 10
     model.opset_import[0].version = 21
     onnx.save(model, 'test.onnx')
@@ -1357,18 +1346,34 @@ def test_dynamic_reshape():
 
 
     model = onnx.load('test.onnx')
-    onnx.checker.check_model(model)
-    printNet(model)
+    # onnx.checker.check_model(model)
+    # printNet(model)
     session = onnxruntime.InferenceSession('test.onnx', providers=onnxruntime.get_available_providers())
     coordPts = np.array([1,2,3,4,5,6]).astype(np.float32).reshape( 3, 2)
     out = session.run(None, {'input': coordPts})
-    print(out[0].shape)
     print(out[0])
+    print(out[0].shape)
+def convertOpencvOnnxToNcnn():    
+    model = onnx.load('models/opencv_encoder.onnx')
+    print(len(model.graph.input))
+    
+    print(model.graph.input[0].name)
+    for index, eachNode in enumerate(model.graph.input):
+        now_name = model.graph.input[index].name
+        if now_name == 'image':
+            model.graph.input.remove(model.graph.input[index])
+            image_node = helper.make_tensor_value_info(
+                'image', TensorProto.FLOAT, [3, 1024, 1024])
+            model.graph.input.insert(index, image_node)
+            print('change the image input node')
+    onnx.save(model, 'test.onnx')
 
 if __name__=='__main__':
     # convert_sam2_hiera_large_encoder_to_opencvOnnx()
     # test_forward()
-    convert_sam2_decoder_point_label()
+    # convert_sam2_decoder_point_label()
+    # test_dynamic_reshape()
+    convertOpencvOnnxToNcnn()
 
 
 
