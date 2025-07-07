@@ -393,9 +393,9 @@ static void fuse_rewrite_gather(onnx::GraphProto* mutable_graph,
             gather->clear_attribute();
 
             int indice = indices[0];
-            set_node_attr_ai(*gather, "starts", std::vector<int> {indice});
-            set_node_attr_ai(*gather, "ends", std::vector<int> {indice + 1});
-            set_node_attr_ai(*gather, "axis", std::vector<int> {axis});
+            set_node_attr_ai(*gather, "starts", std::vector<int>{indice});
+            set_node_attr_ai(*gather, "ends", std::vector<int>{indice + 1});
+            set_node_attr_ai(*gather, "axis", std::vector<int>{axis});
         }
     }
 }
@@ -1208,7 +1208,7 @@ static void fuse_normalize(onnx::GraphProto* mutable_graph, std::map<std::string
                 continue;
 
             if (node2->input(0) != node->output(0) || node3->input(0) != node2->output(0)
-                    || node4->input(0) != node->input(0) || node4->input(1) != node3->output(0))
+                || node4->input(0) != node->input(0) || node4->input(1) != node3->output(0))
                 continue;
 
             if (has_shape_node)
@@ -1331,7 +1331,7 @@ static void fuse_groupnorm(onnx::GraphProto* mutable_graph, std::map<std::string
                 continue;
 
             if (node2->input(0) != node->output(0) || node3->input(0) != node2->output(0)
-                    || node4->input(0) != node3->output(0) || node5->input(0) != node4->output(0))
+                || node4->input(0) != node3->output(0) || node5->input(0) != node4->output(0))
                 continue;
 
             // +eps
@@ -1505,9 +1505,9 @@ static void fuse_layernorm(onnx::GraphProto* mutable_graph, std::map<std::string
                 continue;
 
             if (node2->input(0) != node->input(0) || node2->input(1) != node->output(0)
-                    || node3->input(0) != node2->output(0) || node4->input(0) != node3->output(0)
-                    || node5->input(0) != node4->output(0) || node6->input(0) != node5->output(0)
-                    || node7->input(0) != node2->output(0) || node7->input(1) != node6->output(0))
+                || node3->input(0) != node2->output(0) || node4->input(0) != node3->output(0)
+                || node5->input(0) != node4->output(0) || node6->input(0) != node5->output(0)
+                || node7->input(0) != node2->output(0) || node7->input(1) != node6->output(0))
                 continue;
 
             if (weights.find(node3->input(1)) == weights.end())
@@ -1678,7 +1678,7 @@ static void fuse_flatten(onnx::GraphProto* mutable_graph, std::map<std::string, 
             onnx::NodeProto* node7 = mutable_graph->mutable_node(i + 6);
 
             if (node2->op_type() != "Gather" || node3->op_type() != "Constant" || node4->op_type() != "Unsqueeze" || node5->op_type() != "Unsqueeze"
-                    || node6->op_type() != "Concat" || node7->op_type() != "Reshape")
+                || node6->op_type() != "Concat" || node7->op_type() != "Reshape")
                 continue;
 
             if (node_reference[node2->output(0)] != 1)
@@ -1697,8 +1697,8 @@ static void fuse_flatten(onnx::GraphProto* mutable_graph, std::map<std::string, 
                 continue;
 
             if (node2->input(0) != node->output(0) || node4->input(0) != node2->output(0) || node5->input(0) != node3->output(0)
-                    || node6->input(0) != node4->output(0) || node6->input(1) != node5->output(0)
-                    || node7->input(0) != node->input(0) || node7->input(1) != node6->output(0))
+                || node6->input(0) != node4->output(0) || node6->input(1) != node5->output(0)
+                || node7->input(0) != node->input(0) || node7->input(1) != node6->output(0))
                 continue;
 
             // axis = 0
@@ -2951,8 +2951,8 @@ int test_forward()
     if (testNet.load_model("ncnn.bin"))
         exit(-1);
     ncnn::Extractor ex1 = testNet.create_extractor();
-    std::vector<float> indata (3*1024*1024,1);
-    ncnn::Mat in(1024,1024,1, 3, (void*)&indata[0], 4);
+    std::vector<float> indata(3 * 1024 * 1024, 1);
+    ncnn::Mat in(1024, 1024, 1, 3, (void*)&indata[0], 4);
     //for (int c = 0; c < in.c; c++)
     //{
     //    ncnn::Mat cdata = in.channel(c);
@@ -2962,7 +2962,7 @@ int test_forward()
     //    {
     //        for (int x = 0; x < w; ++x)
     //        {
-    //            float value = cdata.row(y)[x]; // 获取 (y, x) 位置的值
+    //            float value = cdata.row(y)[x]; // 锟斤拷取 (y, x) 位锟矫碉拷值
     //            std::cout << value << " ";
     //        }
     //        std::cout << std::endl;
@@ -2970,10 +2970,10 @@ int test_forward()
     //}
     ex1.input("image", in);
     ncnn::Mat out0; // all rois
-    ncnn::Mat out; // all rois
+    ncnn::Mat out;  // all rois
     ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_0", out);
     ncnn::Mat shape = out.shape();
-    std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w  << std::endl;
+    std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << std::endl;
     for (int c = 0; c < out.c; c++)
     {
         ncnn::Mat cdata = out.channel(c);
@@ -2983,7 +2983,7 @@ int test_forward()
         {
             for (int x = 0; x < w; ++x)
             {
-                float value = cdata.row(y)[x]; // 获取 (y, x) 位置的值
+                float value = cdata.row(y)[x]; // 锟斤拷取 (y, x) 位锟矫碉拷值
                 std::cout << value << " ";
             }
             std::cout << std::endl;
@@ -2994,13 +2994,12 @@ int test_forward()
 typedef std::vector<std::int64_t> TensorShape;
 int main()
 {
-    const char* onnxpb = "D:/repo/colmapThird/models/ncnn_encoder.onnx";
+    const char* onnxpb = "D:/repo/colmap-third/models/ncnn_encoder.onnx";
     const char* ncnn_prototxt = "ncnn.param";
     const char* ncnn_modelbin = "ncnn.bin";
 
-    std::map<std::string, TensorShape>inputShape;
-    inputShape["input"] = {3,2};
-
+    std::map<std::string, TensorShape> inputShape;
+    inputShape["input"] = {3, 2};
 
     onnx::ModelProto model;
 
@@ -3042,7 +3041,7 @@ int main()
         weights[initializer.name()] = initializer;
     }
 
-    if(0)// topological sort
+    if (0) // topological sort
     {
         // name -> producer node index
         std::set<std::string> producers;
@@ -3161,7 +3160,7 @@ int main()
 
         if (op == "Dropout")
         {
-            std::cout <<"Dropout not support "<< std::endl;
+            std::cout << "Dropout not support " << std::endl;
             const std::string& output_name = node.output(0);
             blob_names.insert(output_name);
             node_reference[output_name] = 0;
@@ -3222,7 +3221,7 @@ int main()
     //fuse_rewrite_gather(mutable_graph, weights, node_reference, blob_names, reduced_node_count);
 
     // reduce common const weight node_reference
-    std::unordered_map<std::string,int>graphNodeMap;
+    std::unordered_map<std::string, int> graphNodeMap;
     for (int i = 0; i < node_count; i++)
     {
         const onnx::NodeProto& node = graph.node(i);
@@ -3442,11 +3441,11 @@ int main()
                     std::cout << node.input(j).c_str() << std::endl;
                     node_reference[node.input(j)] -= 1;
                 }
-            }          
-            if (node.output_size()==1)
+            }
+            if (node.output_size() == 1)
             {
                 node.output(0);
-                std::vector<std::int64_t>maybeShape;
+                std::vector<std::int64_t> maybeShape;
                 for (int j = 0; j < node.input_size(); j++)
                 {
                     if (weights.count(node.input(j)) == 0)
@@ -3460,14 +3459,14 @@ int main()
                     }
                     std::cout << tp.dims_size() << std::endl;
                     std::cout << tp.int64_data_size() << std::endl;
-                    std::cout << tp.double_data_size() << std::endl;                   
+                    std::cout << tp.double_data_size() << std::endl;
                     std::cout << tp.int32_data_size() << std::endl;
-                    std::cout << tp.float_data_size() << std::endl;                    
+                    std::cout << tp.float_data_size() << std::endl;
                     std::cout << tp.uint64_data_size() << std::endl;
                     if (tp.has_raw_data())
                     {
                         std::vector<std::int64_t> d(1);
-                        memcpy(&d[0], weights[node.input(j)].raw_data().c_str(),sizeof(std::int64_t));
+                        memcpy(&d[0], weights[node.input(j)].raw_data().c_str(), sizeof(std::int64_t));
                         maybeShape.emplace_back(d[0]);
                     }
                     else if (tp.data_type() == 1)
@@ -3476,7 +3475,6 @@ int main()
                 }
                 //inputShape["input"] = {3, 2};
             }
-            
         }
     }
 
@@ -5993,7 +5991,7 @@ int main()
                 }
                 fprintf(pp, ",-233");
             }
-            fprintf(pp, " 1=%d", axis - 1);
+            fprintf(pp, " 1=%d", axis);
         }
         else if (op == "Sqrt")
         {
@@ -6060,7 +6058,7 @@ int main()
             if (perm.size() == 3)
             {
                 if (perm[0] == 0 && perm[1] == 1 && perm[2] == 2)
-                    fprintf(pp, " 0=0"); // w h 
+                    fprintf(pp, " 0=0"); // w h
                 else if (perm[0] == 0 && perm[1] == 2 && perm[2] == 1)
                     fprintf(pp, " 0=1"); // h w
                 else if (perm[0] == 1 && perm[1] == 0 && perm[2] == 2)
@@ -6078,7 +6076,7 @@ int main()
                     fprintf(pp, " 0=0"); // w h c
                 else if (perm[0] == 0 && perm[1] == 1 && perm[2] == 3 && perm[3] == 2)
                     fprintf(pp, " 0=1"); // h w c
-                else  if (perm[0] == 0 && perm[1] == 2 && perm[2] == 1 && perm[3] == 3)
+                else if (perm[0] == 0 && perm[1] == 2 && perm[2] == 1 && perm[3] == 3)
                     fprintf(pp, " 0=2"); // w c h
                 else if (perm[0] == 0 && perm[1] == 2 && perm[2] == 3 && perm[3] == 1)
                     fprintf(pp, " 0=3"); // c w h
@@ -6086,7 +6084,6 @@ int main()
                     fprintf(pp, " 0=4"); // h c w
                 else if (perm[0] == 0 && perm[1] == 3 && perm[2] == 2 && perm[3] == 1)
                     fprintf(pp, " 0=5"); // c h w
-
 
                 else if (perm[0] == 1 && perm[1] == 0 && perm[2] == 2 && perm[3] == 3)
                     fprintf(pp, " 0=6");

@@ -11,16 +11,14 @@ import torch.optim as optim
 from torch.utils import data
 import onnx_graphsurgeon as gs
 import onnxruntime
-checkmodel = True
-inferShapes = True
+checkmodel = False
+inferShapes = False
 
 shared_input = [
     'image',
 ]
 shared_out = [
-    '/image_encoder/trunk/blocks.0/attn/Split_output_0',
-    '/image_encoder/trunk/blocks.0/attn/Split_output_1',
-    '/image_encoder/trunk/blocks.0/attn/Split_output_2',
+    '/image_encoder/trunk/blocks.0/attn/MatMul_1_output_0',
 ]
 targetParamPath = 'models/ncnn_encoder.onnx'
 image = np.ones([3, 1024, 1024]).astype(np.float32)
@@ -148,7 +146,6 @@ def modifySplitLayer(layerNamesAndtargetSplit):
         newshapes.append(layerNamesAndtargetSplit[shape]['split'])
     registerShapeNode(newshapes)
     model = onnx.load(targetParamPath)
-    model = onnx.load(targetParamPath)
     modified = []
     while True:
         if len(modified) == len(layerNamesAndtargetSplit):
@@ -171,6 +168,40 @@ def modifySplitLayer(layerNamesAndtargetSplit):
                 break
     onnx.save(model, targetParamPath)
 
+def deleteSqueezeLayer(layernames):
+    model = onnx.load(targetParamPath)
+    prevNodeName=[]
+    nextNodeName=[]
+    for deletingLayer in layernames:
+        findNode=False
+        for node in model.graph.node:
+            if node.name == deletingLayer:
+                findNode=True
+                layerInput = node.input
+                layerOutput = node.output
+                assert len(layerInput) == 2
+                assert len(layerOutput) == 1
+                prevNodeName.append(layerInput[0])
+                nextNodeName.append(layerOutput[0])
+                break
+        assert findNode
+    modified = []
+    while True:
+        if len(modified) == len(layernames):
+            break
+        for i, node in enumerate(model.graph.node):
+            if node.name in prevNodeName and node.name not in modified:
+                layerInput = node.input
+                layerOutput = node.output
+
+
+                model.graph.node.remove(model.graph.node[i])
+                # model.graph.node.insert(i, new_split_node)
+                modified.append(node.name)
+                break
+    onnx.save(model, targetParamPath)
+    
+
 def convertOpencvOnnxToNcnn():
     model = onnx.load('models/opencv_encoder.onnx')
     print(len(model.graph.input))
@@ -181,6 +212,8 @@ def convertOpencvOnnxToNcnn():
     model = onnx.load(targetParamPath)
     print(model.graph.input[0].name)
 
+# --------------------------------
+    deleteSqueezeLayer(['/image_encoder/trunk/blocks.0/attn/Squeeze_2'])
 # --------------------------------
     reshapeAndtargetShape = {}
     reshapeAndtargetShape['/image_encoder/trunk/blocks.0/Reshape']=[32,8,32,1152]
