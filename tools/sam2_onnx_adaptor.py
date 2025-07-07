@@ -1353,27 +1353,12 @@ def test_dynamic_reshape():
     out = session.run(None, {'input': coordPts})
     print(out[0])
     print(out[0].shape)
-def convertOpencvOnnxToNcnn():    
-    model = onnx.load('models/opencv_encoder.onnx')
-    print(len(model.graph.input))
-    
-    print(model.graph.input[0].name)
-    for index, eachNode in enumerate(model.graph.input):
-        now_name = model.graph.input[index].name
-        if now_name == 'image':
-            model.graph.input.remove(model.graph.input[index])
-            image_node = helper.make_tensor_value_info(
-                'image', TensorProto.FLOAT, [3, 1024, 1024])
-            model.graph.input.insert(index, image_node)
-            print('change the image input node')
-    onnx.save(model, 'test.onnx')
 
 if __name__=='__main__':
-    # convert_sam2_hiera_large_encoder_to_opencvOnnx()
+    convert_sam2_hiera_large_encoder_to_opencvOnnx()
     # test_forward()
-    # convert_sam2_decoder_point_label()
+    convert_sam2_decoder_point_label()
     # test_dynamic_reshape()
-    convertOpencvOnnxToNcnn()
 
 
 

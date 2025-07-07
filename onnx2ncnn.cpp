@@ -1,4 +1,4 @@
-﻿
+
 #include "net.h"
 #include "onnx.pb.h"
 #include <algorithm>
@@ -393,9 +393,9 @@ static void fuse_rewrite_gather(onnx::GraphProto* mutable_graph,
             gather->clear_attribute();
 
             int indice = indices[0];
-            set_node_attr_ai(*gather, "starts", std::vector<int>{indice});
-            set_node_attr_ai(*gather, "ends", std::vector<int>{indice + 1});
-            set_node_attr_ai(*gather, "axis", std::vector<int>{axis});
+            set_node_attr_ai(*gather, "starts", std::vector<int> {indice});
+            set_node_attr_ai(*gather, "ends", std::vector<int> {indice + 1});
+            set_node_attr_ai(*gather, "axis", std::vector<int> {axis});
         }
     }
 }
@@ -1208,7 +1208,7 @@ static void fuse_normalize(onnx::GraphProto* mutable_graph, std::map<std::string
                 continue;
 
             if (node2->input(0) != node->output(0) || node3->input(0) != node2->output(0)
-                || node4->input(0) != node->input(0) || node4->input(1) != node3->output(0))
+                    || node4->input(0) != node->input(0) || node4->input(1) != node3->output(0))
                 continue;
 
             if (has_shape_node)
@@ -1331,7 +1331,7 @@ static void fuse_groupnorm(onnx::GraphProto* mutable_graph, std::map<std::string
                 continue;
 
             if (node2->input(0) != node->output(0) || node3->input(0) != node2->output(0)
-                || node4->input(0) != node3->output(0) || node5->input(0) != node4->output(0))
+                    || node4->input(0) != node3->output(0) || node5->input(0) != node4->output(0))
                 continue;
 
             // +eps
@@ -1456,8 +1456,8 @@ static void fuse_layernorm(onnx::GraphProto* mutable_graph, std::map<std::string
     {
         onnx::NodeProto* node = mutable_graph->mutable_node(i);
 
-        // LayerNorm <= X - ReduceMean - Sub - Pow - ReduceMean - Add - Sqrt - Div
-        // LayerNorm <= X - ReduceMean - Sub - Pow - ReduceMean - Add - Sqrt - Div - Mul - Add
+        // LayerNormalization <= X - ReduceMean - Sub - Pow - ReduceMean - Add - Sqrt - Div
+        // LayerNormalization <= X - ReduceMean - Sub - Pow - ReduceMean - Add - Sqrt - Div - Mul - Add
         if (node->op_type() == "ReduceMean")
         {
             if (node_reference[node->output(0)] != 1)
@@ -1505,9 +1505,9 @@ static void fuse_layernorm(onnx::GraphProto* mutable_graph, std::map<std::string
                 continue;
 
             if (node2->input(0) != node->input(0) || node2->input(1) != node->output(0)
-                || node3->input(0) != node2->output(0) || node4->input(0) != node3->output(0)
-                || node5->input(0) != node4->output(0) || node6->input(0) != node5->output(0)
-                || node7->input(0) != node2->output(0) || node7->input(1) != node6->output(0))
+                    || node3->input(0) != node2->output(0) || node4->input(0) != node3->output(0)
+                    || node5->input(0) != node4->output(0) || node6->input(0) != node5->output(0)
+                    || node7->input(0) != node2->output(0) || node7->input(1) != node6->output(0))
                 continue;
 
             if (weights.find(node3->input(1)) == weights.end())
@@ -1678,7 +1678,7 @@ static void fuse_flatten(onnx::GraphProto* mutable_graph, std::map<std::string, 
             onnx::NodeProto* node7 = mutable_graph->mutable_node(i + 6);
 
             if (node2->op_type() != "Gather" || node3->op_type() != "Constant" || node4->op_type() != "Unsqueeze" || node5->op_type() != "Unsqueeze"
-                || node6->op_type() != "Concat" || node7->op_type() != "Reshape")
+                    || node6->op_type() != "Concat" || node7->op_type() != "Reshape")
                 continue;
 
             if (node_reference[node2->output(0)] != 1)
@@ -1697,8 +1697,8 @@ static void fuse_flatten(onnx::GraphProto* mutable_graph, std::map<std::string, 
                 continue;
 
             if (node2->input(0) != node->output(0) || node4->input(0) != node2->output(0) || node5->input(0) != node3->output(0)
-                || node6->input(0) != node4->output(0) || node6->input(1) != node5->output(0)
-                || node7->input(0) != node->input(0) || node7->input(1) != node6->output(0))
+                    || node6->input(0) != node4->output(0) || node6->input(1) != node5->output(0)
+                    || node7->input(0) != node->input(0) || node7->input(1) != node6->output(0))
                 continue;
 
             // axis = 0
@@ -2951,28 +2951,29 @@ int test_forward()
     if (testNet.load_model("ncnn.bin"))
         exit(-1);
     ncnn::Extractor ex1 = testNet.create_extractor();
-    std::vector<float> indata = {1, 2, 3, 4, 5, 6};
-    ncnn::Mat in(2, 3, (void*)&indata[0], 4);
-    //ncnn::Mat in(3,2,  &indata[0]);
-    for (int c = 0; c < in.c; c++)
-    {
-        ncnn::Mat cdata = in.channel(c);
-        int h = cdata.h;
-        int w = cdata.w;
-        for (int y = 0; y < h; ++y)
-        {
-            for (int x = 0; x < w; ++x)
-            {
-                float value = cdata.row(y)[x]; // ��ȡ (y, x) λ�õ�ֵ
-                std::cout << value << " ";
-            }
-            std::cout << std::endl;
-        }
-    }
-    ex1.input("input", in);
+    std::vector<float> indata (3*1024*1024,1);
+    ncnn::Mat in(1024,1024,1, 3, (void*)&indata[0], 4);
+    //for (int c = 0; c < in.c; c++)
+    //{
+    //    ncnn::Mat cdata = in.channel(c);
+    //    int h = cdata.h;
+    //    int w = cdata.w;
+    //    for (int y = 0; y < h; ++y)
+    //    {
+    //        for (int x = 0; x < w; ++x)
+    //        {
+    //            float value = cdata.row(y)[x]; // ��ȡ (y, x) λ�õ�ֵ
+    //            std::cout << value << " ";
+    //        }
+    //        std::cout << std::endl;
+    //    }
+    //}
+    ex1.input("image", in);
+    ncnn::Mat out0; // all rois
     ncnn::Mat out; // all rois
-    ex1.extract("outputReshape", out);
+    ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_0", out);
     ncnn::Mat shape = out.shape();
+    std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w  << std::endl;
     for (int c = 0; c < out.c; c++)
     {
         ncnn::Mat cdata = out.channel(c);
@@ -2982,7 +2983,7 @@ int test_forward()
         {
             for (int x = 0; x < w; ++x)
             {
-                float value = cdata.row(y)[x]; // ��ȡ (y, x) λ�õ�ֵ
+                float value = cdata.row(y)[x]; // ��ȡ (y, x) λ�õ�ֵ
                 std::cout << value << " ";
             }
             std::cout << std::endl;
@@ -2993,12 +2994,13 @@ int test_forward()
 typedef std::vector<std::int64_t> TensorShape;
 int main()
 {
-    const char* onnxpb = "D:/repo/colmap-third/test.onnx";
+    const char* onnxpb = "D:/repo/colmapThird/models/ncnn_encoder.onnx";
     const char* ncnn_prototxt = "ncnn.param";
     const char* ncnn_modelbin = "ncnn.bin";
 
-    std::map<std::string, TensorShape> inputShape;
-    inputShape["input"] = {3, 2};
+    std::map<std::string, TensorShape>inputShape;
+    inputShape["input"] = {3,2};
+
 
     onnx::ModelProto model;
 
@@ -3030,13 +3032,17 @@ int main()
     for (int j = 0; j < graph.initializer_size(); j++)
     {
         const onnx::TensorProto& initializer = graph.initializer(j);
-
-        //         fprintf(stderr, "weight = %s %d\n", initializer.name().c_str(), initializer.data_type());
-
+        std::cout << "initializer " << j << ". name=" << initializer.name() << "; type=" << initializer.data_type() << std::endl;
+        std::cout << "\t";
+        for (int k = 0; k < initializer.dims_size(); k++)
+        {
+            std::cout << initializer.dims()[k] << ", ";
+        }
+        std::cout << std::endl;
         weights[initializer.name()] = initializer;
     }
 
-    if (0) // topological sort
+    if(0)// topological sort
     {
         // name -> producer node index
         std::set<std::string> producers;
@@ -3155,7 +3161,7 @@ int main()
 
         if (op == "Dropout")
         {
-            std::cout << "Dropout not support " << std::endl;
+            std::cout <<"Dropout not support "<< std::endl;
             const std::string& output_name = node.output(0);
             blob_names.insert(output_name);
             node_reference[output_name] = 0;
@@ -3216,7 +3222,7 @@ int main()
     //fuse_rewrite_gather(mutable_graph, weights, node_reference, blob_names, reduced_node_count);
 
     // reduce common const weight node_reference
-    std::unordered_map<std::string, int> graphNodeMap;
+    std::unordered_map<std::string,int>graphNodeMap;
     for (int i = 0; i < node_count; i++)
     {
         const onnx::NodeProto& node = graph.node(i);
@@ -3302,7 +3308,7 @@ int main()
             node_reference[node.input(1)] -= 1;
             node_reference[node.input(2)] -= 1;
         }
-        else if (op == "LayerNorm")
+        else if (op == "LayerNormalization")
         {
             int affine = get_node_attr_i(node, "affine", 1);
             if (affine)
@@ -3426,6 +3432,51 @@ int main()
             {
                 node_reference[node.input(1)] -= 1;
             }
+        }
+        else if (op == "Concat")
+        {
+            if (node.input_size() >= 2)
+            {
+                for (int j = 0; j < node.input_size(); j++)
+                {
+                    std::cout << node.input(j).c_str() << std::endl;
+                    node_reference[node.input(j)] -= 1;
+                }
+            }          
+            if (node.output_size()==1)
+            {
+                node.output(0);
+                std::vector<std::int64_t>maybeShape;
+                for (int j = 0; j < node.input_size(); j++)
+                {
+                    if (weights.count(node.input(j)) == 0)
+                    {
+                        break;
+                    }
+                    const onnx::TensorProto& tp = weights[node.input(j)];
+                    if (tp.data_type() != 7)
+                    {
+                        break;
+                    }
+                    std::cout << tp.dims_size() << std::endl;
+                    std::cout << tp.int64_data_size() << std::endl;
+                    std::cout << tp.double_data_size() << std::endl;                   
+                    std::cout << tp.int32_data_size() << std::endl;
+                    std::cout << tp.float_data_size() << std::endl;                    
+                    std::cout << tp.uint64_data_size() << std::endl;
+                    if (tp.has_raw_data())
+                    {
+                        std::vector<std::int64_t> d(1);
+                        memcpy(&d[0], weights[node.input(j)].raw_data().c_str(),sizeof(std::int64_t));
+                        maybeShape.emplace_back(d[0]);
+                    }
+                    else if (tp.data_type() == 1)
+                    {
+                    }
+                }
+                //inputShape["input"] = {3, 2};
+            }
+            
         }
     }
 
@@ -3590,10 +3641,12 @@ int main()
 
         internal_split++;
     }
+
     for (int i = 0; i < node_count; i++)
     {
         const onnx::NodeProto& node = graph.node(i);
         const std::string& op = node.op_type();
+
         std::cout << "name = " << node.name() << "; type=" << op << std::endl;
         std::cout << "\tinput size = " << node.input_size() << std::endl;
         for (int j = 0; j < node.input_size(); j++)
@@ -3839,7 +3892,7 @@ int main()
         {
             fprintf(pp, "%-16s", "InstanceNorm");
         }
-        else if (op == "LayerNorm")
+        else if (op == "LayerNormalization")
         {
             fprintf(pp, "%-16s", "LayerNorm");
         }
@@ -4918,7 +4971,7 @@ int main()
                 fwrite_tensor_proto_data(B, bp);
             }
         }
-        else if (op == "LayerNorm")
+        else if (op == "LayerNormalization")
         {
             float eps = get_node_attr_f(node, "epsilon", 1e-5f);
             int affine = get_node_attr_i(node, "affine", 1);
@@ -5581,10 +5634,9 @@ int main()
             {
                 if (weights.find(node.input(1)) != weights.end())
                 {
-                    shape=get_node_attr_from_input_ai(weights[node.input(1)]);
+                    shape = get_node_attr_from_input_ai(weights[node.input(1)]);
                 }
             }
-
             if (shape.size() == 1)
             {
                 fprintf(pp, " 0=%d", shape[0]); // should never reach here
@@ -5602,8 +5654,8 @@ int main()
             }
             else if (shape.size() == 4)
             {
-                fprintf(pp, " 11=%d", shape[0]);
-                fprintf(pp, " 2=%d", shape[1]);
+                fprintf(pp, " 2=%d", shape[0]);
+                fprintf(pp, " 11=%d", shape[1]);
                 fprintf(pp, " 1=%d", shape[2]);
                 fprintf(pp, " 0=%d", shape[3]);
             }
@@ -5916,8 +5968,12 @@ int main()
         }
         else if (op == "Split")
         {
+            if (2 != node.input_size())
+            {
+                std::cout << "split param error!" << std::endl;
+            }
+            std::vector<int> split = get_node_attr_from_input_ai(weights[node.input(1)]);
             int axis = get_node_attr_i(node, "axis", 0);
-            std::vector<int> split = get_node_attr_ai(node, "split");
             if (axis < 1)
                 fprintf(stderr, "Unsupported split axis !\n");
 
@@ -6003,48 +6059,79 @@ int main()
 
             if (perm.size() == 3)
             {
-                if (perm[1] == 1 && perm[2] == 2)
-                    fprintf(pp, " 0=0"); // w h
-                else if (perm[1] == 2 && perm[2] == 1)
+                if (perm[0] == 0 && perm[1] == 1 && perm[2] == 2)
+                    fprintf(pp, " 0=0"); // w h 
+                else if (perm[0] == 0 && perm[1] == 2 && perm[2] == 1)
                     fprintf(pp, " 0=1"); // h w
                 else if (perm[0] == 1 && perm[1] == 0 && perm[2] == 2)
-                    fprintf(pp, " 0=0"); // w h
+                    fprintf(pp, " 0=8"); // w h
+                else if (perm[0] == 1 && perm[1] == 2 && perm[2] == 0)
+                    fprintf(pp, " 0=9"); // w h
                 else if (perm[0] == 2 && perm[1] == 0 && perm[2] == 1)
-                    fprintf(pp, " 0=1"); // h w
+                    fprintf(pp, " 0=10"); // h w
+                else if (perm[0] == 2 && perm[1] == 1 && perm[2] == 0)
+                    fprintf(pp, " 0=11"); // h w
             }
             else if (perm.size() == 4)
             {
-                if (perm[1] == 1 && perm[2] == 2 && perm[3] == 3)
+                if (perm[0] == 0 && perm[1] == 1 && perm[2] == 2 && perm[3] == 3)
                     fprintf(pp, " 0=0"); // w h c
-                else if (perm[1] == 1 && perm[2] == 3 && perm[3] == 2)
+                else if (perm[0] == 0 && perm[1] == 1 && perm[2] == 3 && perm[3] == 2)
                     fprintf(pp, " 0=1"); // h w c
-                else if (perm[1] == 2 && perm[2] == 1 && perm[3] == 3)
+                else  if (perm[0] == 0 && perm[1] == 2 && perm[2] == 1 && perm[3] == 3)
                     fprintf(pp, " 0=2"); // w c h
-                else if (perm[1] == 2 && perm[2] == 3 && perm[3] == 1)
+                else if (perm[0] == 0 && perm[1] == 2 && perm[2] == 3 && perm[3] == 1)
                     fprintf(pp, " 0=3"); // c w h
-                else if (perm[1] == 3 && perm[2] == 1 && perm[3] == 2)
+                else if (perm[0] == 0 && perm[1] == 3 && perm[2] == 1 && perm[3] == 2)
                     fprintf(pp, " 0=4"); // h c w
-                else if (perm[1] == 3 && perm[2] == 2 && perm[3] == 1)
+                else if (perm[0] == 0 && perm[1] == 3 && perm[2] == 2 && perm[3] == 1)
                     fprintf(pp, " 0=5"); // c h w
+
+
+                else if (perm[0] == 1 && perm[1] == 0 && perm[2] == 2 && perm[3] == 3)
+                    fprintf(pp, " 0=6");
+                else if (perm[0] == 1 && perm[1] == 0 && perm[2] == 3 && perm[3] == 2)
+                    fprintf(pp, " 0=7");
+                else if (perm[0] == 1 && perm[1] == 2 && perm[2] == 0 && perm[3] == 3)
+                    fprintf(pp, " 0=8");
+                else if (perm[0] == 1 && perm[1] == 2 && perm[2] == 3 && perm[3] == 0)
+                    fprintf(pp, " 0=9");
+                else if (perm[0] == 1 && perm[1] == 3 && perm[2] == 0 && perm[3] == 2)
+                    fprintf(pp, " 0=10");
+                else if (perm[0] == 1 && perm[1] == 3 && perm[2] == 2 && perm[3] == 0)
+                    fprintf(pp, " 0=11");
+
+                else if (perm[0] == 2 && perm[1] == 0 && perm[2] == 1 && perm[3] == 3)
+                    fprintf(pp, " 0=12");
+                else if (perm[0] == 2 && perm[1] == 0 && perm[2] == 3 && perm[3] == 1)
+                    fprintf(pp, " 0=13");
+                else if (perm[0] == 2 && perm[1] == 1 && perm[2] == 0 && perm[3] == 3)
+                    fprintf(pp, " 0=14");
+                else if (perm[0] == 2 && perm[1] == 1 && perm[2] == 3 && perm[3] == 0)
+                    fprintf(pp, " 0=15");
+                else if (perm[0] == 2 && perm[1] == 3 && perm[2] == 0 && perm[3] == 1)
+                    fprintf(pp, " 0=16");
+                else if (perm[0] == 2 && perm[1] == 3 && perm[2] == 1 && perm[3] == 0)
+                    fprintf(pp, " 0=17");
+
+                else if (perm[0] == 3 && perm[1] == 0 && perm[2] == 1 && perm[3] == 2)
+                    fprintf(pp, " 0=18");
+                else if (perm[0] == 3 && perm[1] == 0 && perm[2] == 2 && perm[3] == 1)
+                    fprintf(pp, " 0=19");
+                else if (perm[0] == 3 && perm[1] == 1 && perm[2] == 0 && perm[3] == 2)
+                    fprintf(pp, " 0=20");
+                else if (perm[0] == 3 && perm[1] == 1 && perm[2] == 2 && perm[3] == 0)
+                    fprintf(pp, " 0=21");
+                else if (perm[0] == 3 && perm[1] == 2 && perm[2] == 0 && perm[3] == 1)
+                    fprintf(pp, " 0=22");
+                else if (perm[0] == 3 && perm[1] == 2 && perm[2] == 1 && perm[3] == 0)
+                    fprintf(pp, " 0=21");
                 else
                     fprintf(stderr, "Unsupported transpose type !\n");
             }
             else if (perm.size() == 5)
             {
-                if (perm[1] == 1 && perm[2] == 2 && perm[3] == 3 && perm[4] == 4)
-                    fprintf(pp, " 0=0"); // wx h c
-                else if (perm[1] == 1 && perm[2] == 3 && perm[3] == 4 && perm[4] == 2)
-                    fprintf(pp, " 0=1"); // h wx c
-                else if (perm[1] == 2 && perm[2] == 1 && perm[3] == 3 && perm[4] == 4)
-                    fprintf(pp, " 0=2"); // wx c h
-                else if (perm[1] == 2 && perm[2] == 3 && perm[3] == 4 && perm[4] == 1)
-                    fprintf(pp, " 0=3"); // c wx h
-                else if (perm[1] == 3 && perm[2] == 4 && perm[3] == 1 && perm[4] == 2)
-                    fprintf(pp, " 0=4"); // h c wx
-                else if (perm[1] == 3 && perm[2] == 4 && perm[3] == 2 && perm[4] == 1)
-                    fprintf(pp, " 0=5"); // c h wx
-                else
-                    fprintf(stderr, "Unsupported transpose type !\n");
+                fprintf(stderr, "Unsupported transpose type !\n");
             }
         }
         else if (op == "Upsample")
