@@ -2971,7 +2971,7 @@ int test_forward()
     ex1.input("image", in);
     ncnn::Mat out0; // all rois
     ncnn::Mat out;  // all rois
-    ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_0", out);
+    ex1.extract("/image_encoder/trunk/blocks.0/attn/MatMul_output_0", out);
     ncnn::Mat shape = out.shape();
     std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << std::endl;
     for (int c = 0; c < out.c; c++)
@@ -2994,7 +2994,7 @@ int test_forward()
 typedef std::vector<std::int64_t> TensorShape;
 int main()
 {
-    const char* onnxpb = "D:/repo/colmap-third/models/ncnn_encoder.onnx";
+    const char* onnxpb = "D:/repo/colmapthird/models/ncnn_encoder.onnx";
     const char* ncnn_prototxt = "ncnn.param";
     const char* ncnn_modelbin = "ncnn.bin";
 
@@ -3612,7 +3612,8 @@ int main()
         {
             fprintf(pp, " 0=%d", (int)M.dims(3));
             fprintf(pp, " 1=%d", (int)M.dims(2));
-            fprintf(pp, " 2=%d", (int)M.dims(1));
+            fprintf(pp, " 11=%d", (int)M.dims(1));
+            fprintf(pp, " 2=%d", (int)M.dims(0));
         }
 
         fprintf(pp, "\n");
@@ -4128,13 +4129,13 @@ int main()
             int op_type = 0;
             fprintf(pp, " 0=%d", op_type);
 
-            int with_scalar = get_node_attr_i(node, "with_scalar", 0);
-            float b = get_node_attr_f(node, "b", 0.f);
-            if (with_scalar)
-            {
-                fprintf(pp, " 1=%d", with_scalar);
-                fprintf(pp, " 2=%e", b);
-            }
+            //int with_scalar = get_node_attr_i(node, "with_scalar", 0);
+            //float b = get_node_attr_f(node, "b", 0.f);
+            //if (with_scalar)
+            //{
+            //    fprintf(pp, " 1=%d", with_scalar);
+            //    fprintf(pp, " 2=%e", b);
+            //}
         }
         else if (op == "Asin")
         {
@@ -5269,13 +5270,15 @@ int main()
             int op_type = 2;
             fprintf(pp, " 0=%d", op_type);
 
-            int with_scalar = get_node_attr_i(node, "with_scalar", 0);
-            float b = get_node_attr_f(node, "b", 0.f);
-            if (with_scalar)
-            {
-                fprintf(pp, " 1=%d", with_scalar);
-                fprintf(pp, " 2=%e", b);
-            }
+            //float b = get_node_attr_from_input_f(weights[node.input(1)]);
+            //int with_scalar = 1;
+            //int with_scalar = get_node_attr_i(node, "with_scalar", 0);
+            //float b = get_node_attr_f(node, "b", 0.f);
+            //if (with_scalar)
+            //{
+            //    fprintf(pp, " 1=%d", with_scalar);
+            //    fprintf(pp, " 2=%e", b);
+            //}
         }
         else if (op == "MultiHeadAttention")
         {
