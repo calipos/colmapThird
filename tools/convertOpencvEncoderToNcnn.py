@@ -18,8 +18,8 @@ shared_input = [
     'image',
 ]
 shared_out = [
-    '/image_encoder/trunk/patch_embed/Transpose_output_0'
-    # '/image_encoder/trunk/blocks.0/attn/MatMul_output_0',
+    # '/image_encoder/trunk/patch_embed/Transpose_output_0'
+    '/image_encoder/trunk/blocks.0/attn/MatMul_output_0',
 ]
 targetParamPath = 'models/ncnn_encoder.onnx'
 image = np.ones([3, 1024, 1024]).astype(np.float32)

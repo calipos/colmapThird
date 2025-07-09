@@ -2947,13 +2947,15 @@ void printNcnnBlob(const ncnn::Mat& out)
     ncnn::Mat shape = out.shape();
     std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << std::endl;
     int cstep = out.cstep;
+    int dstep = out.cstep;
     const float*data = (float*)out.data;
     const int elemSize = out.elemsize;
-    if (shape.d > 1) cstep /= shape.d;
+    if (shape.d > 1) dstep /= shape.d;
     for (int c = 0; c < shape.c; c++)
     {
         for (int d = 0; d < shape.d; d++)
         {
+            data = (float*)out.data + d * dstep + c * cstep;
             for (int h = 0; h < shape.h; ++h)
             {
                 const float* data2 = data + h * shape.w;
@@ -2992,14 +2994,12 @@ void printNcnnBlob(const ncnn::Mat& out)
                 }
             }
         }
-        data += cstep;
         if (c == 2)
         {
             int newC = shape.c - 4;
             if (newC>c)
             {
                 std::cout << " ... " << std::endl;
-                data += (cstep * (newC-c));
                 c = newC;
             }
         }
@@ -3034,7 +3034,7 @@ int test_forward()
     ex1.input("image", in);
     ncnn::Mat out0; // all rois
     ncnn::Mat out;  // all rois
-    ex1.extract("/image_encoder/trunk/patch_embed/Transpose_output_0", out);
+    ex1.extract("/image_encoder/trunk/blocks.0/attn/MatMul_output_0", out);
     printNcnnBlob(out);
     return 0;
 }
