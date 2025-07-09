@@ -1,4 +1,4 @@
-
+﻿
 #include "net.h"
 #include "onnx.pb.h"
 #include <algorithm>
@@ -2942,6 +2942,69 @@ static std::string trunc_name(std::string name)
     return trunc_name;
 }
 
+void printNcnnBlob(const ncnn::Mat& out)
+{
+    ncnn::Mat shape = out.shape();
+    std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << std::endl;
+    int cstep = out.cstep;
+    const float*data = (float*)out.data;
+    const int elemSize = out.elemsize;
+    if (shape.d > 1) cstep /= shape.d;
+    for (int c = 0; c < shape.c; c++)
+    {
+        for (int d = 0; d < shape.d; d++)
+        {
+            for (int h = 0; h < shape.h; ++h)
+            {
+                const float* data2 = data + h * shape.w;
+                std::cout << "[" << c << "," << d << "," << h << ":];  ";
+                for (int w = 0; w < shape.w; ++w)
+                {
+                    std::cout << data2[w] << " ";
+                    if (w == 2)
+                    {
+                        int newW = shape.w - 4;
+                        if (newW > w)
+                        {
+                            std::cout << " ... " ;
+                            w = newW;
+                        }
+                    }
+                }
+                std::cout << std::endl;
+                if (h == 2)
+                {
+                    int newH = shape.h - 4;
+                    if (newH > h)
+                    {
+                        std::cout << " ... " << std::endl;
+                        h = newH;
+                    }
+                }
+            }
+            if (d == 2)
+            {
+                int newD = shape.d - 4;
+                if (newD > d)
+                {
+                    std::cout << " ... " << std::endl;
+                    d = newD;
+                }
+            }
+        }
+        data += cstep;
+        if (c == 2)
+        {
+            int newC = shape.c - 4;
+            if (newC>c)
+            {
+                std::cout << " ... " << std::endl;
+                data += (cstep * (newC-c));
+                c = newC;
+            }
+        }
+    }
+}
 int test_forward()
 {
     ncnn::Net testNet;
@@ -2952,7 +3015,7 @@ int test_forward()
         exit(-1);
     ncnn::Extractor ex1 = testNet.create_extractor();
     std::vector<float> indata(3 * 1024 * 1024, 1);
-    ncnn::Mat in(1024, 1024, 1, 3, (void*)&indata[0], 4);
+    ncnn::Mat in(1024, 1024,  3, (void*)&indata[0], 4);
     //for (int c = 0; c < in.c; c++)
     //{
     //    ncnn::Mat cdata = in.channel(c);
@@ -2971,7 +3034,29 @@ int test_forward()
     ex1.input("image", in);
     ncnn::Mat out0; // all rois
     ncnn::Mat out;  // all rois
-    ex1.extract("/image_encoder/trunk/blocks.0/attn/MatMul_output_0", out);
+    ex1.extract("/image_encoder/trunk/patch_embed/Transpose_output_0", out);
+    printNcnnBlob(out);
+    return 0;
+}
+int test_matmul_forward()
+{
+    ncnn::Net testNet;
+    testNet.opt.use_vulkan_compute = true;
+    if (testNet.load_param("ncnn.param"))
+        exit(-1);
+    if (testNet.load_model("ncnn.bin"))
+        exit(-1);
+    ncnn::Extractor ex1 = testNet.create_extractor();
+    std::vector<float> indata(2*3*4, 1);
+    for (size_t i = 0; i < indata.size(); i++)
+    {
+        indata[i] = i;
+    }
+    ncnn::Mat in(4,3,2, (void*)&indata[0], 4);
+    ex1.input("input", in);
+    ncnn::Mat out0; // all rois
+    ncnn::Mat out;  // all rois
+    ex1.extract("output", out);
     ncnn::Mat shape = out.shape();
     std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << std::endl;
     for (int c = 0; c < out.c; c++)
@@ -2992,9 +3077,81 @@ int test_forward()
     return 0;
 }
 typedef std::vector<std::int64_t> TensorShape;
+
+std::map<std::string,float> getTheSimpleBinaryOp(const onnx::GraphProto& graph,
+                                              const std::map<std::string, onnx::TensorProto>&weights)
+{
+    std::map<std::string, float>ret;
+    std::map<std::string,std::string>binaryNodeAndOutBlob;
+    std::map<std::string,int>inputBlobCnt;
+    int node_count = graph.node_size();
+    for (int i = 0; i < node_count; i++)
+    {
+        const onnx::NodeProto& node = graph.node(i);
+        const std::string&nodeName = node.name();
+        const std::string& op = node.op_type();
+        for (int i = 0; i < node.input_size(); i++)
+        {
+            const std::string& inputName = node.input(i);
+            if (inputBlobCnt.count(inputName) == 0)
+            {
+                inputBlobCnt[inputName] = 1;
+            }
+            else
+            {
+                inputBlobCnt[inputName] += 1;
+            }
+        }
+        if (op.compare("Add") == 0 || op.compare("Div") == 0 || op.compare("Mul") == 0)
+        {
+            if (node.input_size() == 2 && node.output_size() == 1)
+            {
+                const std::string& binaryOperandName = node.input(1);
+                if (weights.count(binaryOperandName) > 0)
+                {
+                    int dim_size = weights.at(binaryOperandName).dims_size();
+                    int eleCnt =1;
+                    for (size_t i = 0; i < dim_size; i++)
+                    {
+                        eleCnt *= weights.at(binaryOperandName).dims(i);
+                    }
+                    if (eleCnt==1)
+                    {
+                        float data = get_node_attr_from_input_f(weights.at(binaryOperandName));
+                        ret[nodeName] = data;
+                        binaryNodeAndOutBlob[nodeName] = node.output(0);
+                    }
+                }
+            }
+            
+        }
+    }
+    auto iter = ret.begin();
+    while (true)
+    {
+        if (iter == ret.end())
+        {
+            break;
+        }
+        const auto& binaryOpName = iter->first;
+        const auto& outBlobName = binaryNodeAndOutBlob[binaryOpName];
+        if (inputBlobCnt.count(outBlobName) != 1)
+        {
+            ret.erase(iter);
+            iter = ret.begin();
+        }
+        else
+        {
+            iter++;
+        }
+    }
+    return ret;
+}
 int main()
 {
+    //return test_forward();
     const char* onnxpb = "D:/repo/colmapthird/models/ncnn_encoder.onnx";
+    //const char* onnxpb = "D:/repo/colmapthird/test.onnx";
     const char* ncnn_prototxt = "ncnn.param";
     const char* ncnn_modelbin = "ncnn.bin";
 
@@ -3019,15 +3176,9 @@ int main()
 
     const onnx::GraphProto& graph = model.graph();
     onnx::GraphProto* mutable_graph = model.mutable_graph();
-
     int node_count = graph.node_size();
-
-    // node reference
     std::map<std::string, int> node_reference;
-
-    // weight node and weight reshape node
     std::map<std::string, onnx::TensorProto> weights;
-
     for (int j = 0; j < graph.initializer_size(); j++)
     {
         const onnx::TensorProto& initializer = graph.initializer(j);
@@ -3040,114 +3191,27 @@ int main()
         std::cout << std::endl;
         weights[initializer.name()] = initializer;
     }
-
-    if (0) // topological sort
-    {
-        // name -> producer node index
-        std::set<std::string> producers;
-        for (int j = 0; j < graph.input_size(); j++)
-        {
-            const std::string& input_name = graph.input(j).name();
-            producers.insert(input_name);
-        }
-
-        for (int i = 0; i < node_count;)
-        {
-            onnx::NodeProto* node = mutable_graph->mutable_node(i);
-
-            bool swapnode = false;
-            std::string missing_input_name;
-            for (int j = 0; j < (int)node->input_size(); j++)
-            {
-                const std::string& input_name = node->input(j);
-                if (input_name.empty())
-                    continue;
-
-                if (producers.find(input_name) == producers.end() && weights.find(input_name) == weights.end())
-                {
-                    swapnode = true;
-                    missing_input_name = input_name;
-                    break;
-                }
-            }
-
-            if (!swapnode)
-            {
-                for (int j = 0; j < (int)node->output_size(); j++)
-                {
-                    const std::string& output_name = node->output(j);
-                    if (output_name.empty())
-                        continue;
-
-                    producers.insert(output_name);
-                }
-
-                i++;
-                continue;
-            }
-
-            // find node that produce missing_input_name
-            int q = i + 1;
-            for (; q < node_count; q++)
-            {
-                onnx::NodeProto* nodeq = mutable_graph->mutable_node(q);
-                bool found = false;
-                for (int j = 0; j < (int)nodeq->output_size(); j++)
-                {
-                    const std::string& output_name = nodeq->output(j);
-                    if (output_name == missing_input_name)
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (found)
-                    break;
-            }
-
-            if (q == node_count)
-            {
-                fprintf(stderr, "cannot find node produces %s but node %d requires it\n", missing_input_name.c_str(), i);
-                return -1;
-            }
-
-            // fprintf(stderr, "swap %d %d\n", i, q);
-            // swap this node with q
-            onnx::NodeProto* nodeq = mutable_graph->mutable_node(q);
-            onnx::NodeProto tmp = *node;
-            *node = *nodeq;
-            *nodeq = tmp;
-        }
-    }
-
-    // global definition line
-    // [layer count] [blob count]
+    auto SimpleBinaryOp = getTheSimpleBinaryOp(graph, weights);
+    
     std::set<std::string> blob_names;
     for (int i = 0; i < node_count; i++)
     {
         const onnx::NodeProto& node = graph.node(i);
-
         const std::string& op = node.op_type();
-
         std::string name = node.name();
         if (name.empty())
         {
             name = node.output(0);
         }
-
         if (op == "Constant")
         {
             onnx::TensorProto tensor = get_node_attr_tensor(node, "value");
             weights[node.output(0)] = tensor;
         }
-
         for (int j = 0; j < (int)node.input_size(); j++)
         {
             const std::string& input_name = node.input(j);
-
             blob_names.insert(input_name);
-
             if (node_reference.find(input_name) == node_reference.end())
             {
                 node_reference[input_name] = 1;
@@ -3157,47 +3221,34 @@ int main()
                 node_reference[input_name] = node_reference[input_name] + 1;
             }
         }
-
         if (op == "Dropout")
         {
-            std::cout << "Dropout not support " << std::endl;
+            std::cout << "   ***  Dropout not support    ***  " << std::endl;
             const std::string& output_name = node.output(0);
             blob_names.insert(output_name);
             node_reference[output_name] = 0;
             continue;
         }
-
         for (int j = 0; j < (int)node.output_size(); j++)
         {
             const std::string& output_name = node.output(j);
-
             blob_names.insert(output_name);
-
             node_reference[output_name] = 0;
         }
     }
 
-    // include Input node
     int input_node_count = 0;
     for (int j = 0; j < graph.input_size(); j++)
     {
         const std::string& input_name = graph.input(j).name();
-
-        // check weight
         if (weights.find(input_name) != weights.end())
             continue;
-
         blob_names.insert(input_name);
         graph.input(j).type();
         input_node_count++;
     }
 
-    //     for (auto a: node_reference)
-    //     {
-    //         fprintf(stderr, "a = %s %d\n", a.first.c_str(), a.second);
-    //     }
 
-    // op chain fusion
     int reduced_node_count = 0;
     //fuse_weight_reshape(mutable_graph, weights, node_reference, blob_names, reduced_node_count);
     //fuse_weight_transpose(mutable_graph, weights, node_reference, blob_names, reduced_node_count);
@@ -3445,7 +3496,6 @@ int main()
             if (node.output_size() == 1)
             {
                 node.output(0);
-                std::vector<std::int64_t> maybeShape;
                 for (int j = 0; j < node.input_size(); j++)
                 {
                     if (weights.count(node.input(j)) == 0)
@@ -3457,33 +3507,11 @@ int main()
                     {
                         break;
                     }
-                    std::cout << tp.dims_size() << std::endl;
-                    std::cout << tp.int64_data_size() << std::endl;
-                    std::cout << tp.double_data_size() << std::endl;
-                    std::cout << tp.int32_data_size() << std::endl;
-                    std::cout << tp.float_data_size() << std::endl;
-                    std::cout << tp.uint64_data_size() << std::endl;
-                    if (tp.has_raw_data())
-                    {
-                        std::vector<std::int64_t> d(1);
-                        memcpy(&d[0], weights[node.input(j)].raw_data().c_str(), sizeof(std::int64_t));
-                        maybeShape.emplace_back(d[0]);
-                    }
-                    else if (tp.data_type() == 1)
-                    {
-                    }
                 }
                 //inputShape["input"] = {3, 2};
             }
         }
     }
-
-    //         for (auto a: node_reference)
-    //         {
-    //             fprintf(stderr, "b = %s %d\n", a.first.c_str(), a.second);
-    //         }
-
-    // count all weight node with zero reference
     int zero_reference_weight_node_count = 0;
     for (std::map<std::string, onnx::TensorProto>::iterator it = weights.begin(); it != weights.end(); it++)
     {
@@ -3696,388 +3724,389 @@ int main()
             fprintf(stderr, "  output = %s\n", output_name.c_str());
         }
         */
-
-        if (op == "Abs")
         {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "Acos")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "Add")
-        {
-            fprintf(pp, "%-16s", "BinaryOp");
-        }
-        else if (op == "Asin")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "Atan")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "AveragePool" || op == "MaxPool")
-        {
-            std::vector<int> kernel_shape = get_node_attr_ai(node, "kernel_shape");
-            if (kernel_shape.size() == 1)
+            if (op == "Abs")
             {
-                fprintf(pp, "%-16s", "Pooling1D");
+                fprintf(pp, "%-16s", "UnaryOp");
             }
-            else
+            else if (op == "Acos")
             {
-                fprintf(pp, "%-16s", "Pooling");
+                fprintf(pp, "%-16s", "UnaryOp");
             }
-        }
-        else if (op == "BatchNormalization")
-        {
-            fprintf(pp, "%-16s", "BatchNorm");
-        }
-        else if (op == "BiasGelu")
-        {
-            fprintf(pp, "%-16s", "BiasGelu");
-        }
-        else if (op == "Ceil")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "Celu")
-        {
-            fprintf(pp, "%-16s", "CELU");
-        }
-        else if (op == "Clip")
-        {
-            fprintf(pp, "%-16s", "Clip");
-        }
-        else if (op == "Concat")
-        {
-            fprintf(pp, "%-16s", "Concat");
-        }
-        else if (op == "Constant")
-        {
-            continue;
-        }
-        else if (op == "Conv")
-        {
-            std::vector<int> kernel_shape = get_node_attr_ai(node, "kernel_shape");
-            if (kernel_shape.size() == 1)
+            else if (op == "Add")
             {
-                fprintf(pp, "%-16s", "Convolution1D");
+                fprintf(pp, "%-16s", "BinaryOp");
             }
-            else
+            else if (op == "Asin")
+            {
+                fprintf(pp, "%-16s", "UnaryOp");
+            }
+            else if (op == "Atan")
+            {
+                fprintf(pp, "%-16s", "UnaryOp");
+            }
+            else if (op == "AveragePool" || op == "MaxPool")
+            {
+                std::vector<int> kernel_shape = get_node_attr_ai(node, "kernel_shape");
+                if (kernel_shape.size() == 1)
+                {
+                    fprintf(pp, "%-16s", "Pooling1D");
+                }
+                else
+                {
+                    fprintf(pp, "%-16s", "Pooling");
+                }
+            }
+            else if (op == "BatchNormalization")
+            {
+                fprintf(pp, "%-16s", "BatchNorm");
+            }
+            else if (op == "BiasGelu")
+            {
+                fprintf(pp, "%-16s", "BiasGelu");
+            }
+            else if (op == "Ceil")
+            {
+                fprintf(pp, "%-16s", "UnaryOp");
+            }
+            else if (op == "Celu")
+            {
+                fprintf(pp, "%-16s", "CELU");
+            }
+            else if (op == "Clip")
+            {
+                fprintf(pp, "%-16s", "Clip");
+            }
+            else if (op == "Concat")
+            {
+                fprintf(pp, "%-16s", "Concat");
+            }
+            else if (op == "Constant")
+            {
+                continue;
+            }
+            else if (op == "Conv")
+            {
+                std::vector<int> kernel_shape = get_node_attr_ai(node, "kernel_shape");
+                if (kernel_shape.size() == 1)
+                {
+                    fprintf(pp, "%-16s", "Convolution1D");
+                }
+                else
+                {
+                    int group = get_node_attr_i(node, "group", 1);
+                    if (group > 1)
+                    {
+                        fprintf(pp, "%-16s", "ConvolutionDepthWise");
+                    }
+                    else
+                    {
+                        fprintf(pp, "%-16s", "Convolution");
+                    }
+                }
+            }
+            else if (op == "ConvTranspose")
             {
                 int group = get_node_attr_i(node, "group", 1);
                 if (group > 1)
                 {
-                    fprintf(pp, "%-16s", "ConvolutionDepthWise");
+                    fprintf(pp, "%-16s", "DeconvolutionDepthWise");
                 }
                 else
                 {
-                    fprintf(pp, "%-16s", "Convolution");
+                    fprintf(pp, "%-16s", "Deconvolution");
                 }
             }
-        }
-        else if (op == "ConvTranspose")
-        {
-            int group = get_node_attr_i(node, "group", 1);
-            if (group > 1)
+            else if (op == "Cos")
             {
-                fprintf(pp, "%-16s", "DeconvolutionDepthWise");
+                fprintf(pp, "%-16s", "UnaryOp");
             }
-            else
+            else if (op == "Crop")
             {
-                fprintf(pp, "%-16s", "Deconvolution");
+                fprintf(pp, "%-16s", "Crop");
             }
-        }
-        else if (op == "Cos")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "Crop")
-        {
-            fprintf(pp, "%-16s", "Crop");
-        }
-        else if (op == "DepthToSpace")
-        {
-            fprintf(pp, "%-16s", "PixelShuffle");
-        }
-        else if (op == "Div")
-        {
-            fprintf(pp, "%-16s", "BinaryOp");
-        }
-        else if (op == "Dropout")
-        {
-            fprintf(pp, "%-16s", "Dropout");
-            output_size = 1;
-        }
-        else if (op == "Elu")
-        {
-            fprintf(pp, "%-16s", "ELU");
-        }
-        else if (op == "EmbedLayerNormalization")
-        {
-            fprintf(pp, "%-16s", "EmbedLayerNormalization");
-        }
-        else if (op == "Erf")
-        {
-            fprintf(pp, "%-16s", "Erf");
-        }
-        else if (op == "Exp")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "Flatten")
-        {
-            fprintf(pp, "%-16s", "Flatten");
-        }
-        else if (op == "Floor")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "Gelu")
-        {
-            fprintf(pp, "%-16s", "GELU");
-        }
-        else if (op == "Gemm")
-        {
-            float alpha = get_node_attr_f(node, "alpha", 1.f);
-            float beta = get_node_attr_f(node, "beta", 1.f);
-            int transA = get_node_attr_i(node, "transA", 0);
-            int transB = get_node_attr_i(node, "transB", 0);
+            else if (op == "DepthToSpace")
+            {
+                fprintf(pp, "%-16s", "PixelShuffle");
+            }
+            else if (op == "Div")
+            {
+                fprintf(pp, "%-16s", "BinaryOp");
+            }
+            else if (op == "Dropout")
+            {
+                fprintf(pp, "%-16s", "Dropout");
+                output_size = 1;
+            }
+            else if (op == "Elu")
+            {
+                fprintf(pp, "%-16s", "ELU");
+            }
+            else if (op == "EmbedLayerNormalization")
+            {
+                fprintf(pp, "%-16s", "EmbedLayerNormalization");
+            }
+            else if (op == "Erf")
+            {
+                fprintf(pp, "%-16s", "Erf");
+            }
+            else if (op == "Exp")
+            {
+                fprintf(pp, "%-16s", "UnaryOp");
+            }
+            else if (op == "Flatten")
+            {
+                fprintf(pp, "%-16s", "Flatten");
+            }
+            else if (op == "Floor")
+            {
+                fprintf(pp, "%-16s", "UnaryOp");
+            }
+            else if (op == "Gelu")
+            {
+                fprintf(pp, "%-16s", "GELU");
+            }
+            else if (op == "Gemm")
+            {
+                float alpha = get_node_attr_f(node, "alpha", 1.f);
+                float beta = get_node_attr_f(node, "beta", 1.f);
+                int transA = get_node_attr_i(node, "transA", 0);
+                int transB = get_node_attr_i(node, "transB", 0);
 
-            if (alpha == 1.f && beta == 1.f && transA == 0 && transB == 1)
+                if (alpha == 1.f && beta == 1.f && transA == 0 && transB == 1)
+                {
+                    // InnerProduct-like A * B + C
+                    fprintf(pp, "%-16s", "InnerProduct");
+                }
+                else
+                {
+                    fprintf(pp, "%-16s", "Gemm");
+                }
+            }
+            else if (op == "GlobalAveragePool")
             {
-                // InnerProduct-like A * B + C
-                fprintf(pp, "%-16s", "InnerProduct");
+                fprintf(pp, "%-16s", "Pooling");
+            }
+            else if (op == "GlobalMaxPool")
+            {
+                fprintf(pp, "%-16s", "Pooling");
+            }
+            else if (op == "adaptive_avg_pool2d" || op == "adaptive_max_pool2d")
+            {
+                fprintf(pp, "%-16s", "Pooling");
+            }
+            else if (op == "GroupNorm")
+            {
+                fprintf(pp, "%-16s", "GroupNorm");
+            }
+            else if (op == "GRU")
+            {
+                fprintf(pp, "%-16s", "GRU");
+            }
+            else if (op == "HardSigmoid")
+            {
+                fprintf(pp, "%-16s", "HardSigmoid");
+            }
+            else if (op == "HardSwish")
+            {
+                fprintf(pp, "%-16s", "HardSwish");
+            }
+            else if (op == "ImageScaler")
+            {
+                fprintf(pp, "%-16s", "Scale");
+            }
+            else if (op == "InstanceNormalization")
+            {
+                fprintf(pp, "%-16s", "InstanceNorm");
+            }
+            else if (op == "LayerNormalization")
+            {
+                fprintf(pp, "%-16s", "LayerNorm");
+            }
+            else if (op == "LeakyRelu")
+            {
+                fprintf(pp, "%-16s", "ReLU");
+            }
+            else if (op == "Log")
+            {
+                fprintf(pp, "%-16s", "UnaryOp");
+            }
+            else if (op == "LRN")
+            {
+                fprintf(pp, "%-16s", "LRN");
+            }
+            else if (op == "LSTM")
+            {
+                fprintf(pp, "%-16s", "LSTM");
+            }
+            else if (op == "MatMul")
+            {
+                if (weights.find(node.input(1)) != weights.end() && weights[node.input(1)].dims_size() == 2)
+                {
+                    fprintf(pp, "%-16s", "InnerProduct");
+                }
+                else
+                {
+                    fprintf(pp, "%-16s", "MatMul");
+                }
+            }
+            else if (op == "Max")
+            {
+                fprintf(pp, "%-16s", "BinaryOp");
+            }
+            else if (op == "Min")
+            {
+                fprintf(pp, "%-16s", "BinaryOp");
+            }
+            else if (op == "Mul")
+            {
+                fprintf(pp, "%-16s", "BinaryOp");
+            }
+            else if (op == "MultiHeadAttention")
+            {
+                fprintf(pp, "%-16s", "MultiHeadAttention");
+            }
+            else if (op == "Neg")
+            {
+                fprintf(pp, "%-16s", "UnaryOp");
+            }
+            else if (op == "Normalize")
+            {
+                fprintf(pp, "%-16s", "Normalize");
+            }
+            else if (op == "Pad")
+            {
+                fprintf(pp, "%-16s", "Padding");
+            }
+            else if (op == "PixelShuffle")
+            {
+                fprintf(pp, "%-16s", "PixelShuffle");
+            }
+            else if (op == "Pow")
+            {
+                fprintf(pp, "%-16s", "BinaryOp");
+            }
+            else if (op == "PRelu")
+            {
+                fprintf(pp, "%-16s", "PReLU");
+            }
+            else if (op == "Reciprocal")
+            {
+                fprintf(pp, "%-16s", "UnaryOp");
+            }
+            else if (op == "ReduceMax" || op == "ReduceMin" || op == "ReduceMean" || op == "ReduceProd" || op == "ReduceSum" || op == "ReduceSumSquare" || op == "ReduceL1" || op == "ReduceL2" || op == "ReduceLogSum" || op == "ReduceLogSumExp")
+            {
+                fprintf(pp, "%-16s", "Reduction");
+            }
+            else if (op == "Relu")
+            {
+                fprintf(pp, "%-16s", "ReLU");
+            }
+            else if (op == "Reorg")
+            {
+                fprintf(pp, "%-16s", "Reorg");
+            }
+            else if (op == "Reshape")
+            {
+                fprintf(pp, "%-16s", "Reshape");
+            }
+            else if (op == "RNN")
+            {
+                fprintf(pp, "%-16s", "RNN");
+            }
+            else if (op == "RDiv")
+            {
+                fprintf(pp, "%-16s", "BinaryOp");
+            }
+            else if (op == "RSub")
+            {
+                fprintf(pp, "%-16s", "BinaryOp");
+            }
+            else if (op == "Shrink")
+            {
+                fprintf(pp, "%-16s", "Shrink");
+            }
+            else if (op == "ShuffleChannel")
+            {
+                fprintf(pp, "%-16s", "ShuffleChannel");
+            }
+            else if (op == "Sigmoid")
+            {
+                fprintf(pp, "%-16s", "Sigmoid");
+            }
+            else if (op == "Sin")
+            {
+                fprintf(pp, "%-16s", "UnaryOp");
+            }
+            else if (op == "SkipLayerNormalization")
+            {
+                fprintf(pp, "%-16s", "SkipLayerNormalization");
+            }
+            else if (op == "Slice")
+            {
+                fprintf(pp, "%-16s", "Crop");
+            }
+            else if (op == "Softmax")
+            {
+                fprintf(pp, "%-16s", "Softmax");
+            }
+            else if (op == "Softplus")
+            {
+                fprintf(pp, "%-16s", "Softplus");
+            }
+            else if (op == "Split")
+            {
+                fprintf(pp, "%-16s", "Slice");
+            }
+            else if (op == "Sqrt")
+            {
+                fprintf(pp, "%-16s", "UnaryOp");
+            }
+            else if (op == "Squeeze")
+            {
+                fprintf(pp, "%-16s", "Squeeze");
+            }
+            else if (op == "Sub")
+            {
+                fprintf(pp, "%-16s", "BinaryOp");
+            }
+            else if (op == "Sum")
+            {
+                fprintf(pp, "%-16s", "Eltwise");
+            }
+            else if (op == "Swish")
+            {
+                fprintf(pp, "%-16s", "Swish");
+            }
+            else if (op == "Tan")
+            {
+                fprintf(pp, "%-16s", "UnaryOp");
+            }
+            else if (op == "Tanh")
+            {
+                fprintf(pp, "%-16s", "UnaryOp");
+            }
+            else if (op == "Transpose")
+            {
+                fprintf(pp, "%-16s", "Permute");
+            }
+            else if (op == "Upsample" || op == "Resize")
+            {
+                fprintf(pp, "%-16s", "Interp");
+            }
+            else if (op == "Unsqueeze")
+            {
+                fprintf(pp, "%-16s", "ExpandDims");
             }
             else
             {
-                fprintf(pp, "%-16s", "Gemm");
+                // TODO
+                fprintf(stderr, "%s not supported yet!\n", op.c_str());
+                fprintf(pp, "%-16s", op.c_str());
             }
         }
-        else if (op == "GlobalAveragePool")
-        {
-            fprintf(pp, "%-16s", "Pooling");
-        }
-        else if (op == "GlobalMaxPool")
-        {
-            fprintf(pp, "%-16s", "Pooling");
-        }
-        else if (op == "adaptive_avg_pool2d" || op == "adaptive_max_pool2d")
-        {
-            fprintf(pp, "%-16s", "Pooling");
-        }
-        else if (op == "GroupNorm")
-        {
-            fprintf(pp, "%-16s", "GroupNorm");
-        }
-        else if (op == "GRU")
-        {
-            fprintf(pp, "%-16s", "GRU");
-        }
-        else if (op == "HardSigmoid")
-        {
-            fprintf(pp, "%-16s", "HardSigmoid");
-        }
-        else if (op == "HardSwish")
-        {
-            fprintf(pp, "%-16s", "HardSwish");
-        }
-        else if (op == "ImageScaler")
-        {
-            fprintf(pp, "%-16s", "Scale");
-        }
-        else if (op == "InstanceNormalization")
-        {
-            fprintf(pp, "%-16s", "InstanceNorm");
-        }
-        else if (op == "LayerNormalization")
-        {
-            fprintf(pp, "%-16s", "LayerNorm");
-        }
-        else if (op == "LeakyRelu")
-        {
-            fprintf(pp, "%-16s", "ReLU");
-        }
-        else if (op == "Log")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "LRN")
-        {
-            fprintf(pp, "%-16s", "LRN");
-        }
-        else if (op == "LSTM")
-        {
-            fprintf(pp, "%-16s", "LSTM");
-        }
-        else if (op == "MatMul")
-        {
-            if (weights.find(node.input(1)) != weights.end() && weights[node.input(1)].dims_size() == 2)
-            {
-                fprintf(pp, "%-16s", "InnerProduct");
-            }
-            else
-            {
-                fprintf(pp, "%-16s", "Gemm");
-            }
-        }
-        else if (op == "Max")
-        {
-            fprintf(pp, "%-16s", "BinaryOp");
-        }
-        else if (op == "Min")
-        {
-            fprintf(pp, "%-16s", "BinaryOp");
-        }
-        else if (op == "Mul")
-        {
-            fprintf(pp, "%-16s", "BinaryOp");
-        }
-        else if (op == "MultiHeadAttention")
-        {
-            fprintf(pp, "%-16s", "MultiHeadAttention");
-        }
-        else if (op == "Neg")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "Normalize")
-        {
-            fprintf(pp, "%-16s", "Normalize");
-        }
-        else if (op == "Pad")
-        {
-            fprintf(pp, "%-16s", "Padding");
-        }
-        else if (op == "PixelShuffle")
-        {
-            fprintf(pp, "%-16s", "PixelShuffle");
-        }
-        else if (op == "Pow")
-        {
-            fprintf(pp, "%-16s", "BinaryOp");
-        }
-        else if (op == "PRelu")
-        {
-            fprintf(pp, "%-16s", "PReLU");
-        }
-        else if (op == "Reciprocal")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "ReduceMax" || op == "ReduceMin" || op == "ReduceMean" || op == "ReduceProd" || op == "ReduceSum" || op == "ReduceSumSquare" || op == "ReduceL1" || op == "ReduceL2" || op == "ReduceLogSum" || op == "ReduceLogSumExp")
-        {
-            fprintf(pp, "%-16s", "Reduction");
-        }
-        else if (op == "Relu")
-        {
-            fprintf(pp, "%-16s", "ReLU");
-        }
-        else if (op == "Reorg")
-        {
-            fprintf(pp, "%-16s", "Reorg");
-        }
-        else if (op == "Reshape")
-        {
-            fprintf(pp, "%-16s", "Reshape");
-        }
-        else if (op == "RNN")
-        {
-            fprintf(pp, "%-16s", "RNN");
-        }
-        else if (op == "RDiv")
-        {
-            fprintf(pp, "%-16s", "BinaryOp");
-        }
-        else if (op == "RSub")
-        {
-            fprintf(pp, "%-16s", "BinaryOp");
-        }
-        else if (op == "Shrink")
-        {
-            fprintf(pp, "%-16s", "Shrink");
-        }
-        else if (op == "ShuffleChannel")
-        {
-            fprintf(pp, "%-16s", "ShuffleChannel");
-        }
-        else if (op == "Sigmoid")
-        {
-            fprintf(pp, "%-16s", "Sigmoid");
-        }
-        else if (op == "Sin")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "SkipLayerNormalization")
-        {
-            fprintf(pp, "%-16s", "SkipLayerNormalization");
-        }
-        else if (op == "Slice")
-        {
-            fprintf(pp, "%-16s", "Crop");
-        }
-        else if (op == "Softmax")
-        {
-            fprintf(pp, "%-16s", "Softmax");
-        }
-        else if (op == "Softplus")
-        {
-            fprintf(pp, "%-16s", "Softplus");
-        }
-        else if (op == "Split")
-        {
-            fprintf(pp, "%-16s", "Slice");
-        }
-        else if (op == "Sqrt")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "Squeeze")
-        {
-            fprintf(pp, "%-16s", "Squeeze");
-        }
-        else if (op == "Sub")
-        {
-            fprintf(pp, "%-16s", "BinaryOp");
-        }
-        else if (op == "Sum")
-        {
-            fprintf(pp, "%-16s", "Eltwise");
-        }
-        else if (op == "Swish")
-        {
-            fprintf(pp, "%-16s", "Swish");
-        }
-        else if (op == "Tan")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "Tanh")
-        {
-            fprintf(pp, "%-16s", "UnaryOp");
-        }
-        else if (op == "Transpose")
-        {
-            fprintf(pp, "%-16s", "Permute");
-        }
-        else if (op == "Upsample" || op == "Resize")
-        {
-            fprintf(pp, "%-16s", "Interp");
-        }
-        else if (op == "Unsqueeze")
-        {
-            fprintf(pp, "%-16s", "ExpandDims");
-        }
-        else
-        {
-            // TODO
-            fprintf(stderr, "%s not supported yet!\n", op.c_str());
-            fprintf(pp, "%-16s", op.c_str());
-        }
-
         fprintf(pp, " %-24s %d %d", trunc_name(name).c_str(), input_size, output_size);
+        
 
         for (int j = 0; j < (int)node.input_size(); j++)
         {
@@ -5269,7 +5298,16 @@ int main()
         {
             int op_type = 2;
             fprintf(pp, " 0=%d", op_type);
-
+            if (SimpleBinaryOp.count(name) > 0)
+            {
+                float b = SimpleBinaryOp.at(name);
+                int with_scalar = 1;
+                if (with_scalar)
+                {
+                    fprintf(pp, " 1=%d", with_scalar);
+                    fprintf(pp, " 2=%e", b);
+                }
+            }
             //float b = get_node_attr_from_input_f(weights[node.input(1)]);
             //int with_scalar = 1;
             //int with_scalar = get_node_attr_i(node, "with_scalar", 0);
@@ -6268,5 +6306,6 @@ int main()
     fclose(pp);
     fclose(bp);
     test_forward();
+    //test_matmul_forward();
     return 0;
 }

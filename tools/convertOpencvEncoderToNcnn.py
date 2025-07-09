@@ -18,7 +18,8 @@ shared_input = [
     'image',
 ]
 shared_out = [
-    '/image_encoder/trunk/blocks.0/attn/MatMul_output_0',
+    '/image_encoder/trunk/patch_embed/Transpose_output_0'
+    # '/image_encoder/trunk/blocks.0/attn/MatMul_output_0',
 ]
 targetParamPath = 'models/ncnn_encoder.onnx'
 image = np.ones([3, 1024, 1024]).astype(np.float32)
@@ -247,7 +248,7 @@ def insertSpecifiedReshape(layerPairs):
             insert_Reshape_node = onnx.helper.make_node(
                 op_type='Reshape',
                 inputs=[node.output[0],
-                        shapeToStr(layerPairs[specifiedPair]['targetShape'])],
+                        shapeToStr(layerPairs[node.name]['targetShape'])],
                 outputs=[node.name+'_plus_reshape'],
                 name=node.name+'_plus_reshape')
             newReshapeNodes[i] = insert_Reshape_node
@@ -255,10 +256,11 @@ def insertSpecifiedReshape(layerPairs):
     prevNodeIndex.sort(reverse=True)
     for i in prevNodeIndex:
         model.graph.node.insert(i+1, newReshapeNodes[i])
+    # printNet(model)
     onnx.save(model, targetParamPath)
 
     model = onnx.load(targetParamPath)
-    printNet(model)
+    # printNet(model)
     graph = gs.import_onnx(model)
     for specifiedPair in layerPairs.keys():
         pickFirst = [node for node in graph.nodes if node.name ==specifiedPair]
@@ -274,10 +276,11 @@ def insertSpecifiedReshape(layerPairs):
         if len(insertReshape) == 0:
             continue
         pickSecond[0].inputs[0] = insertReshape[0].outputs[0]
-        graph.cleanup()
+    graph.cleanup()
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
     onnx.save(new_mode, targetParamPath)
+
 
 def modifySplitLayer(layerNamesAndtargetSplit):
     newshapes = []
@@ -311,6 +314,23 @@ def modifySplitLayer(layerNamesAndtargetSplit):
                 loopDone = True
     onnx.save(model, targetParamPath)
 
+def modifyMatmulToGemm(layerNames):
+    model = onnx.load(targetParamPath)
+    graph = gs.import_onnx(model)
+    for name in layerNames:
+        pick = [node for node in graph.nodes if node.name == name]
+        if len(pick) == 0:
+            continue
+        matmul_node = pick[0]
+        if matmul_node.op == 'MatMul':
+            matmul_node.op = 'Gemm'
+            graph.cleanup()
+        else:
+            assert False, "not support yet"
+
+    new_mode = gs.export_onnx(graph)
+    new_mode.ir_version = 10
+    onnx.save(new_mode, targetParamPath)
 def deleteLayer(layernames):
     model = onnx.load(targetParamPath)
     graph = gs.import_onnx(model)
@@ -327,8 +347,6 @@ def deleteLayer(layernames):
             graph.cleanup()
         else:
             assert False,"not support yet"
-
-
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
     onnx.save(new_mode, targetParamPath)
@@ -347,7 +365,13 @@ def convertOpencvOnnxToNcnn():
 # --------------------------------
     insertReshape={}
     insertReshape['/image_encoder/trunk/patch_embed/proj/Conv']={ 'second': '/image_encoder/trunk/patch_embed/Transpose','targetShape':[1,144,256,256]}
+    insertReshape['/image_encoder/trunk/blocks.0/attn/Transpose'] = {
+        'second': '/image_encoder/trunk/blocks.0/attn/Mul_1', 'targetShape': [2048,64,72]}
+    insertReshape['/image_encoder/trunk/blocks.0/attn/Transpose_2'] = {
+        'second': '/image_encoder/trunk/blocks.0/attn/Mul_2', 'targetShape': [2048, 72, 64]}
     insertSpecifiedReshape(insertReshape)
+# --------------------------------
+    # modifyMatmulToGemm(['/image_encoder/trunk/blocks.0/attn/MatMul'])
 # --------------------------------
     deleteLayer(['/image_encoder/trunk/blocks.0/attn/Squeeze_2',
                 '/image_encoder/trunk/blocks.0/attn/Squeeze_1', 
@@ -358,19 +382,17 @@ def convertOpencvOnnxToNcnn():
     reshapeAndtargetShape['/image_encoder/trunk/blocks.0/Reshape_1'] = [65536, 144]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.0/attn/Reshape'] = [1024,64, 6,72]
     modifyReshapeLayer(reshapeAndtargetShape) 
-    model = onnx.load(targetParamPath)
 # --------------------------------
     transposeAndtargetShape = {}
     transposeAndtargetShape['/image_encoder/trunk/blocks.0/Transpose'] = [0, 2, 1, 3]
     modifyTransposeLayer(transposeAndtargetShape)
-    model = onnx.load(targetParamPath)
 # --------------------------------
     splitAndAxis = {}
     splitAndAxis['/image_encoder/trunk/blocks.0/attn/Split'] = {'axis': 2, 'split':[2, 2, 2]}
     modifySplitLayer(splitAndAxis)
-    model = onnx.load(targetParamPath)
-
 # --------------------------------
+
+    model = onnx.load(targetParamPath)
     graph = gs.import_onnx(model)
     graph.cleanup()
     new_mode = gs.export_onnx(graph)
@@ -399,12 +421,135 @@ def convertOpencvOnnxToNcnn():
         print(" ")
     return pointCoords
 
+
+def test_matmul():
+    # sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
+    input = helper.make_tensor_value_info(
+        'input', TensorProto.FLOAT, [2, 3, 4])
+    output = helper.make_tensor_value_info(
+        'output', TensorProto.FLOAT, [2, 3, 4])
+    w0 = onnx.numpy_helper.from_array(np.random.rand(
+        2,4, 5).astype(np.float32), name='w0') 
+    w1 = onnx.numpy_helper.from_array(np.random.rand(
+        5, 3).astype(np.float32), name='w1') 
+    beforeMatMul = onnx.numpy_helper.from_array(
+        np.array([-1,  5]).astype(np.int64), name='beforeMatMul')  
+    afterMatMul = onnx.numpy_helper.from_array(
+        np.array([-1,  3, 3]).astype(np.int64), name='afterMatMul')  
+    layer0 = onnx.helper.make_node(
+        op_type='MatMul',
+        inputs=['input', 'w0'],
+        outputs=['input1'],
+        name='input1')
+    beforeMatMulLayer = onnx.helper.make_node(
+        op_type='Reshape',
+        inputs=['input1', 'beforeMatMul'],
+        outputs=['input1Reshape'],
+        name='input1Reshape')
+    layer1 = onnx.helper.make_node(
+        op_type='MatMul',
+        inputs=['input1Reshape', 'w1'],
+        outputs=['hide'],
+        name='hide')
+    afterMatMulLayer = onnx.helper.make_node(
+        op_type='Reshape',
+        inputs=['hide', 'afterMatMul'],
+        outputs=['hide2'],
+        name='hide2')
+    layer2 = onnx.helper.make_node(
+        op_type='MatMul',
+        inputs=['hide2', 'input1'],
+        outputs=['output'],
+        name='output')
+    graph = onnx.helper.make_graph(
+        [layer0,beforeMatMulLayer, layer1, afterMatMulLayer,  layer2],
+        'TwoLayerFC',
+        [input],
+        [output],
+        initializer=[w0,w1, beforeMatMul, afterMatMul]
+    )
+    model = helper.make_model(graph, producer_name='onnx-example')
+    model = onnx.shape_inference.infer_shapes(model)
+    onnx.checker.check_model(model)
+    model.ir_version = 10
+    model.opset_import[0].version = 21
+    onnx.save(model, 'test.onnx')
+
+    model = onnx.load('test.onnx')
+    # onnx.checker.check_model(model)
+    # printNet(model)
+    session = onnxruntime.InferenceSession(
+        'test.onnx', providers=onnxruntime.get_available_providers())
+    coordPts = np.array([x for x in range(24)]).astype(
+        np.float32).reshape(2, 3, 4)
+    out = session.run(None, {'input': coordPts})
+    print(out[0])
+    print(out[0].shape)
+def test_matmul0():
+    # sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
+    input = helper.make_tensor_value_info(
+        'input', TensorProto.FLOAT, [2, 3, 4])
+    output = helper.make_tensor_value_info(
+        'output', TensorProto.FLOAT, [2, 3, 4])
+    w1 = onnx.numpy_helper.from_array(np.random.rand(
+        4, 3).astype(np.float32), name='w1')  # [2,16]
+    beforeMatMul = onnx.numpy_helper.from_array(
+        np.array([-1,  4]).astype(np.int64), name='beforeMatMul')  # 1
+    afterMatMul = onnx.numpy_helper.from_array(
+        np.array([-1,  3, 3]).astype(np.int64), name='afterMatMul')  # 1
+    beforeMatMulLayer = onnx.helper.make_node(
+        op_type='Reshape',
+        inputs=['input', 'beforeMatMul'],
+        outputs=['inputReshape'],
+        name='inputReshape')
+    layer1 = onnx.helper.make_node(
+        op_type='MatMul',
+        inputs=['input', 'w1'],
+        outputs=['hide'],
+        name='hide')
+    afterMatMulLayer = onnx.helper.make_node(
+        op_type='Reshape',
+        inputs=['hide', 'afterMatMul'],
+        outputs=['hide2'],
+        name='hide2')
+    layer2 = onnx.helper.make_node(
+        op_type='MatMul',
+        inputs=['hide', 'input'],
+        outputs=['output'],
+        name='output')
+    graph = onnx.helper.make_graph(
+        [layer1,   layer2],
+        'TwoLayerFC',
+        [input],
+        [output],
+        initializer=[w1]
+    )
+    model = helper.make_model(graph, producer_name='onnx-example')
+    model = onnx.shape_inference.infer_shapes(model)
+    onnx.checker.check_model(model)
+    model.ir_version = 10
+    model.opset_import[0].version = 21
+    onnx.save(model, 'test.onnx')
+
+    model = onnx.load('test.onnx')
+    # onnx.checker.check_model(model)
+    # printNet(model)
+    session = onnxruntime.InferenceSession(
+        'test.onnx', providers=onnxruntime.get_available_providers())
+    coordPts = np.array([x for x in range(24)]).astype(
+        np.float32).reshape(2, 3, 4)
+    out = session.run(None, {'input': coordPts})
+    print(out[0])
+    print(out[0].shape)
+
 if __name__=='__main__':
+    # test_matmul()
+    # exit(0)
     onnxParamPath='models/opencv_encoder.onnx'
     if os.path.exists(onnxParamPath):
         a = test_forward()
         b = convertOpencvOnnxToNcnn()
         for i in range(len(a)):
             print(np.max(np.abs(a[i].reshape([-1])-b[i].reshape([-1]))))
-    else:
+    else: 
         print("need run sam2_onnx_adaptor first!!")
