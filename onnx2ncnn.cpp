@@ -2945,7 +2945,7 @@ static std::string trunc_name(std::string name)
 void printNcnnBlob(const ncnn::Mat& out)
 {
     ncnn::Mat shape = out.shape();
-    std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << std::endl;
+    std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << ")  dim="<<out.dims << std::endl;
     int cstep = out.cstep;
     int dstep = out.cstep;
     const float*data = (float*)out.data;
@@ -2993,6 +2993,10 @@ void printNcnnBlob(const ncnn::Mat& out)
                     d = newD;
                 }
             }
+            else
+            {
+                std::cout  << std::endl;
+            }
         }
         if (c == 2)
         {
@@ -3033,9 +3037,12 @@ int test_forward()
     //}
     ex1.input("image", in);
     ncnn::Mat out0; // all rois
-    ncnn::Mat out;  // all rois
-    ex1.extract("/image_encoder/trunk/blocks.0/attn/MatMul_output_0", out);
-    printNcnnBlob(out);
+    ncnn::Mat out1; // all rois
+    ncnn::Mat out2; // all rois
+    ex1.extract("/image_encoder/trunk/blocks.0/attn/qkv/Add_output_0", out0);
+    //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_1", out1);
+    //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_2", out2);
+    printNcnnBlob(out0);
     return 0;
 }
 int test_matmul_forward()
@@ -3074,6 +3081,29 @@ int test_matmul_forward()
             std::cout << std::endl;
         }
     }
+    return 0;
+}
+
+int test_slice_forward()
+{
+    ncnn::Net testNet;
+    testNet.opt.use_vulkan_compute = true;
+    if (testNet.load_param("test.ncnn.param"))
+        exit(-1);
+    if (testNet.load_model("test.ncnn.bin"))
+        exit(-1);
+    ncnn::Extractor ex1 = testNet.create_extractor();
+    std::vector<float> indata(12 * 72, 1);
+    for (int i = 0; i < indata.size(); i++)
+    {
+        indata[i] = i;
+    }
+    ncnn::Mat in(72, 12, (void*)&indata[0], 4);
+    ex1.input("in0", in);
+    ncnn::Mat out1; 
+    ncnn::Mat out2;
+    ncnn::Mat out3; 
+    ex1.extract("out1", out1);
     return 0;
 }
 typedef std::vector<std::int64_t> TensorShape;
@@ -3149,14 +3179,13 @@ std::map<std::string,float> getTheSimpleBinaryOp(const onnx::GraphProto& graph,
 }
 int main()
 {
+    return test_slice_forward();
     //return test_forward();
-    const char* onnxpb = "D:/repo/colmapthird/models/ncnn_encoder.onnx";
-    //const char* onnxpb = "D:/repo/colmapthird/test.onnx";
+    //const char* onnxpb = "D:/repo/colmapthird/models/ncnn_encoder.onnx";
+    const char* onnxpb = "D:/repo/colmapthird/test.onnx";
     const char* ncnn_prototxt = "ncnn.param";
     const char* ncnn_modelbin = "ncnn.bin";
 
-    std::map<std::string, TensorShape> inputShape;
-    inputShape["input"] = {3, 2};
 
     onnx::ModelProto model;
 
@@ -3508,7 +3537,6 @@ int main()
                         break;
                     }
                 }
-                //inputShape["input"] = {3, 2};
             }
         }
     }
@@ -6013,7 +6041,7 @@ int main()
             }
             std::vector<int> split = get_node_attr_from_input_ai(weights[node.input(1)]);
             int axis = get_node_attr_i(node, "axis", 0);
-            if (axis < 1)
+            if (axis < 0)
                 fprintf(stderr, "Unsupported split axis !\n");
 
             fprintf(pp, " -23300=%d", output_size);
@@ -6305,7 +6333,8 @@ int main()
 
     fclose(pp);
     fclose(bp);
-    test_forward();
+    //test_forward();
     //test_matmul_forward();
+    test_slice_forward();
     return 0;
 }
