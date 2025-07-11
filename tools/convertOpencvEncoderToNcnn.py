@@ -20,12 +20,8 @@ shared_input = [
     'image',
 ]
 shared_out = [
-    '/image_encoder/trunk/blocks.0/norm1/LayerNormalization_output_0',
-    '/image_encoder/trunk/blocks.0/attn/qkv/Add_output_0',
-    # '/image_encoder/trunk/blocks.0/attn/Reshape_output_0'
-    '/image_encoder/trunk/patch_embed/proj/Conv_output_0',
-    # '/image_encoder/trunk/blocks.0/attn/Split_output_1',
-    # '/image_encoder/trunk/blocks.0/attn/Split_output_2',
+    # '/image_encoder/trunk/blocks.0/norm2/LayerNormalization_output_0'
+    '/conv_s0/Conv_output_0'
 ]
 targetParamPath = 'models/ncnn_encoder.onnx'
 image = np.ones([3, 1024, 1024]).astype(np.float32)
@@ -274,18 +270,27 @@ def insertSpecifiedReshape(layerPairs):
     graph = gs.import_onnx(model)
     for specifiedPair in layerPairs.keys():
         pickFirst = [node for node in graph.nodes if node.name ==specifiedPair]
+        print(1)
+        if 0 == len(pickFirst):
+            continue
+        assert len(pickFirst) == 1
+        
+        assert len(pickFirst[0].outputs) == 1
+        oldOutPutName = pickFirst[0].outputs[0].name
         if len(pickFirst) == 0:
             continue
-        pickSecond = [node for node in graph.nodes if node.name ==
-                      layerPairs[specifiedPair]['second']]
-        if len(pickSecond) == 0:
-            continue
-        insertReshapeName = pickSecond[0].i(0).name+'_plus_reshape'
-        insertReshape = [
-            node for node in graph.nodes if node.name == insertReshapeName]
-        if len(insertReshape) == 0:
-            continue
-        pickSecond[0].inputs[0] = insertReshape[0].outputs[0]
+        for nextNodeName in layerPairs[specifiedPair]['nextNodes']:
+            pickSecond = [
+                node for node in graph.nodes if node.name == nextNodeName]
+            if len(pickSecond) == 0:
+                continue
+            for j in range(len(pickSecond[0].inputs)):
+                if pickSecond[0].inputs[j].name == oldOutPutName:
+                    insertReshapeName = pickSecond[0].i(j).name+'_plus_reshape'
+                    insertReshape = [
+                        node for node in graph.nodes if node.name == insertReshapeName]
+                    pickSecond[0].inputs[j] = insertReshape[0].outputs[0]
+
     graph.cleanup()
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
@@ -357,7 +362,7 @@ def modifySplitLayer(layerNamesAndtargetSplit):
                         layerNamesAndtargetSplit[node.name]['split'])],
                     outputs=node.output,
                     name=node.name,
-                    axis=layerNamesAndtargetSplit[shape]['axis']
+                    axis=layerNamesAndtargetSplit[node.name]['axis']
                 )
                 model.graph.node.remove(model.graph.node[i])
                 model.graph.node.insert(i, new_split_node)
@@ -407,23 +412,71 @@ def refreshOutputShape():
     # printNet(model)
     graph = gs.import_onnx(model)
     for node in graph.nodes:
+        print('refresh layer shape: ',node.name)
         if node.op == 'Reshape' :
+            if np.sum(np.array(node.inputs[0].shape) == -1) :
+                continue
             node.outputs[0].shape = node.inputs[1].values.tolist()
         elif node.op == 'Transpose':
-            inputShape = node.inputs[0].shape
-            perm = node.attrs['perm']
-            node.outputs[0].shape = [inputShape[i] for i in perm]
+            try:
+                inputShape = node.inputs[0].shape
+                perm = node.attrs['perm']
+                node.outputs[0].shape = [inputShape[i] for i in perm]
+            except:
+                print(node)
+                assert False
         elif node.op == 'LayerNormalization':
             node.outputs[0].shape = node.inputs[0].shape
         elif node.op == 'MatMul':
+            if np.sum(np.array(node.inputs[0].shape) == -1) != 0:
+                continue
+            if np.sum(np.array(node.inputs[1].shape) == -1) != 0:
+                continue
             A = np.ones(node.inputs[0].shape)
             B = np.ones(node.inputs[1].shape)
-            C=A@B
+            try:
+                C=A@B
+            except:
+                print(node)
+                assert False
+
             node.outputs[0].shape = C.shape
-        elif node.op == 'Add':
+        elif node.op == 'Mul':
+            if np.sum(np.array(node.inputs[0].shape) == -1) != 0:
+                continue
+            if np.sum(np.array(node.inputs[1].shape) == -1) != 0:
+                continue
+            A = np.ones(node.inputs[0].shape)
+            B = np.ones(node.inputs[1].shape)
+            try:
+                C = A*B
+            except:
+                print(node)
+                assert False
+            node.outputs[0].shape = C.shape
+        elif node.op == 'Erf':
+            node.outputs[0].shape = node.inputs[0].shape
+        elif node.op == 'Add' :
+            if node.name == '/image_encoder/trunk/blocks.0/mlp/layers.1/Add':
+                print(1)
+            if np.sum(np.array(node.inputs[0].shape) == -1) != 0:
+                continue
+            if np.sum(np.array(node.inputs[1].shape) == -1) != 0:
+                continue
             A = np.ones(node.inputs[0].shape)
             B = np.ones(node.inputs[1].shape)
             C = A+B
+            for j in range(len(node.outputs)):
+                node.outputs[j].shape = C.shape
+            print(1)
+        elif node.op == 'Div':
+            if np.sum(np.array(node.inputs[0].shape) == -1) != 0:
+                continue
+            if np.sum(np.array(node.inputs[1].shape) == -1) != 0:
+                continue
+            A = np.ones(node.inputs[0].shape)
+            B = np.ones(node.inputs[1].shape)
+            C = A/B
             node.outputs[0].shape = C.shape
         elif node.op == 'Split':
             axis = node.attrs['axis']
@@ -433,7 +486,6 @@ def refreshOutputShape():
             for i in range(len(node.outputs)):
                 node.outputs[i].shape = copy.deepcopy(srcShape)
                 node.outputs[i].shape[axis] = splitArray[i]
-            print(1) 
     graph.cleanup()
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
@@ -451,13 +503,15 @@ def convertOpencvOnnxToNcnn():
 # --------------------------------
     insertReshape = {}
     insertReshape['/image_encoder/trunk/patch_embed/proj/Conv'] = {
-        'second': '/image_encoder/trunk/patch_embed/Transpose', 'targetShape': [1, 144, 256, 256]}
-    insertReshape['/image_encoder/trunk/blocks.0/attn/Transpose'] = {
-        'second': '/image_encoder/trunk/blocks.0/attn/Mul_1', 'targetShape': [2048,64,72]}
-    insertReshape['/image_encoder/trunk/blocks.0/attn/Transpose_2'] = {
-        'second': '/image_encoder/trunk/blocks.0/attn/Mul_2', 'targetShape': [2048, 72, 64]}
+        'nextNodes': ['/image_encoder/trunk/patch_embed/Transpose'], 'targetShape': [1, 144, 256, 256]}
     insertReshape['/image_encoder/trunk/Add_1'] = {
-        'second': '/image_encoder/trunk/blocks.0/norm1/LayerNormalization', 'targetShape': [65536,144]}
+        'nextNodes': ['/image_encoder/trunk/blocks.0/norm1/LayerNormalization'], 'targetShape': [65536, 144]}
+    insertReshape['/image_encoder/trunk/blocks.0/Add_2'] = {
+        'nextNodes':  ['/image_encoder/trunk/blocks.0/Add_3', '/image_encoder/trunk/blocks.0/norm2/LayerNormalization'], 'targetShape': [65536, 144]}
+    insertReshape['/image_encoder/trunk/Transpose_1'] = {
+        'nextNodes': ['/image_encoder/neck/convs.3/conv/Conv'], 'targetShape': [1, 256, 256, 144]}
+    insertReshape['/image_encoder/trunk/blocks.1/Add_3'] = {
+        'nextNodes': ['/image_encoder/trunk/Transpose_1'], 'targetShape': [1, 256, 256, 144]}
     insertSpecifiedReshape(insertReshape)
 # --------------------------------
     # insertTanspose = {}
@@ -466,21 +520,48 @@ def convertOpencvOnnxToNcnn():
     # insertSpecifiedTranspose(insertTanspose)
 # --------------------------------
     deleteLayer(['/image_encoder/trunk/blocks.0/attn/Squeeze_2',
-                '/image_encoder/trunk/blocks.0/attn/Squeeze_1', 
-                '/image_encoder/trunk/blocks.0/attn/Squeeze'])
+                '/image_encoder/trunk/blocks.0/attn/Squeeze_1',
+                 '/image_encoder/trunk/blocks.0/attn/Squeeze', 
+                 '/image_encoder/trunk/blocks.1/attn/Squeeze_2',
+                 '/image_encoder/trunk/blocks.1/attn/Squeeze_1',
+                 '/image_encoder/trunk/blocks.1/attn/Squeeze',
+                 '/image_encoder/trunk/blocks.2/attn/Squeeze',
+                 '/image_encoder/trunk/blocks.2/attn/Squeeze_1',
+                 '/image_encoder/trunk/blocks.2/attn/Squeeze_2'])
 # --------------------------------
     reshapeAndtargetShape = {}
     reshapeAndtargetShape['/image_encoder/trunk/blocks.0/Reshape']=[32,8,32,1152]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.0/Reshape_1'] = [65536, 144]
-    reshapeAndtargetShape['/image_encoder/trunk/blocks.0/attn/Reshape'] = [1024*64, 6,72]
-    modifyReshapeLayer(reshapeAndtargetShape) 
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.0/attn/Reshape'] = [1024,64, 6,72]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.0/attn/Reshape_1'] = [65536, 144]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.0/Reshape_2'] = [32,32,  8, 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.1/Reshape'] = [32, 8, 32, 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.1/Reshape_1'] = [65536, 144]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.1/attn/Reshape'] = [1024, 64, 6, 72]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.1/attn/Reshape_1'] = [65536, 144]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.1/Reshape_2'] = [32, 32,  8, 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.1/Reshape_3'] = [65536, 144]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.2/Reshape'] = [32, 8, 32, 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.2/Reshape_1'] = [65536, 144]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.2/attn/Reshape']=[1024,192,4,72]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.2/attn/Reshape_1']=[1024,8,8,288]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.2/attn/Reshape_2'] = [1024, 16,4, 72]
+    modifyReshapeLayer(reshapeAndtargetShape)
 # --------------------------------
     transposeAndtargetShape = {}
     transposeAndtargetShape['/image_encoder/trunk/blocks.0/Transpose'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.0/Transpose_1'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.1/Transpose'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.1/Transpose_1'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.2/Transpose_2'] = [0, 2, 1, 3]
     modifyTransposeLayer(transposeAndtargetShape)
 # --------------------------------
     splitAndAxis = {}
-    splitAndAxis['/image_encoder/trunk/blocks.0/attn/Split'] = {'axis': 1, 'split':[2, 2, 2]}
+    splitAndAxis['/image_encoder/trunk/blocks.0/attn/Split'] = {'axis': 2, 'split':[2, 2, 2]}
+    splitAndAxis['/image_encoder/trunk/blocks.1/attn/Split'] = {
+        'axis': 2, 'split': [2, 2, 2]}
+    splitAndAxis['/image_encoder/trunk/blocks.2/attn/Split'] = {
+        'axis': 1, 'split': [64, 64, 64]}
     modifySplitLayer(splitAndAxis)
 # --------------------------------
 
@@ -583,6 +664,8 @@ def test_slice():
         'input', TensorProto.FLOAT, [12, 72])
     w1 = onnx.numpy_helper.from_array(np.ones(
         [72, 36]).astype(np.float32), name='w1')
+    output = helper.make_tensor_value_info(
+        'output', TensorProto.FLOAT, [12, 36])
     output1 = helper.make_tensor_value_info(
         'output1', TensorProto.FLOAT, [2, 2, 36])
     output2 = helper.make_tensor_value_info(
@@ -635,8 +718,8 @@ def test_slice():
 
 if __name__=='__main__':
     # test_matmul()
-    test_slice()
-    exit(0)
+    # test_slice()
+    # exit(0)
     onnxParamPath='models/opencv_encoder.onnx'
     if os.path.exists(onnxParamPath):
         a = test_forward()

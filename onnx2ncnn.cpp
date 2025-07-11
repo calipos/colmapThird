@@ -2,6 +2,7 @@
 #include "net.h"
 #include "onnx.pb.h"
 #include <algorithm>
+#include <chrono>
 #include <unordered_map>
 #include <float.h>
 #include <fstream>
@@ -3036,13 +3037,15 @@ int test_forward()
     //    }
     //}
     ex1.input("image", in);
-    ncnn::Mat out0; // all rois
-    ncnn::Mat out1; // all rois
-    ncnn::Mat out2; // all rois
-    ex1.extract("/image_encoder/trunk/blocks.0/attn/qkv/Add_output_0", out0);
+    ncnn::Mat out0;
+    auto start1 = std::chrono::steady_clock::now(); 
+    ex1.extract("/image_encoder/trunk/blocks.2/attn/Transpose_3_output_0", out0);
     //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_1", out1);
     //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_2", out2);
+    auto end1 = std::chrono::steady_clock::now();
+    auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
     printNcnnBlob(out0);
+    std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
     return 0;
 }
 int test_matmul_forward()
@@ -3088,9 +3091,9 @@ int test_slice_forward()
 {
     ncnn::Net testNet;
     testNet.opt.use_vulkan_compute = true;
-    if (testNet.load_param("test.ncnn.param"))
+    if (testNet.load_param("ncnn.param"))
         exit(-1);
-    if (testNet.load_model("test.ncnn.bin"))
+    if (testNet.load_model("ncnn.bin"))
         exit(-1);
     ncnn::Extractor ex1 = testNet.create_extractor();
     std::vector<float> indata(12 * 72, 1);
@@ -3099,11 +3102,12 @@ int test_slice_forward()
         indata[i] = i;
     }
     ncnn::Mat in(72, 12, (void*)&indata[0], 4);
-    ex1.input("in0", in);
+    ex1.input("input", in);
     ncnn::Mat out1; 
     ncnn::Mat out2;
     ncnn::Mat out3; 
-    ex1.extract("out1", out1);
+    ex1.extract("output1", out1);
+    printNcnnBlob(out1);
     return 0;
 }
 typedef std::vector<std::int64_t> TensorShape;
@@ -3140,6 +3144,11 @@ std::map<std::string,float> getTheSimpleBinaryOp(const onnx::GraphProto& graph,
                 if (weights.count(binaryOperandName) > 0)
                 {
                     int dim_size = weights.at(binaryOperandName).dims_size();
+                    if (dim_size==0)
+                    {
+                        std::cout << "div type size maybe 0 : "
+                                  << node.input(1) << std::endl;
+                    }
                     int eleCnt =1;
                     for (size_t i = 0; i < dim_size; i++)
                     {
@@ -3149,40 +3158,40 @@ std::map<std::string,float> getTheSimpleBinaryOp(const onnx::GraphProto& graph,
                     {
                         float data = get_node_attr_from_input_f(weights.at(binaryOperandName));
                         ret[nodeName] = data;
-                        binaryNodeAndOutBlob[nodeName] = node.output(0);
+                        //binaryNodeAndOutBlob[nodeName] = node.output(0);
                     }
                 }
             }
             
         }
     }
-    auto iter = ret.begin();
-    while (true)
-    {
-        if (iter == ret.end())
-        {
-            break;
-        }
-        const auto& binaryOpName = iter->first;
-        const auto& outBlobName = binaryNodeAndOutBlob[binaryOpName];
-        if (inputBlobCnt.count(outBlobName) != 1)
-        {
-            ret.erase(iter);
-            iter = ret.begin();
-        }
-        else
-        {
-            iter++;
-        }
-    }
+    //auto iter = ret.begin();
+    //while (true)
+    //{
+    //    if (iter == ret.end())
+    //    {
+    //        break;
+    //    }
+    //    const auto& binaryOpName = iter->first;
+    //    const auto& outBlobName = binaryNodeAndOutBlob[binaryOpName];
+    //    if (inputBlobCnt.count(outBlobName) != 1)
+    //    {
+    //        ret.erase(iter);
+    //        iter = ret.begin();
+    //    }
+    //    else
+    //    {
+    //        iter++;
+    //    }
+    //}
     return ret;
 }
 int main()
 {
-    return test_slice_forward();
+    //return test_slice_forward();
     //return test_forward();
-    //const char* onnxpb = "D:/repo/colmapthird/models/ncnn_encoder.onnx";
-    const char* onnxpb = "D:/repo/colmapthird/test.onnx";
+    const char* onnxpb = "D:/repo/colmapthird/models/ncnn_encoder.onnx";
+    //const char* onnxpb = "D:/repo/colmapthird/test.onnx";
     const char* ncnn_prototxt = "ncnn.param";
     const char* ncnn_modelbin = "ncnn.bin";
 
@@ -3537,6 +3546,13 @@ int main()
                         break;
                     }
                 }
+            }
+        }
+        else if (op == "Split")
+        {
+            if (node.input_size() == 2)
+            {
+                node_reference[node.input(1)] -= 1;
             }
         }
     }
@@ -4186,6 +4202,17 @@ int main()
             int op_type = 0;
             fprintf(pp, " 0=%d", op_type);
 
+            //if (SimpleBinaryOp.count(name) > 0)
+            //{
+            //    float b = SimpleBinaryOp.at(name);
+            //    int with_scalar = 1;
+            //    if (with_scalar)
+            //    {
+            //        fprintf(pp, " 1=%d", with_scalar);
+            //        fprintf(pp, " 2=%e", b);
+            //    }
+            //}
+
             //int with_scalar = get_node_attr_i(node, "with_scalar", 0);
             //float b = get_node_attr_f(node, "b", 0.f);
             //if (with_scalar)
@@ -4639,14 +4666,23 @@ int main()
         {
             int op_type = 3;
             fprintf(pp, " 0=%d", op_type);
-
-            int with_scalar = get_node_attr_i(node, "with_scalar", 0);
-            float b = get_node_attr_f(node, "b", 0.f);
-            if (with_scalar)
+            if (SimpleBinaryOp.count(name) > 0)
             {
-                fprintf(pp, " 1=%d", with_scalar);
-                fprintf(pp, " 2=%e", b);
+                float b = SimpleBinaryOp.at(name);
+                int with_scalar = 1;
+                if (with_scalar)
+                {
+                    fprintf(pp, " 1=%d", with_scalar);
+                    fprintf(pp, " 2=%e", b);
+                }
             }
+            //int with_scalar = get_node_attr_i(node, "with_scalar", 0);
+            //float b = get_node_attr_f(node, "b", 0.f);
+            //if (with_scalar)
+            //{
+            //    fprintf(pp, " 1=%d", with_scalar);
+            //    fprintf(pp, " 2=%e", b);
+            //}
         }
         else if (op == "Dropout")
         {
@@ -6030,7 +6066,14 @@ int main()
         else if (op == "Softmax")
         {
             int axis = get_node_attr_i(node, "axis", 1);
-            fprintf(pp, " 0=%d", axis - 1);
+            if (axis<0)
+            {
+                fprintf(pp, " 0=%d", axis);
+            }
+            else
+            {
+                fprintf(pp, " 0=%d", axis - 1);
+            }
             fprintf(pp, " 1=1");
         }
         else if (op == "Split")
@@ -6333,8 +6376,8 @@ int main()
 
     fclose(pp);
     fclose(bp);
-    //test_forward();
+    test_forward();
     //test_matmul_forward();
-    test_slice_forward();
+    //test_slice_forward();
     return 0;
 }
