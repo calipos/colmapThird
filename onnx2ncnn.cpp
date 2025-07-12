@@ -2946,10 +2946,10 @@ static std::string trunc_name(std::string name)
 void printNcnnBlob(const ncnn::Mat& out)
 {
     ncnn::Mat shape = out.shape();
-    std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << ")  dim="<<out.dims << std::endl;
+    std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << ")  dim=" << out.dims << std::endl;
     int cstep = out.cstep;
     int dstep = out.cstep;
-    const float*data = (float*)out.data;
+    const float* data = (float*)out.data;
     const int elemSize = out.elemsize;
     if (shape.d > 1) dstep /= shape.d;
     for (int c = 0; c < shape.c; c++)
@@ -2969,7 +2969,7 @@ void printNcnnBlob(const ncnn::Mat& out)
                         int newW = shape.w - 4;
                         if (newW > w)
                         {
-                            std::cout << " ... " ;
+                            std::cout << " ... ";
                             w = newW;
                         }
                     }
@@ -2996,13 +2996,13 @@ void printNcnnBlob(const ncnn::Mat& out)
             }
             else
             {
-                std::cout  << std::endl;
+                std::cout << std::endl;
             }
         }
         if (c == 2)
         {
             int newC = shape.c - 4;
-            if (newC>c)
+            if (newC > c)
             {
                 std::cout << " ... " << std::endl;
                 c = newC;
@@ -3020,7 +3020,7 @@ int test_forward()
         exit(-1);
     ncnn::Extractor ex1 = testNet.create_extractor();
     std::vector<float> indata(3 * 1024 * 1024, 1);
-    ncnn::Mat in(1024, 1024,  3, (void*)&indata[0], 4);
+    ncnn::Mat in(1024, 1024, 3, (void*)&indata[0], 4);
     //for (int c = 0; c < in.c; c++)
     //{
     //    ncnn::Mat cdata = in.channel(c);
@@ -3038,8 +3038,8 @@ int test_forward()
     //}
     ex1.input("image", in);
     ncnn::Mat out0;
-    auto start1 = std::chrono::steady_clock::now(); 
-    ex1.extract("/image_encoder/trunk/blocks.2/attn/Transpose_3_output_0", out0);
+    auto start1 = std::chrono::steady_clock::now();
+    ex1.extract("/image_encoder/neck/convs.3/conv/Conv_output_0", out0);
     //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_1", out1);
     //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_2", out2);
     auto end1 = std::chrono::steady_clock::now();
@@ -3057,12 +3057,12 @@ int test_matmul_forward()
     if (testNet.load_model("ncnn.bin"))
         exit(-1);
     ncnn::Extractor ex1 = testNet.create_extractor();
-    std::vector<float> indata(2*3*4, 1);
+    std::vector<float> indata(2 * 3 * 4, 1);
     for (size_t i = 0; i < indata.size(); i++)
     {
         indata[i] = i;
     }
-    ncnn::Mat in(4,3,2, (void*)&indata[0], 4);
+    ncnn::Mat in(4, 3, 2, (void*)&indata[0], 4);
     ex1.input("input", in);
     ncnn::Mat out0; // all rois
     ncnn::Mat out;  // all rois
@@ -3103,26 +3103,26 @@ int test_slice_forward()
     }
     ncnn::Mat in(72, 12, (void*)&indata[0], 4);
     ex1.input("input", in);
-    ncnn::Mat out1; 
+    ncnn::Mat out1;
     ncnn::Mat out2;
-    ncnn::Mat out3; 
+    ncnn::Mat out3;
     ex1.extract("output1", out1);
     printNcnnBlob(out1);
     return 0;
 }
 typedef std::vector<std::int64_t> TensorShape;
 
-std::map<std::string,float> getTheSimpleBinaryOp(const onnx::GraphProto& graph,
-                                              const std::map<std::string, onnx::TensorProto>&weights)
+std::map<std::string, float> getTheSimpleBinaryOp(const onnx::GraphProto& graph,
+                                                  const std::map<std::string, onnx::TensorProto>& weights)
 {
-    std::map<std::string, float>ret;
-    std::map<std::string,std::string>binaryNodeAndOutBlob;
-    std::map<std::string,int>inputBlobCnt;
+    std::map<std::string, float> ret;
+    std::map<std::string, std::string> binaryNodeAndOutBlob;
+    std::map<std::string, int> inputBlobCnt;
     int node_count = graph.node_size();
     for (int i = 0; i < node_count; i++)
     {
         const onnx::NodeProto& node = graph.node(i);
-        const std::string&nodeName = node.name();
+        const std::string& nodeName = node.name();
         const std::string& op = node.op_type();
         for (int i = 0; i < node.input_size(); i++)
         {
@@ -3144,17 +3144,17 @@ std::map<std::string,float> getTheSimpleBinaryOp(const onnx::GraphProto& graph,
                 if (weights.count(binaryOperandName) > 0)
                 {
                     int dim_size = weights.at(binaryOperandName).dims_size();
-                    if (dim_size==0)
+                    if (dim_size == 0)
                     {
                         std::cout << "div type size maybe 0 : "
                                   << node.input(1) << std::endl;
                     }
-                    int eleCnt =1;
+                    int eleCnt = 1;
                     for (size_t i = 0; i < dim_size; i++)
                     {
                         eleCnt *= weights.at(binaryOperandName).dims(i);
                     }
-                    if (eleCnt==1)
+                    if (eleCnt == 1)
                     {
                         float data = get_node_attr_from_input_f(weights.at(binaryOperandName));
                         ret[nodeName] = data;
@@ -3162,7 +3162,6 @@ std::map<std::string,float> getTheSimpleBinaryOp(const onnx::GraphProto& graph,
                     }
                 }
             }
-            
         }
     }
     //auto iter = ret.begin();
@@ -3190,11 +3189,10 @@ int main()
 {
     //return test_slice_forward();
     //return test_forward();
-    const char* onnxpb = "D:/repo/colmapthird/models/ncnn_encoder.onnx";
+    const char* onnxpb = "D:/repo/colmap-third/models/ncnn_encoder.onnx";
     //const char* onnxpb = "D:/repo/colmapthird/test.onnx";
     const char* ncnn_prototxt = "ncnn.param";
     const char* ncnn_modelbin = "ncnn.bin";
-
 
     onnx::ModelProto model;
 
@@ -3230,7 +3228,7 @@ int main()
         weights[initializer.name()] = initializer;
     }
     auto SimpleBinaryOp = getTheSimpleBinaryOp(graph, weights);
-    
+
     std::set<std::string> blob_names;
     for (int i = 0; i < node_count; i++)
     {
@@ -3285,7 +3283,6 @@ int main()
         graph.input(j).type();
         input_node_count++;
     }
-
 
     int reduced_node_count = 0;
     //fuse_weight_reshape(mutable_graph, weights, node_reference, blob_names, reduced_node_count);
@@ -4150,7 +4147,6 @@ int main()
             }
         }
         fprintf(pp, " %-24s %d %d", trunc_name(name).c_str(), input_size, output_size);
-        
 
         for (int j = 0; j < (int)node.input_size(); j++)
         {
@@ -6066,7 +6062,7 @@ int main()
         else if (op == "Softmax")
         {
             int axis = get_node_attr_i(node, "axis", 1);
-            if (axis<0)
+            if (axis < 0)
             {
                 fprintf(pp, " 0=%d", axis);
             }

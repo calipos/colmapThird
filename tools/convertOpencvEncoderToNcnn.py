@@ -13,19 +13,32 @@ import torch.optim as optim
 from torch.utils import data
 import onnx_graphsurgeon as gs
 import onnxruntime
-checkmodel = True
-inferShapes = True
+checkmodel = False
+inferShapes = False
 
 shared_input = [
     'image',
 ]
 shared_out = [
     # '/image_encoder/trunk/blocks.0/norm2/LayerNormalization_output_0'
-    '/conv_s0/Conv_output_0'
+    '/image_encoder/neck/convs.3/conv/Conv_output_0'
 ]
 targetParamPath = 'models/ncnn_encoder.onnx'
 image = np.ones([3, 1024, 1024]).astype(np.float32)
 shape_set=[]
+def cnnOutFigure(input_size, kernelsize, stride, padding):
+    if isinstance(input_size, int):
+        input_size = (input_size,)
+    if isinstance(kernelsize, int):
+        kernelsize = (kernelsize,) * len(input_size)
+    if isinstance(stride, int):
+        stride = (stride,) * len(input_size)
+    if isinstance(padding, int):
+        padding = (padding,) * len(input_size)
+
+    output = tuple((i - k + 2 * p) // s + 1 for i, k, s, p in zip(input_size, kernelsize, stride, padding))
+    print(output)
+    return output
 def cut_subgraph(origin_graph_path, input_node_name_list, output_node_name_list, sub_graph_path):
     graph = gs.import_onnx(onnx.load(origin_graph_path))
     tensors = graph.tensors()
@@ -270,7 +283,6 @@ def insertSpecifiedReshape(layerPairs):
     graph = gs.import_onnx(model)
     for specifiedPair in layerPairs.keys():
         pickFirst = [node for node in graph.nodes if node.name ==specifiedPair]
-        print(1)
         if 0 == len(pickFirst):
             continue
         assert len(pickFirst) == 1
@@ -412,11 +424,21 @@ def refreshOutputShape():
     # printNet(model)
     graph = gs.import_onnx(model)
     for node in graph.nodes:
-        print('refresh layer shape: ',node.name)
+        # print('refresh layer shape: ',node.name)
+        # if node.name == '/Reshape_5':
+        #     print(1)
         if node.op == 'Reshape' :
-            if np.sum(np.array(node.inputs[0].shape) == -1) :
+            assert len(node.inputs)==2
+            dataIdx=-1
+            shapeIdx=-1
+            for i in range(len(node.inputs)):
+                if node.inputs[i].dtype == 'int64':
+                    shapeIdx=i
+                    dataIdx = 1-i
+            if np.sum(np.array(node.inputs[shapeIdx].shape) == -1) :
                 continue
-            node.outputs[0].shape = node.inputs[1].values.tolist()
+            node.outputs[0].shape = node.inputs[shapeIdx].values.tolist()
+            node.outputs[0].dtype = node.inputs[dataIdx].dtype
         elif node.op == 'Transpose':
             try:
                 inputShape = node.inputs[0].shape
@@ -427,6 +449,11 @@ def refreshOutputShape():
                 assert False
         elif node.op == 'LayerNormalization':
             node.outputs[0].shape = node.inputs[0].shape
+        elif node.op == 'Conv':
+            assert len(node.inputs)==3
+            outShape = cnnOutFigure(node.inputs[0].shape[-2:],node.inputs[1].shape[-2:],node.attrs['strides'],node.attrs['pads'][-2:])
+            shapeGuess= [node.inputs[0].shape[0], node.inputs[1].shape[0],outShape[0],outShape[1]]
+            node.outputs[0].shape =shapeGuess[4-len(node.inputs[0].shape):]
         elif node.op == 'MatMul':
             if np.sum(np.array(node.inputs[0].shape) == -1) != 0:
                 continue
@@ -439,7 +466,6 @@ def refreshOutputShape():
             except:
                 print(node)
                 assert False
-
             node.outputs[0].shape = C.shape
         elif node.op == 'Mul':
             if np.sum(np.array(node.inputs[0].shape) == -1) != 0:
@@ -457,8 +483,6 @@ def refreshOutputShape():
         elif node.op == 'Erf':
             node.outputs[0].shape = node.inputs[0].shape
         elif node.op == 'Add' :
-            if node.name == '/image_encoder/trunk/blocks.0/mlp/layers.1/Add':
-                print(1)
             if np.sum(np.array(node.inputs[0].shape) == -1) != 0:
                 continue
             if np.sum(np.array(node.inputs[1].shape) == -1) != 0:
@@ -468,7 +492,6 @@ def refreshOutputShape():
             C = A+B
             for j in range(len(node.outputs)):
                 node.outputs[j].shape = C.shape
-            print(1)
         elif node.op == 'Div':
             if np.sum(np.array(node.inputs[0].shape) == -1) != 0:
                 continue
@@ -508,16 +531,10 @@ def convertOpencvOnnxToNcnn():
         'nextNodes': ['/image_encoder/trunk/blocks.0/norm1/LayerNormalization'], 'targetShape': [65536, 144]}
     insertReshape['/image_encoder/trunk/blocks.0/Add_2'] = {
         'nextNodes':  ['/image_encoder/trunk/blocks.0/Add_3', '/image_encoder/trunk/blocks.0/norm2/LayerNormalization'], 'targetShape': [65536, 144]}
-    insertReshape['/image_encoder/trunk/Transpose_1'] = {
-        'nextNodes': ['/image_encoder/neck/convs.3/conv/Conv'], 'targetShape': [1, 256, 256, 144]}
     insertReshape['/image_encoder/trunk/blocks.1/Add_3'] = {
         'nextNodes': ['/image_encoder/trunk/Transpose_1'], 'targetShape': [1, 256, 256, 144]}
     insertSpecifiedReshape(insertReshape)
 # --------------------------------
-    # insertTanspose = {}
-    # insertTanspose['/image_encoder/trunk/blocks.0/attn/Reshape'] = {
-    #     'second': '/image_encoder/trunk/blocks.0/attn/Split', 'targetPerm': [1, 0, 2]}
-    # insertSpecifiedTranspose(insertTanspose)
 # --------------------------------
     deleteLayer(['/image_encoder/trunk/blocks.0/attn/Squeeze_2',
                 '/image_encoder/trunk/blocks.0/attn/Squeeze_1',
@@ -546,6 +563,7 @@ def convertOpencvOnnxToNcnn():
     reshapeAndtargetShape['/image_encoder/trunk/blocks.2/attn/Reshape']=[1024,192,4,72]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.2/attn/Reshape_1']=[1024,8,8,288]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.2/attn/Reshape_2'] = [1024, 16,4, 72]
+    reshapeAndtargetShape['/Reshape_5']=[1,32,256,256]
     modifyReshapeLayer(reshapeAndtargetShape)
 # --------------------------------
     transposeAndtargetShape = {}
@@ -554,6 +572,7 @@ def convertOpencvOnnxToNcnn():
     transposeAndtargetShape['/image_encoder/trunk/blocks.1/Transpose'] = [0, 2, 1, 3]
     transposeAndtargetShape['/image_encoder/trunk/blocks.1/Transpose_1'] = [0, 2, 1, 3]
     transposeAndtargetShape['/image_encoder/trunk/blocks.2/Transpose_2'] = [0, 2, 1, 3]
+    # transposeAndtargetShape['/image_encoder/trunk/Transpose_1'] = [2, 0,1]
     modifyTransposeLayer(transposeAndtargetShape)
 # --------------------------------
     splitAndAxis = {}
@@ -578,7 +597,7 @@ def convertOpencvOnnxToNcnn():
         onnx.checker.check_model(model)
     onnx.save(model, targetParamPath)
     refreshOutputShape()
-    printNet(model)
+    # printNet(model)
     session = onnxruntime.InferenceSession(
         targetParamPath, providers=onnxruntime.get_available_providers())
     datain = {}
@@ -715,11 +734,50 @@ def test_slice():
     out = session.run(None, {'input': indata})
     print(out[0])
     print(out[0].shape)
+def test_conv():
+    input = helper.make_tensor_value_info('input', TensorProto.FLOAT, [  3, 224, 224])    
+    output = helper.make_tensor_value_info('output', TensorProto.FLOAT, [ 12, 224, 224])
+    weights = helper.make_tensor('weights', TensorProto.FLOAT, [12, 3, 1, 1], np.random.randn(12, 3, 1,1).astype(np.float32))
+    bias = helper.make_tensor('bias', TensorProto.FLOAT, [12], np.random.randn(12).astype(np.float32))
+    outShape=cnnOutFigure([10,10],[3,3],[1,1],[0,0])
+    kernel_shape = [2, 2]  # 卷积核的形状
+    strides = [2, 2]  # 步幅
+    # pads = [0]  # 填充
+    # dilations = [1, 1]  # 膨胀率
+    group = 1  # 常规卷积，不分组
+    conv = helper.make_node(op_type='Conv',
+                        inputs=['input', 'weights', 'bias'],
+                        outputs=['output'],
+                        # kernel_shape=kernel_shape,
+                        # strides=strides,
+                        # pads=pads,
+                        # dilations=dilations,
+                        # group=group
+                        )
+    graph = helper.make_graph(
+        nodes=[conv],
+        name="test_graph",
+        inputs=[input],
+        outputs=[output], 
+        initializer=[weights, bias],
+    )
+    model = helper.make_model(graph, producer_name='onnx-example')
+    model.ir_version = 10
+    model.opset_import[0].version = 21
+    onnx.save(model, 'test.onnx')    
+    session = onnxruntime.InferenceSession('test.onnx', providers=onnxruntime.get_available_providers())
+    indata = np.ones([3,224,224]).astype(
+        np.float32).reshape(1,3,224,224)
+    out = session.run(None, {'input': indata})
+    print(out[0])
+    print(out[0].shape)
 
+    return model
 if __name__=='__main__':
     # test_matmul()
     # test_slice()
-    # exit(0)
+    test_conv()
+    exit(0)
     onnxParamPath='models/opencv_encoder.onnx'
     if os.path.exists(onnxParamPath):
         a = test_forward()
