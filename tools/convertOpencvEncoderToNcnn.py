@@ -21,7 +21,8 @@ shared_input = [
 ]
 shared_out = [
     # '/image_encoder/trunk/blocks.0/norm2/LayerNormalization_output_0'
-    '/image_encoder/neck/convs.3/conv/Conv_output_0'
+    'high_res_feats_0',
+    '/image_encoder/trunk/blocks.4/Add_3_output_0'
 ]
 targetParamPath = 'models/ncnn_encoder.onnx'
 image = np.ones([3, 1024, 1024]).astype(np.float32)
@@ -268,7 +269,7 @@ def insertSpecifiedReshape(layerPairs):
                 op_type='Reshape',
                 inputs=[node.output[0],
                         shapeToStr(layerPairs[node.name]['targetShape'])],
-                outputs=[node.name+'_plus_reshape'],
+                outputs=[node.name+'_plus_reshape_out'],
                 name=node.name+'_plus_reshape')
             newReshapeNodes[i] = insert_Reshape_node
 
@@ -418,7 +419,16 @@ def deleteLayer(layernames):
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
     onnx.save(new_mode, targetParamPath)
-    
+def ncnnShapeSqueezeFlag(layerNames):
+    model = onnx.load(targetParamPath)
+    graph = gs.import_onnx(model)
+    for node in graph.nodes:
+        if node.name in layerNames:
+            node.name = node.name+'_needSqueeze'
+    graph.cleanup()
+    new_mode = gs.export_onnx(graph)
+    new_mode.ir_version = 10
+    onnx.save(new_mode, targetParamPath)
 def refreshOutputShape():
     model = onnx.load(targetParamPath)
     # printNet(model)
@@ -533,8 +543,22 @@ def convertOpencvOnnxToNcnn():
         'nextNodes':  ['/image_encoder/trunk/blocks.0/Add_3', '/image_encoder/trunk/blocks.0/norm2/LayerNormalization'], 'targetShape': [65536, 144]}
     insertReshape['/image_encoder/trunk/blocks.1/Add_3'] = {
         'nextNodes': ['/image_encoder/trunk/Transpose_1'], 'targetShape': [1, 256, 256, 144]}
+    insertReshape['/image_encoder/trunk/blocks.2/attn/Transpose']= {
+        'nextNodes': ['/image_encoder/trunk/blocks.2/attn/pool/MaxPool'], 'targetShape': [294912,1, 8,8]}
+    insertReshape['/image_encoder/trunk/blocks.2/attn/pool/MaxPool']= {
+        'nextNodes': ['/image_encoder/trunk/blocks.2/attn/Transpose_1'], 'targetShape': [1024,288, 4,4]}
+    insertReshape['/image_encoder/trunk/blocks.2/proj/Add']= {
+        'nextNodes': ['/image_encoder/trunk/blocks.2/Transpose'], 'targetShape': [1, 256, 256, 288]}
+    insertReshape['/image_encoder/trunk/blocks.2/pool/MaxPool']= {
+        'nextNodes': ['/image_encoder/trunk/blocks.2/Transpose_1'], 'targetShape': [1,288,128,128 ]}
+    insertReshape['/image_encoder/trunk/blocks.2/Transpose_1']= {
+        'nextNodes': ['/image_encoder/trunk/blocks.2/Add_4'], 'targetShape': [128*128, 288]}
+
     insertSpecifiedReshape(insertReshape)
 # --------------------------------
+    ncnnShapeSqueezeFlag(['/image_encoder/neck/convs.3/conv/Conv',
+                        #   '/image_encoder/trunk/blocks.2/attn/pool/MaxPool'
+                                 ])
 # --------------------------------
     deleteLayer(['/image_encoder/trunk/blocks.0/attn/Squeeze_2',
                 '/image_encoder/trunk/blocks.0/attn/Squeeze_1',
@@ -544,7 +568,16 @@ def convertOpencvOnnxToNcnn():
                  '/image_encoder/trunk/blocks.1/attn/Squeeze',
                  '/image_encoder/trunk/blocks.2/attn/Squeeze',
                  '/image_encoder/trunk/blocks.2/attn/Squeeze_1',
-                 '/image_encoder/trunk/blocks.2/attn/Squeeze_2'])
+                 '/image_encoder/trunk/blocks.2/attn/Squeeze_2',
+                 '/image_encoder/trunk/blocks.3/attn/Squeeze',
+                 '/image_encoder/trunk/blocks.3/attn/Squeeze_1',
+                 '/image_encoder/trunk/blocks.3/attn/Squeeze_2',
+                 '/image_encoder/trunk/blocks.4/attn/Squeeze',
+                 '/image_encoder/trunk/blocks.4/attn/Squeeze_1',
+                 '/image_encoder/trunk/blocks.4/attn/Squeeze_2',
+                 
+                 
+                 ])
 # --------------------------------
     reshapeAndtargetShape = {}
     reshapeAndtargetShape['/image_encoder/trunk/blocks.0/Reshape']=[32,8,32,1152]
@@ -560,10 +593,25 @@ def convertOpencvOnnxToNcnn():
     reshapeAndtargetShape['/image_encoder/trunk/blocks.1/Reshape_3'] = [65536, 144]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.2/Reshape'] = [32, 8, 32, 1152]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.2/Reshape_1'] = [65536, 144]
-    reshapeAndtargetShape['/image_encoder/trunk/blocks.2/attn/Reshape']=[1024,192,4,72]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.2/attn/Reshape']=[1024,64,12,72]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.2/attn/Reshape_1']=[1024,8,8,288]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.2/attn/Reshape_2'] = [1024, 16,4, 72]
     reshapeAndtargetShape['/Reshape_5']=[1,32,256,256]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.2/attn/Reshape_3']=[16384,288]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.2/Reshape_2']=[32, 32,  4, 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.2/Reshape_3']=[128*128,288]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.3/Reshape']=[32, 4, 32, 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.3/Reshape_1']=[16384,288]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.3/attn/Reshape']=[1024,16,12,72]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.3/attn/Reshape_1']=[16384,288]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.3/Reshape_2']=[32, 32,  4, 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.3/Reshape_3']=[16384,288]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.4/Reshape']=[32, 4, 32, 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.4/Reshape_1']=[16384,288]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.4/attn/Reshape']=[1024,16,12,72]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.4/attn/Reshape_1']=[16384,288]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.4/Reshape_2']=[32, 32,  4, 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.4/Reshape_3']=[16384,288]
     modifyReshapeLayer(reshapeAndtargetShape)
 # --------------------------------
     transposeAndtargetShape = {}
@@ -572,7 +620,13 @@ def convertOpencvOnnxToNcnn():
     transposeAndtargetShape['/image_encoder/trunk/blocks.1/Transpose'] = [0, 2, 1, 3]
     transposeAndtargetShape['/image_encoder/trunk/blocks.1/Transpose_1'] = [0, 2, 1, 3]
     transposeAndtargetShape['/image_encoder/trunk/blocks.2/Transpose_2'] = [0, 2, 1, 3]
-    # transposeAndtargetShape['/image_encoder/trunk/Transpose_1'] = [2, 0,1]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.2/Transpose_3'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.2/Transpose'] = [3,0,1,2]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.2/Transpose_1'] = [0,2,3,1]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.3/Transpose']= [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.3/Transpose_1'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.4/Transpose']= [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.4/Transpose_1'] = [0, 2, 1, 3]
     modifyTransposeLayer(transposeAndtargetShape)
 # --------------------------------
     splitAndAxis = {}
@@ -580,7 +634,11 @@ def convertOpencvOnnxToNcnn():
     splitAndAxis['/image_encoder/trunk/blocks.1/attn/Split'] = {
         'axis': 2, 'split': [2, 2, 2]}
     splitAndAxis['/image_encoder/trunk/blocks.2/attn/Split'] = {
-        'axis': 1, 'split': [64, 64, 64]}
+        'axis': 2, 'split': [4, 4, 4]}
+    splitAndAxis['/image_encoder/trunk/blocks.3/attn/Split'] = {
+        'axis': 2, 'split': [4, 4, 4]}
+    splitAndAxis['/image_encoder/trunk/blocks.4/attn/Split'] = {
+        'axis': 2, 'split': [4, 4, 4]}
     modifySplitLayer(splitAndAxis)
 # --------------------------------
 
@@ -735,24 +793,34 @@ def test_slice():
     print(out[0])
     print(out[0].shape)
 def test_conv():
-    input = helper.make_tensor_value_info('input', TensorProto.FLOAT, [  3, 224, 224])    
-    output = helper.make_tensor_value_info('output', TensorProto.FLOAT, [ 12, 224, 224])
-    weights = helper.make_tensor('weights', TensorProto.FLOAT, [12, 3, 1, 1], np.random.randn(12, 3, 1,1).astype(np.float32))
-    bias = helper.make_tensor('bias', TensorProto.FLOAT, [12], np.random.randn(12).astype(np.float32))
+    input = helper.make_tensor_value_info('input', TensorProto.FLOAT, [1, 3, 10, 10])    
+    output = helper.make_tensor_value_info('output', TensorProto.FLOAT, [1, 12, 8, 8])
+    weights = helper.make_tensor('weights', TensorProto.FLOAT, [12, 3, 3,3], np.ones([12, 3, 3,3]).astype(np.float32))
+    bias = helper.make_tensor('bias', TensorProto.FLOAT, [12], np.ones(12).astype(np.float32))
+    axes = helper.make_tensor('axes', TensorProto.INT64, [1], np.array([0], dtype=np.int64))
     outShape=cnnOutFigure([10,10],[3,3],[1,1],[0,0])
-    kernel_shape = [2, 2]  # 卷积核的形状
-    strides = [2, 2]  # 步幅
-    # pads = [0]  # 填充
-    # dilations = [1, 1]  # 膨胀率
+    kernel_shape = [3,3]  # 卷积核的形状
+    strides = [1,1]  # 步幅
+    pads = [0,0,0,0]  # 填充
+    dilations = [1, 1]  # 膨胀率
     group = 1  # 常规卷积，不分组
+
+    squeezeNode = helper.make_node(
+            op_type='Squeeze',
+            inputs=['input','axes'],
+            outputs=['inputSqueeze'],
+            name='squeezeNode'
+        )
+
     conv = helper.make_node(op_type='Conv',
                         inputs=['input', 'weights', 'bias'],
                         outputs=['output'],
-                        # kernel_shape=kernel_shape,
-                        # strides=strides,
-                        # pads=pads,
-                        # dilations=dilations,
-                        # group=group
+                        name='Conv_needSqueeze',
+                        kernel_shape=kernel_shape,
+                        strides=strides,
+                        pads=pads,
+                        dilations=dilations,
+                        group=group
                         )
     graph = helper.make_graph(
         nodes=[conv],
@@ -766,18 +834,53 @@ def test_conv():
     model.opset_import[0].version = 21
     onnx.save(model, 'test.onnx')    
     session = onnxruntime.InferenceSession('test.onnx', providers=onnxruntime.get_available_providers())
-    indata = np.ones([3,224,224]).astype(
-        np.float32).reshape(1,3,224,224)
+    indata = np.ones([3,10, 10]).astype(
+        np.float32).reshape(1,3,10, 10)
     out = session.run(None, {'input': indata})
     print(out[0])
     print(out[0].shape)
 
     return model
+def test_maxpool():
+    input = helper.make_tensor_value_info('input', TensorProto.FLOAT, [ 3, 8, 8])    
+    output = helper.make_tensor_value_info('output', TensorProto.FLOAT, [ 3, 4, 4])
+    maxpool_node = onnx.helper.make_node(
+        "MaxPool",
+        inputs=["input"],
+        outputs=["output"],
+        ceil_mode=0,
+        dilations=[1,1],
+        kernel_shape=[2, 2],
+        pads=[0,0],
+        strides=[2,2]
+    ) 
+    graph = helper.make_graph(
+        nodes=[maxpool_node],
+        name="test_graph",
+        inputs=[input],
+        outputs=[output]
+    )
+    model = helper.make_model(graph, producer_name='onnx-example')
+    model.ir_version = 10
+    model.opset_import[0].version = 21
+    onnx.save(model, 'test.onnx')    
+    session = onnxruntime.InferenceSession('test.onnx', providers=onnxruntime.get_available_providers())
+    indata = np.ones([3,8, 8]).astype(
+        np.float32).reshape(3,8, 8)
+    out = session.run(None, {'input': indata})
+    print(out[0])
+    print(out[0].shape)
+
+
+
+
+
 if __name__=='__main__':
     # test_matmul()
     # test_slice()
-    test_conv()
-    exit(0)
+    # test_conv()
+    # test_maxpool()
+    # exit(0)
     onnxParamPath='models/opencv_encoder.onnx'
     if os.path.exists(onnxParamPath):
         a = test_forward()

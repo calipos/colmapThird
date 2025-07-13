@@ -3039,7 +3039,7 @@ int test_forward()
     ex1.input("image", in);
     ncnn::Mat out0;
     auto start1 = std::chrono::steady_clock::now();
-    ex1.extract("/image_encoder/neck/convs.3/conv/Conv_output_0", out0);
+    ex1.extract("/image_encoder/trunk/blocks.4/Add_3_output_0", out0);
     //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_1", out1);
     //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_2", out2);
     auto end1 = std::chrono::steady_clock::now();
@@ -3086,7 +3086,6 @@ int test_matmul_forward()
     }
     return 0;
 }
-
 int test_slice_forward()
 {
     ncnn::Net testNet;
@@ -3107,6 +3106,29 @@ int test_slice_forward()
     ncnn::Mat out2;
     ncnn::Mat out3;
     ex1.extract("output1", out1);
+    printNcnnBlob(out1);
+    return 0;
+}
+int test_squeeze_forward()
+{
+    ncnn::Net testNet;
+    testNet.opt.use_vulkan_compute = true;
+    if (testNet.load_param("ncnn.param"))
+        exit(-1);
+    if (testNet.load_model("ncnn.bin"))
+        exit(-1);
+    ncnn::Extractor ex1 = testNet.create_extractor();
+    std::vector<float> indata(300, 1);
+    //for (int i = 0; i < indata.size(); i++)
+    //{
+    //    indata[i] = i;
+    //}
+    ncnn::Mat in(10,10,3,1, (void*)&indata[0], 4);
+    ex1.input("input", in);
+    ncnn::Mat out1;
+    ncnn::Mat out2;
+    ncnn::Mat out3;
+    ex1.extract("output", out1);
     printNcnnBlob(out1);
     return 0;
 }
@@ -3187,10 +3209,11 @@ std::map<std::string, float> getTheSimpleBinaryOp(const onnx::GraphProto& graph,
 }
 int main()
 {
+    //return test_squeeze_forward();
     //return test_slice_forward();
     //return test_forward();
     const char* onnxpb = "D:/repo/colmap-third/models/ncnn_encoder.onnx";
-    //const char* onnxpb = "D:/repo/colmapthird/test.onnx";
+    //const char* onnxpb = "D:/repo/colmap-third/test.onnx";
     const char* ncnn_prototxt = "ncnn.param";
     const char* ncnn_modelbin = "ncnn.bin";
 
@@ -3306,6 +3329,7 @@ int main()
     //fuse_binaryop_with_scalar(mutable_graph, weights, node_reference, blob_names, reduced_node_count);
     //fuse_rewrite_gather(mutable_graph, weights, node_reference, blob_names, reduced_node_count);
 
+    int needSqueezeConvolutionLayerAdditionCnt = 0;
     // reduce common const weight node_reference
     std::unordered_map<std::string, int> graphNodeMap;
     for (int i = 0; i < node_count; i++)
@@ -3313,7 +3337,10 @@ int main()
         const onnx::NodeProto& node = graph.node(i);
         const std::string& op = node.op_type();
         graphNodeMap[node.name()] = i;
-
+        if (node.name().find("needSqueeze") != std::string::npos)
+        {
+            needSqueezeConvolutionLayerAdditionCnt+=1;
+        }
         if (op == "BatchNormalization")
         {
             node_reference[node.input(1)] -= 1;
@@ -3603,7 +3630,7 @@ int main()
         }
     }
 
-    fprintf(pp, "%zu %zu\n", node_count - constant_node_count_moved_to_weight + weights.size() - zero_reference_weight_node_count - reduced_node_count + input_node_count + split_layer_count, blob_names.size() - zero_reference_weight_node_count + splitncnn_blob_count);
+    fprintf(pp, "%zu %zu\n", node_count - constant_node_count_moved_to_weight + weights.size() - zero_reference_weight_node_count - reduced_node_count + input_node_count + split_layer_count + needSqueezeConvolutionLayerAdditionCnt, blob_names.size() - zero_reference_weight_node_count + splitncnn_blob_count + needSqueezeConvolutionLayerAdditionCnt);
 
     int internal_split = 0;
 
@@ -3709,7 +3736,7 @@ int main()
 
         internal_split++;
     }
-
+    std::string convolution_input_name;
     for (int i = 0; i < node_count; i++)
     {
         const onnx::NodeProto& node = graph.node(i);
@@ -3717,6 +3744,14 @@ int main()
 
         std::cout << "name = " << node.name() << "; type=" << op << std::endl;
         std::cout << "\tinput size = " << node.input_size() << std::endl;
+        if (node.name().find("needSqueeze") != std::string::npos)
+        {
+            std::string squeezeLayerName = "squeezeNode" + std::to_string(needSqueezeConvolutionLayerAdditionCnt++);
+            std::string input_name = node.input(0); //convolution input0 name
+            convolution_input_name = input_name + "_Squeeze"; //convolution input true name
+            std::string squeezeLine = "Squeeze "+ squeezeLayerName +" 1 1 " + input_name + " " + convolution_input_name + " 2=1\n";
+            fprintf(pp, squeezeLine.c_str());
+        }
         for (int j = 0; j < node.input_size(); j++)
         {
             std::cout << "\ti : " << node.input(j).c_str() << std::endl;
@@ -4151,7 +4186,11 @@ int main()
         for (int j = 0; j < (int)node.input_size(); j++)
         {
             std::string input_name = node.input(j);
-
+            std::string maybeConvolutionSqueezeName = input_name + "_Squeeze"; //convolution input true name
+            if (maybeConvolutionSqueezeName.compare(convolution_input_name) == 0)
+            {
+                input_name = maybeConvolutionSqueezeName;
+            }
             // check weight
             if (weights.find(input_name) != weights.end() && node_reference[input_name] == 0)
             {
