@@ -3039,7 +3039,7 @@ int test_forward()
     ex1.input("image", in);
     ncnn::Mat out0;
     auto start1 = std::chrono::steady_clock::now();
-    ex1.extract("/image_encoder/trunk/blocks.4/Add_3_output_0", out0);
+    ex1.extract("/image_encoder/trunk/blocks.10/attn/Reshape_output_0", out0);
     //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_1", out1);
     //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_2", out2);
     auto end1 = std::chrono::steady_clock::now();
@@ -3123,7 +3123,7 @@ int test_squeeze_forward()
     //{
     //    indata[i] = i;
     //}
-    ncnn::Mat in(10,10,3,1, (void*)&indata[0], 4);
+    ncnn::Mat in(10, 10, 3, 1, (void*)&indata[0], 4);
     ex1.input("input", in);
     ncnn::Mat out1;
     ncnn::Mat out2;
@@ -3212,8 +3212,8 @@ int main()
     //return test_squeeze_forward();
     //return test_slice_forward();
     //return test_forward();
-    const char* onnxpb = "D:/repo/colmap-third/models/ncnn_encoder.onnx";
-    //const char* onnxpb = "D:/repo/colmap-third/test.onnx";
+    const char* onnxpb = "D:/repo/colmapThird/models/ncnn_encoder.onnx";
+    //const char* onnxpb = "D:/repo/colmapThird/test.onnx";
     const char* ncnn_prototxt = "ncnn.param";
     const char* ncnn_modelbin = "ncnn.bin";
 
@@ -3339,7 +3339,7 @@ int main()
         graphNodeMap[node.name()] = i;
         if (node.name().find("needSqueeze") != std::string::npos)
         {
-            needSqueezeConvolutionLayerAdditionCnt+=1;
+            needSqueezeConvolutionLayerAdditionCnt += 1;
         }
         if (op == "BatchNormalization")
         {
@@ -3747,9 +3747,9 @@ int main()
         if (node.name().find("needSqueeze") != std::string::npos)
         {
             std::string squeezeLayerName = "squeezeNode" + std::to_string(needSqueezeConvolutionLayerAdditionCnt++);
-            std::string input_name = node.input(0); //convolution input0 name
+            std::string input_name = node.input(0);           //convolution input0 name
             convolution_input_name = input_name + "_Squeeze"; //convolution input true name
-            std::string squeezeLine = "Squeeze "+ squeezeLayerName +" 1 1 " + input_name + " " + convolution_input_name + " 2=1\n";
+            std::string squeezeLine = "Squeeze " + squeezeLayerName + " 1 1 " + input_name + " " + convolution_input_name + " 2=1\n";
             fprintf(pp, squeezeLine.c_str());
         }
         for (int j = 0; j < node.input_size(); j++)
