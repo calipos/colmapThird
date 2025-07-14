@@ -23,7 +23,7 @@ shared_out = [
     # '/image_encoder/trunk/blocks.0/norm2/LayerNormalization_output_0'
     'high_res_feats_0',
     'high_res_feats_1',
-    '/image_encoder/trunk/blocks.23/attn/MatMul_output_0'
+    '/image_encoder/trunk/blocks.24/Add_3_output_0'
 ]
 targetParamPath = 'models/ncnn_encoder.onnx'
 image = np.ones([3, 1024, 1024]).astype(np.float32)
@@ -500,6 +500,8 @@ def refreshOutputShape():
                 print(node)
                 assert False
             node.outputs[0].shape = C.shape
+        elif node.op == 'Softmax':
+            node.outputs[0].shape = node.inputs[0].shape
         elif node.op == 'Mul':
             if np.sum(np.array(node.inputs[0].shape) == -1) != 0:
                 continue
@@ -596,6 +598,10 @@ def convertOpencvOnnxToNcnn():
         'constName': '/image_encoder/trunk/blocks.23/attn/Sqrt_1_output_0', 'value': [0.34329452398451962597171287586684]}
     binaryOperationConst['/image_encoder/trunk/blocks.23/attn/Mul_2'] = {
         'constName': '/image_encoder/trunk/blocks.23/attn/Sqrt_1_output_0', 'value': [0.34329452398451962597171287586684]}
+    binaryOperationConst['/image_encoder/trunk/blocks.24/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.24/attn/Sqrt_1_output_0', 'value': [0.34329452398451962597171287586684]}
+    binaryOperationConst['/image_encoder/trunk/blocks.24/attn/Mul_2'] = {
+        'constName': '/image_encoder/trunk/blocks.24/attn/Sqrt_1_output_0', 'value': [0.34329452398451962597171287586684]}
     modifyBinaryOperationConst(binaryOperationConst)
 # --------------------------------
     ncnnShapeSqueezeFlag(['/image_encoder/neck/convs.3/conv/Conv','/image_encoder/neck/convs.2/conv/Conv'])
@@ -671,7 +677,10 @@ def convertOpencvOnnxToNcnn():
                  '/image_encoder/trunk/blocks.22/attn/Squeeze_2',
                  '/image_encoder/trunk/blocks.23/attn/Squeeze',
                  '/image_encoder/trunk/blocks.23/attn/Squeeze_1',
-                 '/image_encoder/trunk/blocks.23/attn/Squeeze_2'
+                 '/image_encoder/trunk/blocks.23/attn/Squeeze_2',
+                 '/image_encoder/trunk/blocks.24/attn/Squeeze',
+                 '/image_encoder/trunk/blocks.24/attn/Squeeze_1',
+                 '/image_encoder/trunk/blocks.24/attn/Squeeze_2'
                  ])
 # --------------------------------
     reshapeAndtargetShape = {}
@@ -817,7 +826,13 @@ def convertOpencvOnnxToNcnn():
     reshapeAndtargetShape['/image_encoder/trunk/blocks.22/Reshape_2'] = [4, 4, 16, 16*576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.22/Reshape_3'] = [64*64, 576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.23/attn/Reshape'] = [1, 4096, 24, 72]
-    reshapeAndtargetShape['/image_encoder/trunk/blocks.23/attn/Reshape_1']
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.23/attn/Reshape_1'] = [64*64, 576]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.24/Reshape'] = [4, 16, 4, 16*576]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.24/Reshape_1'] = [16*16*16, 576]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.24/attn/Reshape']  =[ 16, 256, 24, 72]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.24/attn/Reshape_1'] = [16*16*16, 576]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.24/Reshape_2'] = [4, 4, 16, 16*576]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.24/Reshape_3'] = [16*16*16, 576]
     modifyReshapeLayer(reshapeAndtargetShape)
 # --------------------------------
     transposeAndtargetShape = {}
@@ -870,6 +885,8 @@ def convertOpencvOnnxToNcnn():
     transposeAndtargetShape['/image_encoder/trunk/blocks.21/Transpose_1'] = [0, 2, 1, 3]
     transposeAndtargetShape['/image_encoder/trunk/blocks.22/Transpose'] = [0, 2, 1, 3]
     transposeAndtargetShape['/image_encoder/trunk/blocks.22/Transpose_1'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.24/Transpose'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.24/Transpose_1'] = [0, 2, 1, 3]
     modifyTransposeLayer(transposeAndtargetShape)
 # --------------------------------
     splitAndAxis = {}
@@ -919,6 +936,8 @@ def convertOpencvOnnxToNcnn():
     splitAndAxis['/image_encoder/trunk/blocks.22/attn/Split'] = {
         'axis': 2, 'split': [8, 8, 8]}
     splitAndAxis['/image_encoder/trunk/blocks.23/attn/Split'] = {
+        'axis': 2, 'split': [8, 8, 8]}
+    splitAndAxis['/image_encoder/trunk/blocks.24/attn/Split'] = {
         'axis': 2, 'split': [8, 8, 8]}
     modifySplitLayer(splitAndAxis)
 # --------------------------------

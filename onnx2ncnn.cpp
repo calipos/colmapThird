@@ -228,7 +228,6 @@ static std::vector<int> get_node_attr_from_input_ai(const onnx::TensorProto& tp)
     int size = 0;
 
     std::vector<int> v;
-    std::cout << tp.data_type() << std::endl;
     // int64
     if (tp.data_type() == 7)
     {
@@ -3039,7 +3038,7 @@ int test_forward()
     ex1.input("image", in);
     ncnn::Mat out0;
     auto start1 = std::chrono::steady_clock::now();
-    ex1.extract("/image_encoder/trunk/blocks.10/attn/Reshape_output_0", out0);
+    ex1.extract("/image_encoder/trunk/blocks.24/Add_3_output_0", out0);
     //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_1", out1);
     //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_2", out2);
     auto end1 = std::chrono::steady_clock::now();
@@ -3241,13 +3240,13 @@ int main()
     for (int j = 0; j < graph.initializer_size(); j++)
     {
         const onnx::TensorProto& initializer = graph.initializer(j);
-        std::cout << "initializer " << j << ". name=" << initializer.name() << "; type=" << initializer.data_type() << std::endl;
-        std::cout << "\t";
-        for (int k = 0; k < initializer.dims_size(); k++)
-        {
-            std::cout << initializer.dims()[k] << ", ";
-        }
-        std::cout << std::endl;
+        //std::cout << "initializer " << j << ". name=" << initializer.name() << "; type=" << initializer.data_type() << std::endl;
+        //std::cout << "\t";
+        //for (int k = 0; k < initializer.dims_size(); k++)
+        //{
+        //    std::cout << initializer.dims()[k] << ", ";
+        //}
+        //std::cout << std::endl;
         weights[initializer.name()] = initializer;
     }
     auto SimpleBinaryOp = getTheSimpleBinaryOp(graph, weights);
@@ -3742,8 +3741,8 @@ int main()
         const onnx::NodeProto& node = graph.node(i);
         const std::string& op = node.op_type();
 
-        std::cout << "name = " << node.name() << "; type=" << op << std::endl;
-        std::cout << "\tinput size = " << node.input_size() << std::endl;
+        //std::cout << "name = " << node.name() << "; type=" << op << std::endl;
+        //std::cout << "\tinput size = " << node.input_size() << std::endl;
         if (node.name().find("needSqueeze") != std::string::npos)
         {
             std::string squeezeLayerName = "squeezeNode" + std::to_string(needSqueezeConvolutionLayerAdditionCnt++);
@@ -3752,15 +3751,14 @@ int main()
             std::string squeezeLine = "Squeeze " + squeezeLayerName + " 1 1 " + input_name + " " + convolution_input_name + " 2=1\n";
             fprintf(pp, squeezeLine.c_str());
         }
-        for (int j = 0; j < node.input_size(); j++)
-        {
-            std::cout << "\ti : " << node.input(j).c_str() << std::endl;
-        }
-        for (int j = 0; j < node.output_size(); j++)
-        {
-            std::cout << "\to : " << node.output(j).c_str() << std::endl;
-        }
-        //         fprintf(stderr, "op = %s\n", op.c_str());
+        //for (int j = 0; j < node.input_size(); j++)
+        //{
+        //    std::cout << "\ti : " << node.input(j).c_str() << std::endl;
+        //}
+        //for (int j = 0; j < node.output_size(); j++)
+        //{
+        //    std::cout << "\to : " << node.output(j).c_str() << std::endl;
+        //}
 
         if (op == "noop_reducedncnn")
         {
