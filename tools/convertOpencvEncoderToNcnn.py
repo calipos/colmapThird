@@ -15,6 +15,7 @@ import torch.optim as optim
 from torch.utils import data
 import onnx_graphsurgeon as gs
 import onnxruntime
+import matplotlib.pyplot as plt
 checkmodel = False
 inferShapes = False
 
@@ -22,14 +23,17 @@ shared_input = [
     'image',
 ]
 shared_out = [
-    '/image_encoder/trunk/blocks.17/Add_3_output_0',  # 1.0013580322265625e-05
-    '/image_encoder/trunk/blocks.18/Add_3_output_0',  # 1.0013580322265625e-05
-    '/image_encoder/trunk/blocks.19/Add_3_output_0',  # 1.0013580322265625e-05
-    '/image_encoder/trunk/blocks.20/Add_3_output_0',  # 1.1444091796875e-05
     '/image_encoder/trunk/blocks.21/Add_3_output_0',  # 1.239776611328125e-05
     '/image_encoder/trunk/blocks.22/Add_2_output_0',  # 1.1682510375976562e-05---------
+    '/image_encoder/trunk/blocks.22/norm2/LayerNormalization_output_0',#7.808208465576172e-06
+    '/image_encoder/trunk/blocks.22/mlp/layers.0/MatMul_output_0',#1.3530254364013672e-05
+    '/image_encoder/trunk/blocks.22/mlp/layers.0/Add_output_0',#1.3589859008789062e-05
+    '/image_encoder/trunk/blocks.22/mlp/act/Mul_output_0',#1.3828277587890625e-05
+    '/image_encoder/trunk/blocks.22/mlp/layers.1/Add_output_0',#1.6808509826660156e-05-------------------
     '/image_encoder/trunk/blocks.22/Add_3_output_0',  # 2.384185791015625e-05
-    '/image_encoder/trunk/blocks.23/Add_1_output_0',  # 9.822845458984375e-05
+    '/image_encoder/trunk/blocks.23/Add_output_0',#2.47955322265625e-05
+    '/image_encoder/trunk/blocks.23/mlp/layers.1/Add_output_0',#7.43865966796875e-05
+    '/image_encoder/trunk/blocks.23/Add_1_output_0',  # 9.822845458984375e-05-------------------
     '/image_encoder/trunk/blocks.24/Add_3_output_0',  # 0.0009136199951171875
     '/image_encoder/trunk/blocks.25/Add_3_output_0',  # 0.00373077392578125
     '/image_encoder/trunk/blocks.26/Add_3_output_0',  # 0.00545501708984375
@@ -1311,7 +1315,10 @@ if __name__=='__main__':
         a = test_forward()
         b = convertOpencvOnnxToNcnn()
         for i in range(len(a)):
-            print(np.max(np.abs(a[i].astype(np.double).reshape(
-                [-1])-b[i].astype(np.double).reshape([-1]))))
+            assert a[i].size==b[i].size
+            diff = a[i].astype(np.double).reshape(-1)-b[i].astype(np.double).reshape(-1)
+            print(np.mean(diff),np.std(diff))
+            plt.plot(diff)  
+            plt.savefig(str(i)+'.png')
     else: 
         print("need run sam2_onnx_adaptor first!!")
