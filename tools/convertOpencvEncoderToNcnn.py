@@ -1,8 +1,10 @@
+from typing import Any, Sequence
 import os
-
+from typing import Any, Sequence
 import copy
 import numpy as np
 import onnx
+import sys
 from onnx import helper
 from onnx import shape_inference
 from onnx import TensorProto
@@ -20,24 +22,48 @@ shared_input = [
     'image',
 ]
 shared_out = [
-    'high_res_feats_0',
-    'high_res_feats_1',
-    '/image_encoder/trunk/blocks.24/Add_2_output_0',
-    '/image_encoder/trunk/blocks.25/Reshape_3_output_0',#0.00032258034
-    '/image_encoder/trunk/blocks.24/Add_2_output_0',    #9.8228455e-05
-    '/image_encoder/trunk/blocks.24/norm2/LayerNormalization_output_0',#4.673004e-05
-    '/image_encoder/trunk/blocks.24/mlp/layers.0/MatMul_output_0', #0.00027561188
-    '/image_encoder/trunk/blocks.24/Add_3_output_0',    #0.00091362
-    '/image_encoder/trunk/blocks.25/Add_2_output_0',    #0.0009975433
-    # '/image_encoder/trunk/blocks.26/Add_2_output_0',
-    # '/image_encoder/trunk/blocks.27/Add_2_output_0',
-    # '/image_encoder/trunk/blocks.28/Add_2_output_0'
+    '/image_encoder/trunk/blocks.14/Add_3_output_0',
+    '/image_encoder/trunk/blocks.15/Add_3_output_0',
+    '/image_encoder/trunk/blocks.16/Add_3_output_0',
+    '/image_encoder/trunk/blocks.17/Add_3_output_0',  # 1.0013580322265625e-05
+    '/image_encoder/trunk/blocks.18/Add_3_output_0',  # 1.0013580322265625e-05
+    '/image_encoder/trunk/blocks.19/Add_3_output_0',  # 1.0013580322265625e-05
+    '/image_encoder/trunk/blocks.20/Add_3_output_0',  # 1.1444091796875e-05
+    '/image_encoder/trunk/blocks.21/Add_3_output_0',  # 1.239776611328125e-05
+    '/image_encoder/trunk/blocks.23/Add_1_output_0',  # 9.822845458984375e-05
+    '/image_encoder/trunk/blocks.24/Add_3_output_0',  # 0.0009136199951171875
+    '/image_encoder/trunk/blocks.25/Add_3_output_0',  # 0.00373077392578125
+    '/image_encoder/trunk/blocks.26/Add_3_output_0',  #0.00545501708984375
+    '/image_encoder/trunk/blocks.27/Add_3_output_0',  # 10.583183288574219
+
+
+
+    # 'high_res_feats_0',
+    # 'high_res_feats_1',
+    # '/image_encoder/trunk/blocks.25/Reshape_3_output_0',#0.00032258034
+    # '/image_encoder/trunk/blocks.24/Add_2_output_0',    #9.8228455e-05
+    # '/image_encoder/trunk/blocks.24/norm2/LayerNormalization_output_0',#4.673004e-05
+    # '/image_encoder/trunk/blocks.24/mlp/layers.0/MatMul_output_0', #0.00027561188
+    # '/image_encoder/trunk/blocks.24/Add_3_output_0',    #0.00091362
+    # '/image_encoder/trunk/blocks.25/Add_2_output_0',    #0.0009975433
+    
+    
+    # '/image_encoder/trunk/blocks.23/Add_output_0',  # 2.47955322265625e-05
+    # '/image_encoder/trunk/blocks.23/mlp/act/Mul_output_0',  # 3.135204315185547e-05
+    # '/image_encoder/trunk/blocks.23/mlp/layers.1/MatMul_output_0',#7.343292236328125e-05
+    # '/image_encoder/trunk/blocks.23/mlp/layers.1/Add_output_0',  # 7.343292236328125e-05
+    # '/image_encoder/trunk/blocks.23/Add_1_output_0',  # 9.822845458984375e-05
+
+
     # '/image_encoder/trunk/blocks.28/attn/proj/Add_output_0'
+
 ]
 targetParamPath = 'models/ncnn_encoder.onnx'
 image = np.ones([3, 1024, 1024]).astype(np.float32)
 shape_set=[]
 const_set={}
+
+
 def cnnOutFigure(input_size, kernelsize, stride, padding):
     if isinstance(input_size, int):
         input_size = (input_size,)
@@ -151,7 +177,7 @@ def printNet(model):
 
 
 def test_forward():
-    # sys.stdout = open('convert_sam2_decoder_point_label.txt', 'w')
+    # sys.stdout = open('test_forward.txt', 'w')
     cut_subgraph('models/opencv_encoder.onnx',
                  shared_input,
                  shared_out,
@@ -173,7 +199,14 @@ def test_forward():
         print(shared_out[i])
         print(pointCoords[i].shape)
         print(pointCoords[i])
-        print(" ")
+        print(" ") 
+
+
+    # sys.stdout = open('test_forward.txt', 'w')
+    # model = onnx.load(targetParamPath)
+    # graph = gs.import_onnx(model)
+    # print(graph.nodes)
+    # sys.stdout = sys.stdout
     return pointCoords
 
 def shapeToStr(shape):
@@ -243,7 +276,8 @@ def modifyReshapeLayer(layerNamesAndtargetShape):
                     inputs=[node.input[0], shapeToStr(
                         layerNamesAndtargetShape[node.name])],
                     outputs=node.output,
-                    name=node.name
+                    name=node.name,
+                    allowzero=0
                 )
                 model.graph.node.remove(model.graph.node[i])
                 model.graph.node.insert(i, new_reshape_node)
@@ -302,7 +336,8 @@ def insertSpecifiedReshape(layerPairs):
                 inputs=[node.output[0],
                         shapeToStr(layerPairs[node.name]['targetShape'])],
                 outputs=[node.name+'_plus_reshape_out'],
-                name=node.name+'_plus_reshape')
+                name=node.name+'_plus_reshape',
+                allowzero= 0)
             newReshapeNodes[i] = insert_Reshape_node
 
     prevNodeIndex.sort(reverse=True)
@@ -474,8 +509,6 @@ def refreshOutputShape():
     graph = gs.import_onnx(model)
     for node in graph.nodes:
         # print('refresh layer shape: ',node.name)
-        if node.name == '/image_encoder/trunk/blocks.23/attn/Transpose_2':
-            print(1)
         if node.op == 'Reshape' :
             assert len(node.inputs)==2
             dataIdx=-1
@@ -486,8 +519,12 @@ def refreshOutputShape():
                     dataIdx = 1-i
             if np.sum(np.array(node.inputs[shapeIdx].shape) == -1) :
                 continue
-            node.outputs[0].shape = node.inputs[shapeIdx].values.tolist()
-            node.outputs[0].dtype = node.inputs[dataIdx].dtype
+            try:
+                node.outputs[0].shape = node.inputs[shapeIdx].values.tolist()
+                node.outputs[0].dtype = node.inputs[dataIdx].dtype
+            except:
+                print(node)
+                assert False
         elif node.op == 'Transpose':
             try:
                 inputShape = node.inputs[0].shape
@@ -560,7 +597,14 @@ def refreshOutputShape():
             for i in range(len(node.outputs)):
                 node.outputs[i].shape = copy.deepcopy(srcShape)
                 node.outputs[i].shape[axis] = splitArray[i]
+            # if node.name == '/image_encoder/trunk/blocks.0/attn/Split':
+            #     print(node)
+        elif node.op == 'MaxPool':
+            node.outputs[0].shape = copy.deepcopy(node.inputs[0].shape)
+            node.outputs[0].shape[-2] = node.outputs[0].shape[-2]//2
+            node.outputs[0].shape[-1] = node.outputs[0].shape[-1]//2
     graph.cleanup()
+    graph.toposort()
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
     onnx.save(new_mode, targetParamPath)
@@ -574,7 +618,7 @@ def convertOpencvOnnxToNcnn():
     model = onnx.load(targetParamPath)
 
 # --------------------------------
-    insertReshape = {}
+    insertReshape = {}    
     insertReshape['/image_encoder/trunk/patch_embed/proj/Conv'] = {
         'nextNodes': ['/image_encoder/trunk/patch_embed/Transpose'], 'targetShape': [1, 144, 256, 256]}
     insertReshape['/image_encoder/trunk/Add_1'] = {
@@ -1017,6 +1061,7 @@ def convertOpencvOnnxToNcnn():
         'axis': 2, 'split': [8, 8, 8]}
     modifySplitLayer(splitAndAxis)
 # --------------------------------
+    refreshOutputShape()
 
     model = onnx.load(targetParamPath)
     graph = gs.import_onnx(model)
@@ -1030,7 +1075,12 @@ def convertOpencvOnnxToNcnn():
     if checkmodel:
         onnx.checker.check_model(model)
     onnx.save(model, targetParamPath)
-    refreshOutputShape()
+
+    # sys.stdout = open('test_forward2.txt', 'w')
+    # graph = gs.import_onnx(model)
+    # print(graph.nodes)
+    # sys.stdout = sys.stdout
+
     # printNet(model)
     session = onnxruntime.InferenceSession(
         targetParamPath, providers=onnxruntime.get_available_providers())
@@ -1218,8 +1268,9 @@ def test_conv():
 
     return model
 def test_maxpool():
-    input = helper.make_tensor_value_info('input', TensorProto.FLOAT, [ 3, 8, 8])    
-    output = helper.make_tensor_value_info('output', TensorProto.FLOAT, [ 3, 4, 4])
+    input = helper.make_tensor_value_info('input', TensorProto.FLOAT, [ 3,1, 8, 8])    
+    output = helper.make_tensor_value_info(
+        'output', TensorProto.FLOAT, [3, 1, 4, 4])
     maxpool_node = onnx.helper.make_node(
         "MaxPool",
         inputs=["input"],
@@ -1227,7 +1278,7 @@ def test_maxpool():
         ceil_mode=0,
         dilations=[1,1],
         kernel_shape=[2, 2],
-        pads=[0,0],
+        pads=[0,0,0,0],
         strides=[2,2]
     ) 
     graph = helper.make_graph(
@@ -1241,12 +1292,11 @@ def test_maxpool():
     model.opset_import[0].version = 21
     onnx.save(model, 'test.onnx')    
     session = onnxruntime.InferenceSession('test.onnx', providers=onnxruntime.get_available_providers())
-    indata = np.ones([3,8, 8]).astype(
-        np.float32).reshape(3,8, 8)
+    indata = np.array([x for x in range(3*8*8)]).astype(
+        np.float32).reshape(3, 1, 8, 8)
     out = session.run(None, {'input': indata})
     print(out[0])
     print(out[0].shape)
-
 
 
 
@@ -1262,6 +1312,7 @@ if __name__=='__main__':
         a = test_forward()
         b = convertOpencvOnnxToNcnn()
         for i in range(len(a)):
-            print(np.max(np.abs(a[i].reshape([-1])-b[i].reshape([-1]))))
+            print(np.max(np.abs(a[i].astype(np.double).reshape(
+                [-1])-b[i].astype(np.double).reshape([-1]))))
     else: 
         print("need run sam2_onnx_adaptor first!!")
