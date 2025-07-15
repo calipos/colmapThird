@@ -22,18 +22,17 @@ shared_input = [
     'image',
 ]
 shared_out = [
-    '/image_encoder/trunk/blocks.14/Add_3_output_0',
-    '/image_encoder/trunk/blocks.15/Add_3_output_0',
-    '/image_encoder/trunk/blocks.16/Add_3_output_0',
     '/image_encoder/trunk/blocks.17/Add_3_output_0',  # 1.0013580322265625e-05
     '/image_encoder/trunk/blocks.18/Add_3_output_0',  # 1.0013580322265625e-05
     '/image_encoder/trunk/blocks.19/Add_3_output_0',  # 1.0013580322265625e-05
     '/image_encoder/trunk/blocks.20/Add_3_output_0',  # 1.1444091796875e-05
     '/image_encoder/trunk/blocks.21/Add_3_output_0',  # 1.239776611328125e-05
+    '/image_encoder/trunk/blocks.22/Add_2_output_0',  # 1.1682510375976562e-05---------
+    '/image_encoder/trunk/blocks.22/Add_3_output_0',  # 2.384185791015625e-05
     '/image_encoder/trunk/blocks.23/Add_1_output_0',  # 9.822845458984375e-05
     '/image_encoder/trunk/blocks.24/Add_3_output_0',  # 0.0009136199951171875
     '/image_encoder/trunk/blocks.25/Add_3_output_0',  # 0.00373077392578125
-    '/image_encoder/trunk/blocks.26/Add_3_output_0',  #0.00545501708984375
+    '/image_encoder/trunk/blocks.26/Add_3_output_0',  # 0.00545501708984375
     '/image_encoder/trunk/blocks.27/Add_3_output_0',  # 10.583183288574219
 
 
