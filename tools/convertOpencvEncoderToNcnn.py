@@ -18,29 +18,27 @@ import onnxruntime
 import matplotlib.pyplot as plt
 checkmodel = False
 inferShapes = False
+temp_shared_input = []#['/image_encoder/trunk/blocks.1/Add_3_output_0',]
+temp_shared_out = []#['/image_encoder/trunk/blocks.27/Add_3_output_0']
 
-shared_input = [
-    'image',
-]
+shared_input = ['image']
 shared_out = [
-    '/image_encoder/trunk/blocks.21/Add_3_output_0',  # 1.239776611328125e-05
-    '/image_encoder/trunk/blocks.22/Add_2_output_0',  # 1.1682510375976562e-05---------
-    '/image_encoder/trunk/blocks.22/norm2/LayerNormalization_output_0',#7.808208465576172e-06
-    '/image_encoder/trunk/blocks.22/mlp/layers.0/MatMul_output_0',#1.3530254364013672e-05
-    '/image_encoder/trunk/blocks.22/mlp/layers.0/Add_output_0',#1.3589859008789062e-05
-    '/image_encoder/trunk/blocks.22/mlp/act/Mul_output_0',#1.3828277587890625e-05
-    '/image_encoder/trunk/blocks.22/mlp/layers.1/Add_output_0',#1.6808509826660156e-05-------------------
-    '/image_encoder/trunk/blocks.22/Add_3_output_0',  # 2.384185791015625e-05
-    '/image_encoder/trunk/blocks.23/Add_output_0',#2.47955322265625e-05
-    '/image_encoder/trunk/blocks.23/mlp/layers.1/Add_output_0',#7.43865966796875e-05
-    '/image_encoder/trunk/blocks.23/Add_1_output_0',  # 9.822845458984375e-05-------------------
-    '/image_encoder/trunk/blocks.24/Add_3_output_0',  # 0.0009136199951171875
-    '/image_encoder/trunk/blocks.25/Add_3_output_0',  # 0.00373077392578125
-    '/image_encoder/trunk/blocks.26/Add_3_output_0',  # 0.00545501708984375
-    '/image_encoder/trunk/blocks.27/Add_3_output_0',  # 10.583183288574219
-
-
-
+    # '/image_encoder/trunk/blocks.21/Add_3_output_0',  # 1.239776611328125e-05
+    # '/image_encoder/trunk/blocks.22/Add_2_output_0',  # 1.1682510375976562e-05---------
+    # '/image_encoder/trunk/blocks.22/norm2/LayerNormalization_output_0',#7.808208465576172e-06
+    # '/image_encoder/trunk/blocks.22/mlp/layers.0/MatMul_output_0',#1.3530254364013672e-05
+    # '/image_encoder/trunk/blocks.22/mlp/layers.0/Add_output_0',#1.3589859008789062e-05
+    # '/image_encoder/trunk/blocks.22/mlp/act/Mul_output_0',#1.3828277587890625e-05
+    # '/image_encoder/trunk/blocks.22/mlp/layers.1/Add_output_0',#1.6808509826660156e-05-------------------
+    # '/image_encoder/trunk/blocks.22/Add_3_output_0',  # 2.384185791015625e-05
+    # '/image_encoder/trunk/blocks.23/Add_output_0',#2.47955322265625e-05
+    # '/image_encoder/trunk/blocks.23/mlp/layers.1/Add_output_0',#7.43865966796875e-05
+    # '/image_encoder/trunk/blocks.23/Add_1_output_0',  # 9.822845458984375e-05-------------------
+    # '/image_encoder/trunk/blocks.24/Add_3_output_0',  # 0.0009136199951171875
+    # '/image_encoder/trunk/blocks.25/Add_3_output_0',  # 0.00373077392578125
+    # '/image_encoder/trunk/blocks.26/Add_3_output_0',  # 0.00545501708984375
+    # '/image_encoder/trunk/blocks.27/Add_3_output_0',  # 10.583183288574219
+ 
     # 'high_res_feats_0',
     # 'high_res_feats_1',
     # '/image_encoder/trunk/blocks.25/Reshape_3_output_0',#0.00032258034
@@ -49,20 +47,22 @@ shared_out = [
     # '/image_encoder/trunk/blocks.24/mlp/layers.0/MatMul_output_0', #0.00027561188
     # '/image_encoder/trunk/blocks.24/Add_3_output_0',    #0.00091362
     # '/image_encoder/trunk/blocks.25/Add_2_output_0',    #0.0009975433
-    
-    
+     
     # '/image_encoder/trunk/blocks.23/Add_output_0',  # 2.47955322265625e-05
     # '/image_encoder/trunk/blocks.23/mlp/act/Mul_output_0',  # 3.135204315185547e-05
     # '/image_encoder/trunk/blocks.23/mlp/layers.1/MatMul_output_0',#7.343292236328125e-05
     # '/image_encoder/trunk/blocks.23/mlp/layers.1/Add_output_0',  # 7.343292236328125e-05
     # '/image_encoder/trunk/blocks.23/Add_1_output_0',  # 9.822845458984375e-05
-
-
-    # '/image_encoder/trunk/blocks.28/attn/proj/Add_output_0'
-
+ 
+    '/image_encoder/trunk/blocks.28/Add_3_output_0'
 ]
+
 targetParamPath = 'models/ncnn_encoder.onnx'
 image = np.ones([3, 1024, 1024]).astype(np.float32)
+
+temp_input0 = np.ones([1, 256,256, 144]).astype(np.float32)
+temp_input1 = np.ones([65536, 144]).astype(np.float32)
+
 shape_set=[]
 const_set={}
 
@@ -180,6 +180,9 @@ def printNet(model):
 
 
 def test_forward():
+    # if len(temp_shared_input) == 1 and len(temp_shared_out) == 1:
+    #     shared_input = temp_shared_input
+    #     shared_out = temp_shared_out
     # sys.stdout = open('test_forward.txt', 'w')
     cut_subgraph('models/opencv_encoder.onnx',
                  shared_input,
@@ -195,6 +198,8 @@ def test_forward():
     datain = {}
     if 'image' in shared_input:
         datain['image'] = image.reshape([1,3,1024,1024])
+    if len(temp_shared_input)==1:
+        datain[temp_shared_input[0]] = temp_input0
     pointCoords = session.run(
         None, datain)
 
@@ -270,6 +275,8 @@ def modifyReshapeLayer(layerNamesAndtargetShape):
         loopDone=False
         for i, node in enumerate(model.graph.node):
             if node.name in layerNamesAndtargetShape.keys() and node.name not in modified:
+                # if node.name == '/image_encoder/trunk/blocks.22/Reshape_1':
+                #     print(1)
                 layerInput = node.input
                 layerOutput = node.output
                 assert len(layerInput) == 2
@@ -289,7 +296,7 @@ def modifyReshapeLayer(layerNamesAndtargetShape):
             if i == len(model.graph.node)-1:
                 loopDone = True
     onnx.save(model, targetParamPath)
-    model = onnx.load(targetParamPath)
+    # printNet(model)
 
 
 def modifyTransposeLayer(layerNamesAndtargetPermute):
@@ -348,7 +355,6 @@ def insertSpecifiedReshape(layerPairs):
         model.graph.node.insert(i+1, newReshapeNodes[i])
     # printNet(model)
     onnx.save(model, targetParamPath)
-
     model = onnx.load(targetParamPath)
     # printNet(model)
     graph = gs.import_onnx(model)
@@ -356,8 +362,7 @@ def insertSpecifiedReshape(layerPairs):
         pickFirst = [node for node in graph.nodes if node.name ==specifiedPair]
         if 0 == len(pickFirst):
             continue
-        assert len(pickFirst) == 1
-        
+        assert len(pickFirst) == 1        
         assert len(pickFirst[0].outputs) == 1
         oldOutPutName = pickFirst[0].outputs[0].name
         if len(pickFirst) == 0:
@@ -373,10 +378,13 @@ def insertSpecifiedReshape(layerPairs):
                     insertReshape = [
                         node for node in graph.nodes if node.name == insertReshapeName]
                     pickSecond[0].inputs[j] = insertReshape[0].outputs[0]
-
     graph.cleanup()
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
+    shape_set.clear()  # for gs cleanup
+    for init in new_mode.graph.initializer:  # for gs cleanup
+        if init.name.startswith("shape_"):  # for gs cleanup
+            shape_set.append(init.name)  # for gs cleanup
     onnx.save(new_mode, targetParamPath)
 
 def insertSpecifiedTranspose(layerPairs):
@@ -612,6 +620,10 @@ def refreshOutputShape():
     new_mode.ir_version = 10
     onnx.save(new_mode, targetParamPath)
 def convertOpencvOnnxToNcnn():
+    # if len(temp_shared_input) == 1 and len(temp_shared_out) == 1:
+    #     shared_input=temp_shared_input
+    #     shared_out = temp_shared_out
+
     model = onnx.load('models/opencv_encoder.onnx')
     print(len(model.graph.input))
     cut_subgraph('models/opencv_encoder.onnx',
@@ -619,6 +631,13 @@ def convertOpencvOnnxToNcnn():
                  shared_out,
                  targetParamPath)
     model = onnx.load(targetParamPath)
+
+    if len(temp_shared_input) == 1 and len(temp_shared_out) == 1:
+        model.graph.input.clear()
+        newInput = helper.make_tensor_value_info(
+            temp_shared_input[0], TensorProto.FLOAT, temp_input1.shape)
+        model.graph.input.append(newInput)
+    onnx.save(model, targetParamPath)
 
 # --------------------------------
     insertReshape = {}    
@@ -941,6 +960,8 @@ def convertOpencvOnnxToNcnn():
     reshapeAndtargetShape['/image_encoder/trunk/blocks.28/Reshape_1']= [16*16*16, 576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.28/attn/Reshape']=[ 16, 256, 24, 72]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.28/attn/Reshape_1']= [16*16*16, 576]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.28/Reshape_2'] = [4, 4, 16, 16*576]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.28/Reshape_3'] = [64*64, 576]
     modifyReshapeLayer(reshapeAndtargetShape)
 # --------------------------------
     transposeAndtargetShape = {}
@@ -1089,7 +1110,9 @@ def convertOpencvOnnxToNcnn():
         targetParamPath, providers=onnxruntime.get_available_providers())
     datain = {}
     if 'image' in shared_input:
-        datain['image'] = image.reshape([1,3,1024,1024])
+        datain['image'] = image.reshape([1, 3, 1024, 1024])
+    if len(temp_shared_input) == 1:
+        datain[temp_shared_input[0]] = temp_input1
     pointCoords = session.run(
         None, datain)
 
