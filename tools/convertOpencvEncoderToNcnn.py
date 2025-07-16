@@ -16,8 +16,8 @@ from torch.utils import data
 import onnx_graphsurgeon as gs
 import onnxruntime
 import matplotlib.pyplot as plt
-checkmodel = True
-inferShapes = True
+checkmodel = False
+inferShapes = False
 temp_shared_input = [
     # 'image'
     # '/image_encoder/trunk/Add_1_output_0',
@@ -63,16 +63,16 @@ shared_out = [
 
     # 'high_res_feats_0',
     # 'high_res_feats_1',
-    '/image_encoder/trunk/blocks.44/attn/Reshape_1_output_0'
-
+    '/image_encoder/neck/Add_output_0'
 ]
 
 targetParamPath = 'models/ncnn_encoder.onnx'
 image0 = np.ones([3, 1024, 1024]).astype(np.float32)
 image1 = np.ones([3, 1024, 1024]).astype(np.float32)
 # image0 = np.random.rand(3, 1024, 1024).astype(np.float32) 
-temp_input0 = np.ones([1, 256, 256, 144]).astype(np.float32)
-temp_input1 = np.ones([256* 256, 144]).astype(np.float32)
+data = np.random.rand(256* 256, 144).astype(np.float32) 
+temp_input0 = data.reshape([1, 256, 256, 144]).astype(np.float32)
+temp_input1 = data.reshape([256* 256, 144]).astype(np.float32)
 
 shape_set=[]
 const_set={}
@@ -220,9 +220,9 @@ def test_forward():
         None, datain)
 
     for i in range(len(shared_out)):
+        # print(pointCoords[i])
         print(shared_out[i])
         print(pointCoords[i].shape)
-        print(pointCoords[i])
         print(" ") 
 
 
@@ -572,12 +572,15 @@ def refreshOutputShape():
                 assert False
         elif node.op == 'Transpose':
             try:
+                inputShapeSum = sum(node.inputs[0].shape)
                 inputShape = node.inputs[0].shape
                 perm = node.attrs['perm']
                 node.outputs[0].shape = [inputShape[i] for i in perm]
             except:
                 print(node)
                 assert False
+        elif node.op == 'Resize':
+            node.outputs[0].shape[0] =1
         elif node.op == 'LayerNormalization':
             node.outputs[0].shape = node.inputs[0].shape
         elif node.op == 'Conv':
@@ -605,9 +608,9 @@ def refreshOutputShape():
                 continue
             if np.sum(np.array(node.inputs[1].shape) == -1) != 0:
                 continue
-            A = np.ones(node.inputs[0].shape)
-            B = np.ones(node.inputs[1].shape)
             try:
+                A = np.ones(node.inputs[0].shape)
+                B = np.ones(node.inputs[1].shape)
                 C = A*B
             except:
                 print(node)
@@ -646,8 +649,7 @@ def refreshOutputShape():
             for i in range(len(node.outputs)):
                 node.outputs[i].shape = copy.deepcopy(srcShape)
                 node.outputs[i].shape[axis] = splitArray[i]
-            # if node.name == '/image_encoder/trunk/blocks.0/attn/Split':
-            #     print(node)
+
         elif node.op == 'MaxPool':
             node.outputs[0].shape = copy.deepcopy(node.inputs[0].shape)
             node.outputs[0].shape[-2] = node.outputs[0].shape[-2]//2
@@ -719,6 +721,22 @@ def convertOpencvOnnxToNcnn():
         'nextNodes': ['/image_encoder/trunk/blocks.8/Transpose_1'], 'targetShape': [1,576, 64,64]}
     insertReshape['/image_encoder/trunk/blocks.8/Transpose_1'] = {
         'nextNodes': ['/image_encoder/trunk/blocks.8/Add_4'], 'targetShape': [4096, 576]}
+    insertReshape['/image_encoder/trunk/blocks.44/attn/Transpose']= {
+        'nextNodes': ['/image_encoder/trunk/blocks.44/attn/pool/MaxPool'], 'targetShape': [18432,1,16,16]}
+    insertReshape['/image_encoder/trunk/blocks.44/attn/pool/MaxPool']= {
+        'nextNodes': ['/image_encoder/trunk/blocks.44/attn/Transpose_1'], 'targetShape': [16,1152,8,8]}
+    insertReshape['/image_encoder/trunk/blocks.44/proj/Add']= {
+        'nextNodes': ['/image_encoder/trunk/blocks.44/Transpose'], 'targetShape': [1,64,64,1152]}
+    insertReshape['/image_encoder/trunk/blocks.44/Transpose']= {
+        'nextNodes': ['/image_encoder/trunk/blocks.44/pool/MaxPool'], 'targetShape': [1152,1,64,64]}
+    insertReshape['/image_encoder/trunk/blocks.44/pool/MaxPool']= {
+        'nextNodes': ['/image_encoder/trunk/blocks.44/Transpose_1'], 'targetShape': [1,1152,32,32]}
+    insertReshape['/image_encoder/trunk/blocks.44/Transpose_1']= {
+        'nextNodes': ['/image_encoder/trunk/blocks.44/Add_4'], 'targetShape': [1024,1152]}    
+    insertReshape['/image_encoder/trunk/blocks.47/Add_3']= {
+        'nextNodes': ['/image_encoder/trunk/Transpose_4'], 'targetShape': [1,32,32,1152]}
+    insertReshape['/image_encoder/trunk/blocks.43/Add_1']= {
+        'nextNodes': ['/image_encoder/trunk/Transpose_3'], 'targetShape': [1, 64, 64, 576]}
     insertSpecifiedReshape(insertReshape)
 
 
@@ -768,8 +786,6 @@ def convertOpencvOnnxToNcnn():
         'constName': '/image_encoder/trunk/blocks.21/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
     binaryOperationConst['/image_encoder/trunk/blocks.22/attn/Mul_1'] = {
         'constName': '/image_encoder/trunk/blocks.22/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    
-
     binaryOperationConst['/image_encoder/trunk/blocks.23/attn/Mul_1'] = {
         'constName': '/image_encoder/trunk/blocks.23/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
     binaryOperationConst['/image_encoder/trunk/blocks.24/attn/Mul_1'] = {
@@ -812,6 +828,14 @@ def convertOpencvOnnxToNcnn():
         'constName': '/image_encoder/trunk/blocks.42/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
     binaryOperationConst['/image_encoder/trunk/blocks.43/attn/Mul_1'] = {
         'constName': '/image_encoder/trunk/blocks.43/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.44/attn/Mul_2'] = {
+        'constName': '/image_encoder/trunk/blocks.44/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.45/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.45/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.46/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.46/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.47/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.47/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
 
 
     modifyBinaryOperationConst(binaryOperationConst)
@@ -994,11 +1018,23 @@ def convertOpencvOnnxToNcnn():
                  '/image_encoder/trunk/blocks.43/attn/Squeeze',
                  '/image_encoder/trunk/blocks.43/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.43/attn/Squeeze_2',
-                 '/image_encoder/trunk/blocks.43/attn/Mul_2'
+                 '/image_encoder/trunk/blocks.43/attn/Mul_2',
                  '/image_encoder/trunk/blocks.44/attn/Squeeze',
                  '/image_encoder/trunk/blocks.44/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.44/attn/Squeeze_2',
-                 '/image_encoder/trunk/blocks.44/attn/Mul_2'
+                 '/image_encoder/trunk/blocks.44/attn/Mul_3',
+                 '/image_encoder/trunk/blocks.45/attn/Squeeze',
+                 '/image_encoder/trunk/blocks.45/attn/Squeeze_1',
+                 '/image_encoder/trunk/blocks.45/attn/Squeeze_2',
+                 '/image_encoder/trunk/blocks.45/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.46/attn/Squeeze',
+                 '/image_encoder/trunk/blocks.46/attn/Squeeze_1',
+                 '/image_encoder/trunk/blocks.46/attn/Squeeze_2',
+                 '/image_encoder/trunk/blocks.46/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.47/attn/Squeeze',
+                 '/image_encoder/trunk/blocks.47/attn/Squeeze_1',
+                 '/image_encoder/trunk/blocks.47/attn/Squeeze_2',
+                 '/image_encoder/trunk/blocks.47/attn/Mul_2'
                  ])
 # --------------------------------
     reshapeAndtargetShape = {}
@@ -1262,13 +1298,32 @@ def convertOpencvOnnxToNcnn():
     reshapeAndtargetShape['/image_encoder/trunk/blocks.42/Reshape_3'] = [64*64, 576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.43/attn/Reshape'] = [1, 4096, 24, 72]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.43/attn/Reshape_1'] = [64*64, 576]
-
     reshapeAndtargetShape['/image_encoder/trunk/blocks.44/Reshape'] = [4, 16, 4, 16*576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.44/Reshape_1'] = [16*16*16, 576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.44/attn/Reshape'] = [16, 256, 48, 72]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.44/attn/Reshape_1'] = [16,16,16, 1152]
-    # reshapeAndtargetShape['/image_encoder/trunk/blocks.44/Reshape_2'] = [4, 4, 16, 16*576]
-    # reshapeAndtargetShape['/image_encoder/trunk/blocks.44/Reshape_3'] = [64*64, 576]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.44/attn/Reshape_2'] = [16, 64, 16, 72]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.44/attn/Reshape_3'] = [1024, 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.44/Reshape_2'] =[4, 4, 8, 8* 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.44/Reshape_3'] = [1024, 1152] 
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.45/Reshape']= [4, 8, 4, 8*1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.45/Reshape_1']= [4* 8* 4* 8,1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.45/attn/Reshape']=[16, 64, 3* 16, 72]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.45/attn/Reshape_1']=[1024, 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.45/Reshape_2']=[ 4, 4, 8, 8* 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.45/Reshape_3']=[ 4* 8* 4* 8,1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.46/Reshape']= [4, 8, 4, 8*1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.46/Reshape_1']= [4* 8* 4* 8,1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.46/attn/Reshape']=[16, 64, 3* 16, 72]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.46/attn/Reshape_1']=[1024, 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.46/Reshape_2']=[ 4, 4, 8, 8* 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.46/Reshape_3']=[ 4* 8* 4* 8,1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.47/Reshape']= [4, 8, 4, 8*1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.47/Reshape_1']= [ 4* 8* 4* 8,1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.47/attn/Reshape']=[16, 64, 3* 16, 72]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.47/attn/Reshape_1']= [ 16*8*8,1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.47/Reshape_2']=[ 4, 4, 8, 8* 1152]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.47/Reshape_3']= [ 16*8*8,1152]
     modifyReshapeLayer(reshapeAndtargetShape)
 # --------------------------------
     transposeAndtargetShape = {}
@@ -1359,6 +1414,14 @@ def convertOpencvOnnxToNcnn():
     transposeAndtargetShape['/image_encoder/trunk/blocks.41/Transpose_1'] = [0, 2, 1, 3]
     transposeAndtargetShape['/image_encoder/trunk/blocks.42/Transpose'] = [0, 2, 1, 3]
     transposeAndtargetShape['/image_encoder/trunk/blocks.42/Transpose_1'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.44/Transpose_2'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.44/Transpose_3'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.45/Transpose'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.45/Transpose_1']= [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.46/Transpose'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.46/Transpose_1']= [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.47/Transpose'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/image_encoder/trunk/blocks.47/Transpose_1'] = [0, 2, 1, 3]
     modifyTransposeLayer(transposeAndtargetShape)
 # --------------------------------
     splitAndAxis = {}
@@ -1449,7 +1512,13 @@ def convertOpencvOnnxToNcnn():
         'axis': 2, 'split': [8, 8, 8]}
     splitAndAxis['/image_encoder/trunk/blocks.43/attn/Split'] = {
         'axis': 2, 'split': [8, 8, 8]}
-    splitAndAxis['/image_encoder/trunk/blocks.43/attn/Split'] = {
+    splitAndAxis['/image_encoder/trunk/blocks.44/attn/Split'] = {
+        'axis': 2, 'split': [16, 16, 16]}
+    splitAndAxis['/image_encoder/trunk/blocks.45/attn/Split'] = {
+        'axis': 2, 'split': [16, 16, 16]}
+    splitAndAxis['/image_encoder/trunk/blocks.46/attn/Split'] = {
+        'axis': 2, 'split': [16, 16, 16]}
+    splitAndAxis['/image_encoder/trunk/blocks.47/attn/Split'] = {
         'axis': 2, 'split': [16, 16, 16]}
     modifySplitLayer(splitAndAxis)
 # --------------------------------
