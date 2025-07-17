@@ -61,9 +61,10 @@ shared_out = [
     # '/image_encoder/trunk/blocks.23/Add_1_output_0',  # 9.822845458984375e-05
  
 
-    # 'high_res_feats_0',
-    # 'high_res_feats_1',
-    '/image_encoder/neck/Add_output_0'
+    'high_res_feats_0',
+    'high_res_feats_1', 
+    '/Transpose_1_output_0'  # == 'image_embed',   -->need reshape (256,64,64)
+
 ]
 
 targetParamPath = 'models/ncnn_encoder.onnx'
@@ -220,7 +221,7 @@ def test_forward():
         None, datain)
 
     for i in range(len(shared_out)):
-        # print(pointCoords[i])
+        print(pointCoords[i])
         print(shared_out[i])
         print(pointCoords[i].shape)
         print(" ") 
@@ -346,17 +347,26 @@ def reshapeAddNode():
     model = onnx.load(targetParamPath)
     graph = gs.import_onnx(model)
     pick = [node for node in graph.nodes if node.name == '/image_encoder/trunk/Add_1']
-    if len(pick)==0:
-        return
+    if len(pick)==1:
+        pick[0].inputs[0].shape = [256*256,144]
+        value = np.array(pick[0].inputs[1].values).astype(
+            pick[0].inputs[1].dtype).reshape(256*256, 144)    
+        hashName = 'const_'+str(hash(pick[0].name))
+        constValue = gs.Constant(hashName, value)
+        pick[0].inputs[1] = constValue
+        pick[0].outputs[0].shape = [256*256, 144]
 
-    pick[0].inputs[0].shape = [256*256,144]
-    value = np.array(pick[0].inputs[1].values).astype(
-        pick[0].inputs[1].dtype).reshape(256*256, 144)
-    
-    hashName = 'const_'+str(hash(pick[0].name))
-    constValue = gs.Constant(hashName, value)
-    pick[0].inputs[1] = constValue
-    pick[0].outputs[0].shape = [256*256, 144]
+    pick = [node for node in graph.nodes if node.name =='/Add']
+    if len(pick) == 1:
+        pick[0].inputs[0].shape = [256]
+        value = np.array(pick[0].inputs[1].values).astype(
+            pick[0].inputs[1].dtype).reshape(256)
+        hashName = 'const_'+str(hash(pick[0].name))
+        constValue = gs.Constant(hashName, value)
+        pick[0].inputs[1] = constValue
+        pick[0].outputs[0].shape = [256*256, 144]
+
+
     graph.cleanup()
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
@@ -1324,6 +1334,7 @@ def convertOpencvOnnxToNcnn():
     reshapeAndtargetShape['/image_encoder/trunk/blocks.47/attn/Reshape_1']= [ 16*8*8,1152]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.47/Reshape_2']=[ 4, 4, 8, 8* 1152]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.47/Reshape_3']= [ 16*8*8,1152]
+    reshapeAndtargetShape['/Reshape_2'] = [256,4096]
     modifyReshapeLayer(reshapeAndtargetShape)
 # --------------------------------
     transposeAndtargetShape = {}
@@ -1422,6 +1433,8 @@ def convertOpencvOnnxToNcnn():
     transposeAndtargetShape['/image_encoder/trunk/blocks.46/Transpose_1']= [0, 2, 1, 3]
     transposeAndtargetShape['/image_encoder/trunk/blocks.47/Transpose'] = [0, 2, 1, 3]
     transposeAndtargetShape['/image_encoder/trunk/blocks.47/Transpose_1'] = [0, 2, 1, 3]
+    transposeAndtargetShape['/Transpose'] = [1,0]
+    transposeAndtargetShape['/Transpose_1'] = [1,0]
     modifyTransposeLayer(transposeAndtargetShape)
 # --------------------------------
     splitAndAxis = {}
