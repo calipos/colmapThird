@@ -60,7 +60,6 @@ shared_out = [
     # '/image_encoder/trunk/blocks.23/mlp/layers.1/Add_output_0',  # 7.343292236328125e-05
     # '/image_encoder/trunk/blocks.23/Add_1_output_0',  # 9.822845458984375e-05
  
-
     'high_res_feats_0',
     'high_res_feats_1', 
     '/Transpose_1_output_0'  # == 'image_embed',   -->need reshape (256,64,64)
@@ -68,6 +67,7 @@ shared_out = [
 ]
 
 targetParamPath = 'models/ncnn_encoder.onnx'
+encoderBeginnngPath = 'models/ncnn_encoder_beginnng.onnx'
 image0 = np.ones([3, 1024, 1024]).astype(np.float32)
 image1 = np.ones([3, 1024, 1024]).astype(np.float32)
 # image0 = np.random.rand(3, 1024, 1024).astype(np.float32) 
@@ -104,8 +104,6 @@ def cut_subgraph(origin_graph_path, input_node_name_list, output_node_name_list,
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
     onnx.save(new_mode, sub_graph_path)
-
-
 def onnx_datatype_to_npType(data_type):
     if data_type == 1:
         return np.float32
@@ -241,8 +239,13 @@ def shapeToStr(shape):
         shapeStr = shapeStr+str(shape[i])
         shapeStr = shapeStr+'_'
     return shapeStr
-def registerShapeNode(shapes):
-    model = onnx.load(targetParamPath)
+
+
+def registerShapeNode(shapes, paramPath=None):
+    if paramPath is not None:
+        model = onnx.load(paramPath)
+    else :
+        model = onnx.load(targetParamPath)
     for init in model.graph.initializer:
         if init.name.startswith("shape_"):
             shape_set.append(init.name)
@@ -254,10 +257,17 @@ def registerShapeNode(shapes):
                 np.array(shape).astype(np.int64), name=shapeStr)
             model.graph.initializer.append(constShape)
             shape_set.append(shapeStr)
-    onnx.save(model, targetParamPath)
+    if paramPath is not None:
+        onnx.save(model, paramPath)
+    else:
+        onnx.save(model, targetParamPath)
 
-def modifyBinaryOperationConst(layerNames):
-    model = onnx.load(targetParamPath)
+
+def modifyBinaryOperationConst(layerNames, paramPath=None):
+    if paramPath is not None:
+        model = onnx.load(paramPath)
+    else:
+        model = onnx.load(targetParamPath)
     graph = gs.import_onnx(model)
     for name in layerNames:
         pick = [node for node in graph.nodes if node.name == name]
@@ -275,14 +285,21 @@ def modifyBinaryOperationConst(layerNames):
                 pick[0].inputs[i] = constValue
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
-    onnx.save(new_mode, targetParamPath)
+    if paramPath is not None:
+        onnx.save(new_mode, paramPath)
+    else:
+        onnx.save(new_mode, targetParamPath)
 
-def modifyReshapeLayer(layerNamesAndtargetShape):
+
+def modifyReshapeLayer(layerNamesAndtargetShape, paramPath=None):
     newshapes = []
     for shape in layerNamesAndtargetShape.keys():
         newshapes.append(layerNamesAndtargetShape[shape])
-    registerShapeNode(newshapes)
-    model = onnx.load(targetParamPath)
+    registerShapeNode(newshapes, paramPath)
+    if paramPath is not None:
+        model = onnx.load(paramPath)
+    else:
+        model = onnx.load(targetParamPath)
     modified = []
     loopDone = False
     while True:
@@ -311,10 +328,17 @@ def modifyReshapeLayer(layerNamesAndtargetShape):
                 break
             if i == len(model.graph.node)-1:
                 loopDone = True
-    onnx.save(model, targetParamPath)
+    if paramPath is not None:
+        onnx.save(model, paramPath)
+    else:
+        onnx.save(model, targetParamPath)
     
-def modifyTransposeLayer(layerNamesAndtargetPermute):
-    model = onnx.load(targetParamPath)
+
+def modifyTransposeLayer(layerNamesAndtargetPermute, paramPath=None):
+    if paramPath is not None:
+        model = onnx.load(paramPath)
+    else:
+        model = onnx.load(targetParamPath)
     modified = []
     loopDone = False
     while True:
@@ -340,21 +364,27 @@ def modifyTransposeLayer(layerNamesAndtargetPermute):
                 break
             if i == len(model.graph.node)-1:
                 loopDone = True
-    onnx.save(model, targetParamPath)
-    model = onnx.load(targetParamPath)
+    if paramPath is not None:
+        onnx.save(model, paramPath)
+    else:
+        onnx.save(model, targetParamPath)
 
-def reshapeAddNode():
-    model = onnx.load(targetParamPath)
+
+def reshapeAddNode(paramPath=None):
+    if paramPath is not None:
+        model = onnx.load(paramPath)
+    else:
+        model = onnx.load(targetParamPath)
     graph = gs.import_onnx(model)
     pick = [node for node in graph.nodes if node.name == '/image_encoder/trunk/Add_1']
     if len(pick)==1:
-        pick[0].inputs[0].shape = [256*256,144]
+        pick[0].inputs[0].shape = [256*256*144]
         value = np.array(pick[0].inputs[1].values).astype(
-            pick[0].inputs[1].dtype).reshape(256*256, 144)    
+            pick[0].inputs[1].dtype).reshape(256*256*144)    
         hashName = 'const_'+str(hash(pick[0].name))
         constValue = gs.Constant(hashName, value)
         pick[0].inputs[1] = constValue
-        pick[0].outputs[0].shape = [256*256, 144]
+        pick[0].outputs[0].shape = [256*256*144]
 
     pick = [node for node in graph.nodes if node.name =='/Add']
     if len(pick) == 1:
@@ -370,16 +400,23 @@ def reshapeAddNode():
     graph.cleanup()
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
-    onnx.save(new_mode, targetParamPath)
 
-def insertSpecifiedReshape(layerPairs):
+    if paramPath is not None:
+        onnx.save(new_mode, paramPath)
+    else:
+        onnx.save(new_mode, targetParamPath)
+
+def insertSpecifiedReshape(layerPairs,paramPath=None):
     prevNodeIndex=[] 
     newReshapeNodes={}
     newshapes = []
     for specifiedPair in layerPairs.keys():
         newshapes.append(layerPairs[specifiedPair]['targetShape'])
-    registerShapeNode(newshapes)
-    model = onnx.load(targetParamPath)
+    registerShapeNode(newshapes, paramPath)
+    if paramPath is not None:
+        model = onnx.load(paramPath)
+    else:
+        model = onnx.load(targetParamPath)
     for i, node in enumerate(model.graph.node):
         if node.name in layerPairs.keys():
             prevNodeIndex.append(i)
@@ -395,9 +432,13 @@ def insertSpecifiedReshape(layerPairs):
     prevNodeIndex.sort(reverse=True)
     for i in prevNodeIndex:
         model.graph.node.insert(i+1, newReshapeNodes[i])
-    # printNet(model)
-    onnx.save(model, targetParamPath)
-    model = onnx.load(targetParamPath)
+
+    if paramPath is not None:
+        onnx.save(model, paramPath)
+        model = onnx.load(paramPath)
+    else:
+        onnx.save(model, targetParamPath)
+        model = onnx.load(targetParamPath)
     # printNet(model)
     graph = gs.import_onnx(model)
     for specifiedPair in layerPairs.keys():
@@ -419,6 +460,8 @@ def insertSpecifiedReshape(layerPairs):
                     insertReshapeName = pickSecond[0].i(j).name+'_plus_reshape'
                     insertReshape = [
                         node for node in graph.nodes if node.name == insertReshapeName]
+                    insertReshape[0].outputs[0].dtype = insertReshape[0].inputs[0].dtype
+                    insertReshape[0].outputs[0].shape = insertReshape[0].inputs[1].values.tolist()
                     pickSecond[0].inputs[j] = insertReshape[0].outputs[0]
     graph.cleanup()
     new_mode = gs.export_onnx(graph)
@@ -427,12 +470,18 @@ def insertSpecifiedReshape(layerPairs):
     for init in new_mode.graph.initializer:  # for gs cleanup
         if init.name.startswith("shape_"):  # for gs cleanup
             shape_set.append(init.name)  # for gs cleanup
-    onnx.save(new_mode, targetParamPath)
+    if paramPath is not None:
+        onnx.save(new_mode, paramPath)
+    else:
+        onnx.save(new_mode, targetParamPath)
 
-def insertSpecifiedTranspose(layerPairs):
+def insertSpecifiedTranspose(layerPairs,paramPath=None):
     prevNodeIndex = []
     newTransposeNodes = {}
-    model = onnx.load(targetParamPath)
+    if paramPath is not None:
+        model = onnx.load(paramPath)
+    else:
+        model = onnx.load(targetParamPath)
     for i, node in enumerate(model.graph.node):
         if node.name in layerPairs.keys():
             prevNodeIndex.append(i)
@@ -447,10 +496,13 @@ def insertSpecifiedTranspose(layerPairs):
     prevNodeIndex.sort(reverse=True)
     for i in prevNodeIndex:
         model.graph.node.insert(i+1, newTransposeNodes[i])
-    # printNet(model)
-    onnx.save(model, targetParamPath)
 
-    model = onnx.load(targetParamPath)
+    if paramPath is not None:
+        onnx.save(model, paramPath)
+        model = onnx.load(paramPath)
+    else:
+        onnx.save(model, targetParamPath)
+        model = onnx.load(targetParamPath)
     # printNet(model)
     graph = gs.import_onnx(model)
     for specifiedPair in layerPairs.keys():
@@ -471,14 +523,20 @@ def insertSpecifiedTranspose(layerPairs):
     graph.cleanup()
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
-    onnx.save(new_mode, targetParamPath)
+    if paramPath is not None:
+        onnx.save(new_mode, paramPath)
+    else:
+        onnx.save(new_mode, targetParamPath)
 
-def modifySplitLayer(layerNamesAndtargetSplit):
+def modifySplitLayer(layerNamesAndtargetSplit,paramPath=None):
     newshapes = []
     for shape in layerNamesAndtargetSplit.keys():
         newshapes.append(layerNamesAndtargetSplit[shape]['split'])
-    registerShapeNode(newshapes)
-    model = onnx.load(targetParamPath)
+    registerShapeNode(newshapes,paramPath)
+    if paramPath is not None:
+        model = onnx.load(paramPath)
+    else:
+        model = onnx.load(targetParamPath)
     modified = []
     loopDone = False
     while True:
@@ -503,26 +561,16 @@ def modifySplitLayer(layerNamesAndtargetSplit):
                 break
             if i == len(model.graph.node)-1:
                 loopDone = True
-    onnx.save(model, targetParamPath)
+    if paramPath is not None:
+        onnx.save(model, paramPath)
+    else:
+        onnx.save(model, targetParamPath)
 
-def modifyMatmulToGemm(layerNames):
-    model = onnx.load(targetParamPath)
-    graph = gs.import_onnx(model)
-    for name in layerNames:
-        pick = [node for node in graph.nodes if node.name == name]
-        if len(pick) == 0:
-            continue
-        matmul_node = pick[0]
-        if matmul_node.op == 'MatMul':
-            matmul_node.op = 'Gemm'
-            graph.cleanup()
-        else:
-            assert False, "not support yet"
-    new_mode = gs.export_onnx(graph)
-    new_mode.ir_version = 10
-    onnx.save(new_mode, targetParamPath)
-def deleteLayer(layernames):
-    model = onnx.load(targetParamPath)
+def deleteLayer(layernames,paramPath=None):
+    if paramPath is not None:
+        model = onnx.load(paramPath)
+    else:
+        model = onnx.load(targetParamPath)
     graph = gs.import_onnx(model)
     for name in layernames:
         pick = [node for node in graph.nodes if node.name == name]
@@ -541,13 +589,26 @@ def deleteLayer(layernames):
                     output_node.inputs[i] = remove_node.inputs[0]
             remove_node.outputs.clear()
             graph.cleanup()
+        elif remove_node.name == '/image_encoder/trunk/Add_1':
+            output_node0 = remove_node.o(0)
+            output_node1 = remove_node.o(1)
+            output_node0.inputs[0] = remove_node.inputs[0]
+            output_node1.inputs[0] = remove_node.inputs[0]
+            remove_node.outputs.clear()
+            graph.cleanup()
         else:
             assert False,"not support yet"
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
-    onnx.save(new_mode, targetParamPath)
-def ncnnShapeSqueezeFlag(layerNames):
-    model = onnx.load(targetParamPath)
+    if paramPath is not None:
+        onnx.save(new_mode, paramPath)
+    else:
+        onnx.save(new_mode, targetParamPath)
+def ncnnShapeSqueezeFlag(layerNames,paramPath=None):
+    if paramPath is not None:
+        model = onnx.load(paramPath)
+    else:
+        model = onnx.load(targetParamPath)
     graph = gs.import_onnx(model)
     for node in graph.nodes:
         if node.name in layerNames:
@@ -555,9 +616,16 @@ def ncnnShapeSqueezeFlag(layerNames):
     graph.cleanup()
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
-    onnx.save(new_mode, targetParamPath)
-def refreshOutputShape():
-    model = onnx.load(targetParamPath)
+
+    if paramPath is not None:
+        onnx.save(new_mode, paramPath)
+    else:
+        onnx.save(new_mode, targetParamPath)
+def refreshOutputShape(paramPath=None):
+    if paramPath is not None:
+        model = onnx.load(paramPath)
+    else:
+        model = onnx.load(targetParamPath)
     # printNet(model)
     graph = gs.import_onnx(model)
     for node in graph.nodes:
@@ -668,7 +736,10 @@ def refreshOutputShape():
     graph.toposort()
     new_mode = gs.export_onnx(graph)
     new_mode.ir_version = 10
-    onnx.save(new_mode, targetParamPath)
+    if paramPath is not None:
+        onnx.save(new_mode, paramPath)
+    else:
+        onnx.save(new_mode, targetParamPath)
 
 
 def convertOpencvOnnxToNcnn():
@@ -704,9 +775,13 @@ def convertOpencvOnnxToNcnn():
 # --------------------------------
     insertReshape = {}    
     # insertReshape['/image_encoder/trunk/patch_embed/proj/Conv'] = {
-    #     'nextNodes': ['/image_encoder/trunk/patch_embed/Transpose'], 'targetShape': [1, 144, 256, 256]}
-    insertReshape['/image_encoder/trunk/patch_embed/Transpose'] = {
-        'nextNodes': ['/image_encoder/trunk/Add_1'], 'targetShape': [65536, 144]}
+    #     'nextNodes': ['/image_encoder/trunk/patch_embed/Transpose'], 'targetShape': [144,65536]}
+    # insertReshape['/image_encoder/trunk/patch_embed/Transpose'] = {
+    #     'nextNodes': ['/image_encoder/trunk/Add_1'], 'targetShape': [1,144*65536]}
+    # insertReshape['/image_encoder/trunk/Add_1'] = {
+    #     'nextNodes': ['/image_encoder/trunk/blocks.0/norm1/LayerNormalization', '/image_encoder/trunk/blocks.0/Add_2'], 'targetShape': [65536, 144]}
+
+
     insertReshape['/image_encoder/trunk/blocks.1/Add_3'] = {
         'nextNodes': ['/image_encoder/trunk/Transpose_1'], 'targetShape': [1, 256, 256, 144]}
     insertReshape['/image_encoder/trunk/blocks.2/attn/Transpose']= {
@@ -850,7 +925,7 @@ def convertOpencvOnnxToNcnn():
 
     modifyBinaryOperationConst(binaryOperationConst)
 # --------------------------------
-    ncnnShapeSqueezeFlag(['/image_encoder/neck/convs.3/conv/Conv','/image_encoder/neck/convs.2/conv/Conv'])
+    ncnnShapeSqueezeFlag(['/image_encoder/neck/convs.3/conv/Conv', '/image_encoder/neck/convs.2/conv/Conv'])
 # --------------------------------
     deleteLayer([
                  '/image_encoder/trunk/blocks.1/attn/Mul_2',
@@ -875,7 +950,6 @@ def convertOpencvOnnxToNcnn():
                  '/image_encoder/trunk/blocks.20/attn/Mul_2',
                  '/image_encoder/trunk/blocks.21/attn/Mul_2',
                  '/image_encoder/trunk/blocks.22/attn/Mul_2',
-
                  '/image_encoder/trunk/blocks.0/attn/Squeeze_2',
                  '/image_encoder/trunk/blocks.0/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.0/attn/Squeeze', 
@@ -1576,6 +1650,24 @@ def convertOpencvOnnxToNcnn():
         print(pointCoords[i])
         print(" ")
     return pointCoords
+def convertOpencvEncoderBeginningToNcnn():
+    print('for some unknown bugs,')
+    cut_subgraph('models/opencv_encoder.onnx',
+                 ['image'],
+                 ['/image_encoder/trunk/Add_1_output_0'],
+                 encoderBeginnngPath)
+    model = onnx.load(encoderBeginnngPath)
+    insertReshape={}
+    insertReshape['/image_encoder/trunk/patch_embed/proj/Conv'] = {
+        'nextNodes': ['/image_encoder/trunk/patch_embed/Transpose'], 'targetShape': [144,65536]}
+    insertReshape['/image_encoder/trunk/patch_embed/Transpose'] = {
+        'nextNodes': ['/image_encoder/trunk/Add_1'], 'targetShape': [1, 144*65536]}
+    insertSpecifiedReshape(insertReshape, encoderBeginnngPath)
+    transposeAndtargetShape={}
+    transposeAndtargetShape['/image_encoder/trunk/patch_embed/Transpose'] = [1, 0]
+    modifyTransposeLayer(transposeAndtargetShape, encoderBeginnngPath)
+    reshapeAddNode(encoderBeginnngPath)
+    refreshOutputShape(encoderBeginnngPath)
 
 
 def test_matmul():
@@ -1789,6 +1881,7 @@ if __name__=='__main__':
     # exit(0)
     onnxParamPath='models/opencv_encoder.onnx'
     if os.path.exists(onnxParamPath):
+        convertOpencvEncoderBeginningToNcnn()
         a = test_forward()
         b = convertOpencvOnnxToNcnn()
         for i in range(len(a)):
