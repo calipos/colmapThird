@@ -430,7 +430,31 @@ if not exist %pwd%\installmingw\protobuf-3.20.0-rc3 (
     cd %pwd%
 ) 
 
-
+if not exist %pwd%\installmingw\ncnn-20250503 (
+    echo  -----------build ncnn-20250503----------
+    cmake  -G Ninja -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++     -B %pwd%buildmingw\ncnn-20250503  -S %pwd%ncnn-20250503   ^
+    -DNCNN_ASAN:BOOL="0"   ^
+    -DNCNN_BUILD_BENCHMARK:BOOL="0"  ^
+    -DNCNN_BUILD_EXAMPLES:BOOL="0"   ^
+    -DNCNN_SHARED_LIB:BOOL="1"   ^
+    -DProtobuf_LITE_LIBRARY_RELEASE:FILEPATH=""   ^
+    -DNCNN_BUILD_TESTS:BOOL="0"   ^
+    -DProtobuf_LIBRARY_DEBUG:FILEPATH=""   ^
+    -DNCNN_SYSTEM_GLSLANG:BOOL="0"   ^
+    -DProtobuf_LITE_LIBRARY_DEBUG:FILEPATH=""   ^
+    -DProtobuf_PROTOC_LIBRARY_DEBUG:FILEPATH=""   ^
+    -DProtobuf_LIBRARY_RELEASE:FILEPATH=""   ^
+    -Dprotobuf_DIR:PATH=""   ^
+    -DNCNN_BUILD_TOOLS:BOOL="0"   ^
+    -DNCNN_VULKAN:BOOL="0"   ^
+    -DProtobuf_INCLUDE_DIR:PATH=""   ^
+    -DProtobuf_PROTOC_LIBRARY_RELEASE:FILEPATH=""   ^
+    -DProtobuf_PROTOC_EXECUTABLE:FILEPATH="" ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%installmingw/ncnn-20250503
+    cd  %pwd%\buildmingw\ncnn-20250503
+    ninja install -j16
+    cd %pwd%
+) 
 
 
 if not exist %pwd%\installmingw\BA_exe (

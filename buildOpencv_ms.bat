@@ -76,3 +76,4 @@ if not exist %pwd%\install\opencv480 (
 )
     rem msbuild %pwd%\build\opencv480\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release    
     msbuild %pwd%\build\opencv480\INSTALL.vcxproj -p:Configuration=Release
+    msbuild %pwd%\build\opencv480\INSTALL.vcxproj -p:Configuration=Debug

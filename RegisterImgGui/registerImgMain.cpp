@@ -18,7 +18,7 @@ static void glfw_error_callback(int error, const char* description)
 bool show_imgRegister_window = false;
 bool show_main_window = true;
 
-
+extern int test_sam2();
 extern int test_geometry();
 extern int test_incremental(); 
 int main(int, char**)

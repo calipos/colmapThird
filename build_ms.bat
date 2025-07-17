@@ -83,7 +83,7 @@ rem =======================================================================
 
 if not exist %pwd%\install\glog-0.7.1\Release (
     echo  -----------build glog-0.7.1----------
-    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\glog-0.7.1  -S %pwd%\glog-0.7.1  -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/glog-0.7.1/Release  ^
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\glog-0.7.1  -S %pwd%\glog-0.7.1  -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/glog-0.7.1  ^
     -DBUILD_TESTING:BOOL="0" ^
     -DWITH_GFLAGS:BOOL="0"  ^
     -DWITH_THREADS:BOOL="1"  ^
@@ -92,16 +92,6 @@ if not exist %pwd%\install\glog-0.7.1\Release (
     -DCMAKE_BUILD_TYPE="Release" 
     TIMEOUT /T 1
     msbuild %pwd%\build\glog-0.7.1\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
-    
-    echo  -----------build glog-0.7.1 debug----------
-    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\glog-0.7.1  -S %pwd%/glog-0.7.1   -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/glog-0.7.1/Debug 
-    -DBUILD_TESTING:BOOL="0" ^
-    -DWITH_GFLAGS:BOOL="0"  ^
-    -DWITH_THREADS:BOOL="1"  ^
-    -DBUILD_TESTING:BOOL="0" ^
-    -DWITH_GTEST:BOOL="0" ^
-    -DCMAKE_BUILD_TYPE="Release" 
-    TIMEOUT /T 1
     msbuild %pwd%\build\glog-0.7.1\INSTALL.vcxproj -t:Rebuild -p:Configuration=Debug
 )
 rem =======================================================================
@@ -567,6 +557,35 @@ if not exist %pwd%\install\flatbuffers-24.12.23 (
     msbuild %pwd%\build\flatbuffers-24.12.23\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
     cd %pwd%
 ) 
+
+if not exist %pwd%\install\ncnn-20250503 (
+    echo  -----------build ncnn-20250503----------
+    cmake  -G "Visual Studio 16 2019"    -B %pwd%\build\ncnn-20250503  -S %pwd%\ncnn-20250503   ^
+    -DNCNN_BUILD_BENCHMARK:BOOL="0"  ^
+    -DNCNN_BUILD_EXAMPLES:BOOL="0"   ^
+    -DNCNN_SHARED_LIB:BOOL="1"   ^
+    -DProtobuf_LITE_LIBRARY_RELEASE:FILEPATH=""   ^
+    -DNCNN_ASAN:BOOL="1"   ^
+    -DNCNN_BUILD_TESTS:BOOL="0"   ^
+    -DProtobuf_LIBRARY_DEBUG:FILEPATH=""   ^
+    -DNCNN_SYSTEM_GLSLANG:BOOL="0"   ^
+    -DProtobuf_LITE_LIBRARY_DEBUG:FILEPATH=""   ^
+    -DProtobuf_PROTOC_LIBRARY_DEBUG:FILEPATH=""   ^
+    -DProtobuf_LIBRARY_RELEASE:FILEPATH=""   ^
+    -Dprotobuf_DIR:PATH=""   ^
+    -DNCNN_BUILD_TOOLS:BOOL="0"   ^
+    -DNCNN_VULKAN:BOOL="0"   ^
+    -DProtobuf_INCLUDE_DIR:PATH=""   ^
+    -DProtobuf_PROTOC_LIBRARY_RELEASE:FILEPATH=""   ^
+    -DProtobuf_PROTOC_EXECUTABLE:FILEPATH="" ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/ncnn-20250503
+    TIMEOUT /T 1
+    msbuild %pwd%\build\ncnn-20250503\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
+    msbuild %pwd%\build\ncnn-20250503\INSTALL.vcxproj -t:Rebuild -p:Configuration=Debug
+    cd %pwd%
+) 
+
+
 
 if not exist %pwd%\install\BA_exe (
     echo  -----------build BA_exe----------
