@@ -1,6 +1,6 @@
 #include "log.h"
-#include "net.h"
-#include "opencv2/opencv.hpp"
+//#include "net.h"
+//#include "opencv2/opencv.hpp"
 #include <string>
 #include <filesystem>
 
@@ -15,10 +15,10 @@ namespace sam2
 		~Sam2();
 
 	private:
-		ncnn::Net encoderBeginningNet;
-		ncnn::Net encoderNet;
-		ncnn::Extractor* ex_encoderBeginning;
-		ncnn::Extractor* ex_encoder;
+		//ncnn::Net encoderBeginningNet;
+		//ncnn::Net encoderNet;
+		//ncnn::Extractor* ex_encoderBeginning;
+		//ncnn::Extractor* ex_encoder;
 	};
 
 	Sam2::Sam2(
@@ -49,18 +49,18 @@ namespace sam2
 
 
 
-		encoderBeginningNet.opt.use_vulkan_compute = true;
-		if (encoderBeginningNet.load_param(ncnnEncoderBeginningParamPath.string().c_str()))
-			exit(-1);
-		if (encoderBeginningNet.load_model(ncnnEncoderBeginningBinPath.string().c_str()))
-			exit(-1);
-		*ex_encoderBeginning = encoderBeginningNet.create_extractor();
-		encoderNet.opt.use_vulkan_compute = true;
-		if (encoderNet.load_param(ncnnEncoderParamPath.string().c_str()))
-			exit(-1);
-		if (encoderNet.load_model(ncnnEncoderBinPath.string().c_str()))
-			exit(-1);
-		*ex_encoder = encoderNet.create_extractor();
+		//encoderBeginningNet.opt.use_vulkan_compute = true;
+		//if (encoderBeginningNet.load_param(ncnnEncoderBeginningParamPath.string().c_str()))
+		//	exit(-1);
+		//if (encoderBeginningNet.load_model(ncnnEncoderBeginningBinPath.string().c_str()))
+		//	exit(-1);
+		//*ex_encoderBeginning = encoderBeginningNet.create_extractor();
+		//encoderNet.opt.use_vulkan_compute = true;
+		//if (encoderNet.load_param(ncnnEncoderParamPath.string().c_str()))
+		//	exit(-1);
+		//if (encoderNet.load_model(ncnnEncoderBinPath.string().c_str()))
+		//	exit(-1);
+		//*ex_encoder = encoderNet.create_extractor();
 	}
 
 	Sam2::~Sam2()

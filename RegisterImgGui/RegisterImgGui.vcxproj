@@ -88,6 +88,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard_C>Default</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -102,6 +104,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard_C>Default</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -116,17 +120,17 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>GLOG_USE_GLOG_EXPORT;GLOG_NO_ABBREVIATED_SEVERITIES;NOMINMAX;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\glfw-3.3.10.bin.WIN64\include;$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\install\eigen-3.4.0\include\eigen3;$(SolutionDir)..\install\ceres-solver-2.2.0\include;$(SolutionDir)..\install\glog-0.7.1\$(Configuration)\include;$(SolutionDir)..\install\jsoncpp-1.9.6\$(Configuration)\include;$(SolutionDir)..\install\opencv480\include;$(SolutionDir)..\install\ncnn-20250503\include\ncnn;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\glfw-3.3.10.bin.WIN64\include;$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\install\eigen-3.4.0\include\eigen3;$(SolutionDir)..\install\ceres-solver-2.2.0\include;$(SolutionDir)..\install\glog-0.7.1\include;$(SolutionDir)..\install\jsoncpp-1.9.6\$(Configuration)\include;$(SolutionDir)..\install\opencv480\include;$(SolutionDir)..\install\ncnn-20250503\include\ncnn;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <LanguageStandard_C>Default</LanguageStandard_C>
       <DisableSpecificWarnings>4996</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\glfw-3.3.10.bin.WIN64\lib-vc2019;$(SolutionDir)..\install\ceres-solver-2.2.0\lib;$(SolutionDir)..\install\glog-0.7.1\$(Configuration)\lib;$(SolutionDir)..\install\jsoncpp-1.9.6\$(Configuration)\lib;$(SolutionDir)..\install\opencv480\x64\vc16\lib;$(SolutionDir)..\install\ncnn-20250503\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>glfw3.lib;FreeImage.lib;opengl32.lib;jsoncpp_static.lib;ceres-debug.lib;glogd.lib;opencv_world480.lib;ncnn.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\glfw-3.3.10.bin.WIN64\lib-vc2019;$(SolutionDir)..\install\ceres-solver-2.2.0\lib;$(SolutionDir)..\install\glog-0.7.1\lib;$(SolutionDir)..\install\jsoncpp-1.9.6\$(Configuration)\lib;$(SolutionDir)..\install\opencv480\x64\vc16\lib;$(SolutionDir)..\install\ncnn-20250503\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glfw3.lib;FreeImage.lib;opengl32.lib;jsoncpp_static.lib;ceres-debug.lib;glogd.lib;opencv_world480d.lib;ncnnd.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -137,10 +141,10 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>GLOG_USE_GLOG_EXPORT;GLOG_NO_ABBREVIATED_SEVERITIES;NOMINMAX;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\glfw-3.3.10.bin.WIN64\include;$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\install\eigen-3.4.0\include\eigen3;$(SolutionDir)..\install\ceres-solver-2.2.0\include;$(SolutionDir)..\install\glog-0.7.1\$(Configeration)\include;$(SolutionDir)..\install\jsoncpp-1.9.6\include;$(SolutionDir)..\install\opencv480\include;$(SolutionDir)..\install\ncnn-20250503\include\ncnn;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\glfw-3.3.10.bin.WIN64\include;$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\install\eigen-3.4.0\include\eigen3;$(SolutionDir)..\install\ceres-solver-2.2.0\include;$(SolutionDir)..\install\glog-0.7.1\include;$(SolutionDir)..\install\jsoncpp-1.9.6\$(Configuration)\include;$(SolutionDir)..\install\opencv480\include;$(SolutionDir)..\install\ncnn-20250503\include\ncnn;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <LanguageStandard_C>Default</LanguageStandard_C>
       <DisableSpecificWarnings>4996</DisableSpecificWarnings>
     </ClCompile>
     <Link>
@@ -148,8 +152,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\glfw-3.3.10.bin.WIN64\lib-vc2019;$(SolutionDir)..\install\ceres-solver-2.2.0\lib;$(SolutionDir)..\install\glog-0.7.1\$(Configuration)\lib;$(SolutionDir)..\install\jsoncpp-1.9.6\$(Configuration)\lib;$(SolutionDir)..\install\opencv480\x64\vc16\lib;$(SolutionDir)..\install\ncnn-20250503\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>glfw3.lib;FreeImage.lib;opengl32.lib;jsoncpp_static.lib;ceres.lib;glog.lib;opencv_world480.lib;ncnn.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\glfw-3.3.10.bin.WIN64\lib-vc2019;$(SolutionDir)..\install\ceres-solver-2.2.0\lib;$(SolutionDir)..\install\glog-0.7.1\lib;$(SolutionDir)..\install\jsoncpp-1.9.6\$(Configuration)\lib;$(SolutionDir)..\install\opencv480\x64\vc16\lib;$(SolutionDir)..\install\ncnn-20250503\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glfw3.lib;FreeImage.lib;opengl32.lib;jsoncpp_static.lib;ceres.lib;glog.lib;ncnn.lib;opencv_world480.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>

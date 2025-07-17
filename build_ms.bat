@@ -81,7 +81,7 @@ if not exist %pwd%\install\METIS-5.2.1.1 (
 )
 rem =======================================================================
 
-if not exist %pwd%\install\glog-0.7.1\Release (
+if not exist %pwd%\install\glog-0.7.1 (
     echo  -----------build glog-0.7.1----------
     cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\glog-0.7.1  -S %pwd%\glog-0.7.1  -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/glog-0.7.1  ^
     -DBUILD_TESTING:BOOL="0" ^
@@ -250,6 +250,24 @@ if not exist %pwd%\install\zlib-1.2.13 (
     msbuild %pwd%\build\zlib-1.2.13\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
 )
 rem =======================================================================
+
+
+if not exist %pwd%\install\protobuf-3.20.0-rc3 (
+    echo  -----------build protobuf-3.20.0-rc3----------
+    cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\protobuf-3.20.0-rc3  -S %pwd%\protobuf-3.20.0-rc3/cmake     ^
+    -Dprotobuf_BUILD_SHARED_LIBS:BOOL="1"   ^
+    -Dprotobuf_BUILD_TESTS:BOOL="0"    ^
+    -DZLIB_INCLUDE_DIR:PATH=%pwd%/install/zlib-1.2.13/include    ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%/install/protobuf-3.20.0-rc3/     ^
+    -DZLIB_LIBRARY_DEBUG:FILEPATH=%pwd%/install/zlib-1.2.13/lib/zlib.lib    ^
+    -DZLIB_LIBRARY_RELEASE:FILEPATH=%pwd%/install/zlib-1.2.13/lib/zlib.lib    ^
+    -Dprotobuf_WITH_ZLIB:BOOL="1" 
+    TIMEOUT /T 1
+    msbuild %pwd%\build\protobuf-3.20.0-rc3\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
+    msbuild %pwd%\build\protobuf-3.20.0-rc3\INSTALL.vcxproj -t:Rebuild -p:Configuration=Debug
+)
+rem =======================================================================
+
 
 if not exist %pwd%\install\hdf5-hdf5-1_14_3 (
     echo  -----------build hdf5-hdf5-1_14_3----------
@@ -564,20 +582,23 @@ if not exist %pwd%\install\ncnn-20250503 (
     -DNCNN_BUILD_BENCHMARK:BOOL="0"  ^
     -DNCNN_BUILD_EXAMPLES:BOOL="0"   ^
     -DNCNN_SHARED_LIB:BOOL="1"   ^
-    -DProtobuf_LITE_LIBRARY_RELEASE:FILEPATH=""   ^
-    -DNCNN_ASAN:BOOL="1"   ^
+    -DNCNN_ASAN:BOOL="0"   ^
     -DNCNN_BUILD_TESTS:BOOL="0"   ^
-    -DProtobuf_LIBRARY_DEBUG:FILEPATH=""   ^
     -DNCNN_SYSTEM_GLSLANG:BOOL="0"   ^
-    -DProtobuf_LITE_LIBRARY_DEBUG:FILEPATH=""   ^
-    -DProtobuf_PROTOC_LIBRARY_DEBUG:FILEPATH=""   ^
-    -DProtobuf_LIBRARY_RELEASE:FILEPATH=""   ^
-    -Dprotobuf_DIR:PATH=""   ^
-    -DNCNN_BUILD_TOOLS:BOOL="0"   ^
+    -Dprotobuf_DIR:PATH=%pwd%/install/protobuf-3.20.0-rc3/cmake   ^
+    -DNCNN_BUILD_TOOLS:BOOL="1"   ^
     -DNCNN_VULKAN:BOOL="0"   ^
-    -DProtobuf_INCLUDE_DIR:PATH=""   ^
-    -DProtobuf_PROTOC_LIBRARY_RELEASE:FILEPATH=""   ^
-    -DProtobuf_PROTOC_EXECUTABLE:FILEPATH="" ^
+    -DProtobuf_LIBRARY_RELEASE:FILEPATH=%pwd%/install/protobuf-3.20.0-rc3/lib/libprotobuf.lib    ^
+    -DProtobuf_PROTOC_EXECUTABLE:FILEPATH=%pwd%/install/protobuf-3.20.0-rc3/bin/protoc.exe    ^
+    -DProtobuf_LITE_LIBRARY_DEBUG:FILEPATH=%pwd%/install/protobuf-3.20.0-rc3/lib/libprotobuf-lited.lib    ^
+    -DProtobuf_LITE_LIBRARY_RELEASE:FILEPATH=%pwd%/install/protobuf-3.20.0-rc3/lib/libprotobuf-lite.lib    ^
+    -DProtobuf_PROTOC_LIBRARY_RELEASE:FILEPATH=%pwd%/install/protobuf-3.20.0-rc3/lib/libprotoc.lib    ^
+    -DProtobuf_PROTOC_LIBRARY_DEBUG:FILEPATH=%pwd%/install/protobuf-3.20.0-rc3/lib/libprotocd.lib    ^
+    -DProtobuf_INCLUDE_DIR:PATH=%pwd%/install/protobuf-3.20.0-rc3/include"    ^
+    -DProtobuf_LIBRARY_DEBUG:FILEPATH=%pwd%/install/protobuf-3.20.0-rc3/lib/libprotobufd.lib   ^
+    -DZLIB_INCLUDE_DIR:PATH=%pwd%/install/zlib-1.2.13/include    ^
+    -DZLIB_LIBRARY_DEBUG:FILEPATH=%pwd%/install/zlib-1.2.13/lib/zlib.lib    ^
+    -DZLIB_LIBRARY_RELEASE:FILEPATH=%pwd%/install/zlib-1.2.13/lib/zlib.lib   ^
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/ncnn-20250503
     TIMEOUT /T 1
     msbuild %pwd%\build\ncnn-20250503\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
