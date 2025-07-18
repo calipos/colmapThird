@@ -378,13 +378,13 @@ def reshapeAddNode(paramPath=None):
     graph = gs.import_onnx(model)
     pick = [node for node in graph.nodes if node.name == '/image_encoder/trunk/Add_1']
     if len(pick)==1:
-        pick[0].inputs[0].shape = [256*256*144]
+        pick[0].inputs[0].shape = [256*256,144]
         value = np.array(pick[0].inputs[1].values).astype(
-            pick[0].inputs[1].dtype).reshape(256*256*144)    
+            pick[0].inputs[1].dtype).reshape(256*256,144)    
         hashName = 'const_'+str(hash(pick[0].name))
         constValue = gs.Constant(hashName, value)
         pick[0].inputs[1] = constValue
-        pick[0].outputs[0].shape = [256*256*144]
+        pick[0].outputs[0].shape = [256*256,144]
 
     pick = [node for node in graph.nodes if node.name =='/Add']
     if len(pick) == 1:
@@ -1661,7 +1661,7 @@ def convertOpencvEncoderBeginningToNcnn():
     insertReshape['/image_encoder/trunk/patch_embed/proj/Conv'] = {
         'nextNodes': ['/image_encoder/trunk/patch_embed/Transpose'], 'targetShape': [144,65536]}
     insertReshape['/image_encoder/trunk/patch_embed/Transpose'] = {
-        'nextNodes': ['/image_encoder/trunk/Add_1'], 'targetShape': [1, 144*65536]}
+        'nextNodes': ['/image_encoder/trunk/Add_1'], 'targetShape': [65536,144]}
     insertSpecifiedReshape(insertReshape, encoderBeginnngPath)
     transposeAndtargetShape={}
     transposeAndtargetShape['/image_encoder/trunk/patch_embed/Transpose'] = [1, 0]

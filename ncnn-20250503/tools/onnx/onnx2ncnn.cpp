@@ -1,4 +1,5 @@
 ﻿
+#include "mat.h"
 #include "net.h"
 #include "onnx.pb.h"
 #include <algorithm>
@@ -3009,32 +3010,49 @@ void printNcnnBlob(const ncnn::Mat& out)
         }
     }
 }
-int test_forward()
+int test_beginning_forward(const char* ncnnParamPath, const char* ncnnBinPath)
 {
     ncnn::Net testNet;
     testNet.opt.use_vulkan_compute = true;
-    if (testNet.load_param("ncnn.param"))
+    if (testNet.load_param(ncnnParamPath))
         exit(-1);
-    if (testNet.load_model("ncnn.bin"))
+    if (testNet.load_model(ncnnBinPath))
+        exit(-1);
+    ncnn::Extractor ex1 = testNet.create_extractor();
+
+    cv::Mat img = cv::imread(imgPath.string());
+    cv::size oringalSize = img.size();
+    const int netImgSize = 1024;
+    ncnn::Mat imgBlob = ncnn::Mat::from_pixels_resize(img.data, ncnn::Mat::PIXEL_BGR2RGB, img.cols, img.rows, netImgSize, netImgSize);
+    const float mean_vals[3] = {0.485 * 256., 0.456 * 256., 0.406 * 256.};
+    const float norm_vals[3] = {0.00390625 / 0.229, 0.00390625 / 0.224, 0.00390625 / 0.225};
+    imgBlob.substract_mean_normalize(mean_vals, norm_vals);
+    printNcnnBlob(imgBlob);
+
+
+    ex1.input("image", imgBlob);
+    ncnn::Mat out0;
+    auto start1 = std::chrono::steady_clock::now();
+    ex1.extract("/image_encoder/trunk/Add_1_output_0", out0);
+    //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_1", out1);
+    //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_2", out2);
+    auto end1 = std::chrono::steady_clock::now();
+    auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+    printNcnnBlob(out0);
+    std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
+    return 0;
+}
+int test_forward(const char* ncnnParamPath, const char* ncnnBinPath)
+{
+    ncnn::Net testNet;
+    testNet.opt.use_vulkan_compute = true;
+    if (testNet.load_param(ncnnParamPath))
+        exit(-1);
+    if (testNet.load_model(ncnnBinPath))
         exit(-1);
     ncnn::Extractor ex1 = testNet.create_extractor();
     std::vector<float> indata(3 * 1024 * 1024, 1);
     ncnn::Mat in(1024, 1024, 3, (void*)&indata[0], 4);
-    //for (int c = 0; c < in.c; c++)
-    //{
-    //    ncnn::Mat cdata = in.channel(c);
-    //    int h = cdata.h;
-    //    int w = cdata.w;
-    //    for (int y = 0; y < h; ++y)
-    //    {
-    //        for (int x = 0; x < w; ++x)
-    //        {
-    //            float value = cdata.row(y)[x]; // ��ȡ (y, x) λ�õ�ֵ
-    //            std::cout << value << " ";
-    //        }
-    //        std::cout << std::endl;
-    //    }
-    //}
     ex1.input("image", in);
     ncnn::Mat out0;
     auto start1 = std::chrono::steady_clock::now();
@@ -3206,16 +3224,16 @@ std::map<std::string, float> getTheSimpleBinaryOp(const onnx::GraphProto& graph,
     //}
     return ret;
 }
-int main()
+int convert_main(const char* onnxPath, const char* ncnnParamPath, const char* ncnnBinPath)
 {
     //return test_squeeze_forward();
     //return test_slice_forward();
     //return test_forward();
-    const char* onnxpb = "D:/repo/colmapThird/models/ncnn_encoder.onnx";
+    const char* onnxpb = onnxPath;
     //const char* onnxpb = "D:/repo/colmapThird/models/opencv_decoder.onnx";
     //const char* onnxpb = "D:/repo/colmapThird/test.onnx";
-    const char* ncnn_prototxt = "ncnn.param";
-    const char* ncnn_modelbin = "ncnn.bin";
+    const char* ncnn_prototxt = ncnnParamPath;
+    const char* ncnn_modelbin = ncnnBinPath;
 
     onnx::ModelProto model;
 
@@ -6414,8 +6432,29 @@ int main()
 
     fclose(pp);
     fclose(bp);
-    test_forward();
+    //test_forward();
     //test_matmul_forward();
     //test_slice_forward();
+    return 0;
+}
+
+
+int main()
+{ 
+    if (0)
+    {
+        const char* onnxpb = "../../../../models/ncnn_encoder.onnx";
+        const char* ncnn_prototxt = "../../../../models/ncnnEncoder.param";
+        const char* ncnn_modelbin = "../../../../models/ncnnEncoder.bin";
+        convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
+    }
+    if (0)
+    {
+        const char* onnxpb = "../../../../models/ncnn_encoder_beginnng.onnx";
+        const char* ncnn_prototxt = "../../../../models/ncnnEncoderBeginning.param";
+        const char* ncnn_modelbin = "../../../../models/ncnnEncoderBeginning.bin";
+        convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
+    }
+    test_beginning_forward("../../../../models/ncnnEncoderBeginning.param", "../../../../models/ncnnEncoderBeginning.bin");
     return 0;
 }

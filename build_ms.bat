@@ -265,6 +265,7 @@ if not exist %pwd%\install\protobuf-3.20.0-rc3 (
     TIMEOUT /T 1
     msbuild %pwd%\build\protobuf-3.20.0-rc3\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
     msbuild %pwd%\build\protobuf-3.20.0-rc3\INSTALL.vcxproj -t:Rebuild -p:Configuration=Debug
+    copy %pwd%\install\zlib-1.2.13\bin\zlib.dll  %pwd%install\protobuf-3.20.0-rc3\bin
 )
 rem =======================================================================
 
@@ -602,7 +603,7 @@ if not exist %pwd%\install\ncnn-20250503 (
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/ncnn-20250503
     TIMEOUT /T 1
     msbuild %pwd%\build\ncnn-20250503\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
-    msbuild %pwd%\build\ncnn-20250503\INSTALL.vcxproj -t:Rebuild -p:Configuration=Debug
+rem    msbuild %pwd%\build\ncnn-20250503\INSTALL.vcxproj -t:Rebuild -p:Configuration=Debug
     cd %pwd%
 ) 
 
