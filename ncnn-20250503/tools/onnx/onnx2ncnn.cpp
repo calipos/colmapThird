@@ -3020,17 +3020,17 @@ int test_beginning_forward(const char* ncnnParamPath, const char* ncnnBinPath)
         exit(-1);
     ncnn::Extractor ex1 = testNet.create_extractor();
 
-    cv::Mat img = cv::imread(imgPath.string());
-    cv::size oringalSize = img.size();
-    const int netImgSize = 1024;
-    ncnn::Mat imgBlob = ncnn::Mat::from_pixels_resize(img.data, ncnn::Mat::PIXEL_BGR2RGB, img.cols, img.rows, netImgSize, netImgSize);
-    const float mean_vals[3] = {0.485 * 256., 0.456 * 256., 0.406 * 256.};
-    const float norm_vals[3] = {0.00390625 / 0.229, 0.00390625 / 0.224, 0.00390625 / 0.225};
-    imgBlob.substract_mean_normalize(mean_vals, norm_vals);
-    printNcnnBlob(imgBlob);
+    //cv::Mat img = cv::imread(imgPath.string());
+    //cv::size oringalSize = img.size();
+    //const int netImgSize = 1024;
+    //ncnn::Mat imgBlob = ncnn::Mat::from_pixels_resize(img.data, ncnn::Mat::PIXEL_BGR2RGB, img.cols, img.rows, netImgSize, netImgSize);
+    //const float mean_vals[3] = {0.485 * 256., 0.456 * 256., 0.406 * 256.};
+    //const float norm_vals[3] = {0.00390625 / 0.229, 0.00390625 / 0.224, 0.00390625 / 0.225};
+    //imgBlob.substract_mean_normalize(mean_vals, norm_vals);
+    //printNcnnBlob(imgBlob);
 
 
-    ex1.input("image", imgBlob);
+    //ex1.input("image", imgBlob);
     ncnn::Mat out0;
     auto start1 = std::chrono::steady_clock::now();
     ex1.extract("/image_encoder/trunk/Add_1_output_0", out0);

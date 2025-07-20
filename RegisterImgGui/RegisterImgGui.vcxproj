@@ -44,6 +44,7 @@
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
+    <EnableASAN>false</EnableASAN>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -130,7 +131,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\glfw-3.3.10.bin.WIN64\lib-vc2019;$(SolutionDir)..\install\ceres-solver-2.2.0\lib;$(SolutionDir)..\install\glog-0.7.1\lib;$(SolutionDir)..\install\jsoncpp-1.9.6\$(Configuration)\lib;$(SolutionDir)..\install\opencv480\x64\vc16\lib;$(SolutionDir)..\install\ncnn-20250503\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>glfw3.lib;FreeImage.lib;opengl32.lib;jsoncpp_static.lib;ceres-debug.lib;glogd.lib;opencv_world480d.lib;ncnnd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glfw3.lib;FreeImage.lib;opengl32.lib;jsoncpp_static.lib;ceres-debug.lib;glogd.lib;ncnnd.lib;opencv_world480d.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

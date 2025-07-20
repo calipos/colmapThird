@@ -603,7 +603,7 @@ if not exist %pwd%\install\ncnn-20250503 (
     -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/ncnn-20250503
     TIMEOUT /T 1
     msbuild %pwd%\build\ncnn-20250503\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
-rem    msbuild %pwd%\build\ncnn-20250503\INSTALL.vcxproj -t:Rebuild -p:Configuration=Debug
+    msbuild %pwd%\build\ncnn-20250503\INSTALL.vcxproj -t:Rebuild -p:Configuration=Debug
     cd %pwd%
 ) 
 

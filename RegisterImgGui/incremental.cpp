@@ -43,7 +43,6 @@ int test_bitmap()
 int test_incremental()
 {
 
-
     //test_bitmap();
     std::vector<image_t>incrementalImages = { 0,1,2,3,4 };
     std::filesystem::path dataPath = "../data2";
