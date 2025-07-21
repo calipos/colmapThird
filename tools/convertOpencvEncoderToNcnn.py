@@ -1,6 +1,4 @@
-from typing import Any, Sequence
 import os
-from typing import Any, Sequence
 import copy
 import numpy as np
 import onnx
@@ -8,35 +6,59 @@ import sys
 from onnx import helper
 from onnx import shape_inference
 from onnx import TensorProto
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-from torch.utils import data
+# import torch
+# import torch.nn as nn
+# import torch.nn.functional as F
+# import torch.optim as optim
+# from torch.utils import data
 import onnx_graphsurgeon as gs
 import onnxruntime
 import matplotlib.pyplot as plt
 import cv2
 checkmodel = False
 inferShapes = False
-
+ir_version = 10
 # shared_input = ['/image_encoder/trunk/Add_1_output_0']
 shared_out = [ 
-    #/image_encoder/trunk/blocks.12/Add_3_output_0    8.106231689453125e-06 
-    #'/image_encoder/trunk/blocks.14/Add_3_output_0',  7.62939453125e-06
-    #'/image_encoder/trunk/blocks.18/Add_3_output_0',1.0013580322265625e-05
-    #'/image_encoder/trunk/blocks.20/Add_3_output_0',   1.049041748046875e-05 
-    #'/image_encoder/trunk/blocks.22/Add_3_output_0    1.9073486328125e-05 
-    # '/image_encoder/trunk/blocks.22/Add_3_output_0',
-    # '/image_encoder/trunk/blocks.24/Add_3_output_0'    #0.000812530517578125 
-    # '/image_encoder/trunk/blocks.28/Add_3_output_0'    #0.008251190185546875
+    '/image_encoder/trunk/blocks.0/attn/MatMul_output_0',
+    '/image_encoder/trunk/blocks.0/mlp/layers.1/MatMul_output_0',
+    '/image_encoder/trunk/blocks.1/attn/qkv/MatMul_output_0',
+    '/image_encoder/trunk/blocks.1/attn/MatMul_output_0',
+    '/image_encoder/trunk/blocks.1/attn/MatMul_1_output_0',
+    '/image_encoder/trunk/blocks.1/attn/proj/MatMul_output_0',
+    '/image_encoder/trunk/blocks.1/mlp/act/Mul_output_0',
 
-    '/image_encoder/trunk/blocks.24/Add_3_output_0',
+
+    '/image_encoder/trunk/blocks.2/attn/qkv/MatMul_output_0',
+    '/image_encoder/trunk/blocks.2/attn/MatMul_output_0',
+    '/image_encoder/trunk/blocks.2/attn/MatMul_1_output_0',
+    '/image_encoder/trunk/blocks.2/attn/proj/MatMul_output_0',
+    '/image_encoder/trunk/blocks.2/mlp/act/Mul_output_0',
+
+
+    '/image_encoder/trunk/blocks.3/attn/MatMul_output_0',
+    '/image_encoder/trunk/blocks.6/attn/MatMul_output_0',
+    '/image_encoder/trunk/blocks.9/attn/MatMul_output_0',
+    '/image_encoder/trunk/blocks.12/attn/MatMul_output_0',
+    '/image_encoder/trunk/blocks.15/attn/MatMul_output_0',
+    '/image_encoder/trunk/blocks.18/attn/MatMul_output_0',
+    '/image_encoder/trunk/blocks.21/attn/MatMul_output_0',
+    '/image_encoder/trunk/blocks.21/Add_3_output_0',    #1.049041748046875e-05 
+    '/image_encoder/trunk/blocks.22/Add_3_output_0',
+    '/image_encoder/trunk/blocks.23/Add_output_0',
+    '/image_encoder/trunk/blocks.23/Add_1_output_0',
+    '/image_encoder/trunk/blocks.24/Add_3_output_0',    
+    '/image_encoder/trunk/blocks.25/Add_3_output_0',    
+    '/image_encoder/trunk/blocks.26/Add_3_output_0',    
+    '/image_encoder/trunk/blocks.27/Add_3_output_0',
+    '/image_encoder/trunk/blocks.28/Add_3_output_0',    #0.008251190185546875
+    '/image_encoder/trunk/blocks.41/Add_3_output_0',    #0.008251190185546875
+
     # '/Transpose_1_output_0'
  
-    # 'high_res_feats_0',
-    # 'high_res_feats_1', 
-    # '/Transpose_1_output_0'  # == 'image_embed',   -->need reshape (256,64,64)
+    'high_res_feats_0',
+    'high_res_feats_1', 
+    '/Transpose_1_output_0'  # == 'image_embed',   -->need reshape (256,64,64)
 
 ]
 
@@ -76,8 +98,9 @@ def cut_subgraph(origin_graph_path, input_node_name_list, output_node_name_list,
     for output_node_name in output_node_name_list:
         graph.outputs.append(tensors[output_node_name])
     graph.cleanup()
+    graph.toposort()
     new_mode = gs.export_onnx(graph)
-    new_mode.ir_version = 10
+    new_mode.ir_version = ir_version
     onnx.save(new_mode, sub_graph_path)
 def onnx_datatype_to_npType(data_type):
     if data_type == 1:
@@ -216,14 +239,14 @@ def test_forward():
     cut_subgraph('models/opencv_encoder.onnx',
                  ['image'],
                  shared_out,
-                 targetParamPath)
+                 'models/temp.onnx')
     model = onnx.load(targetParamPath)
     if inferShapes:
         model = onnx.shape_inference.infer_shapes(model)
     if checkmodel:
         onnx.checker.check_model(model)
     session = onnxruntime.InferenceSession(
-        targetParamPath, providers=onnxruntime.get_available_providers())
+        'models/temp.onnx', providers=onnxruntime.get_available_providers())
     datain = {}
     datain['image'] = image0.reshape([1,3,1024,1024])
     pointCoords = session.run(
@@ -307,8 +330,10 @@ def modifyBinaryOperationConst(layerNames, paramPath=None):
                 constValue = gs.Constant(hashName, value)
                 pick[0].inputs[i] = constValue                
         assert hitByName,pick[0]
+    graph.cleanup()
+    graph.toposort()
     new_mode = gs.export_onnx(graph)
-    new_mode.ir_version = 10
+    new_mode.ir_version = ir_version
     if paramPath is not None:
         onnx.save(new_mode, paramPath)
     else:
@@ -421,12 +446,10 @@ def reshapeAddNode(paramPath=None):
         pick[0].outputs[0].shape = [256*256, 144]
 
 
-
-
-
     graph.cleanup()
+    graph.toposort()
     new_mode = gs.export_onnx(graph)
-    new_mode.ir_version = 10
+    new_mode.ir_version = ir_version
 
     if paramPath is not None:
         onnx.save(new_mode, paramPath)
@@ -490,9 +513,11 @@ def insertSpecifiedReshape(layerPairs,paramPath=None):
                     insertReshape[0].outputs[0].dtype = insertReshape[0].inputs[0].dtype
                     insertReshape[0].outputs[0].shape = insertReshape[0].inputs[1].values.tolist()
                     pickSecond[0].inputs[j] = insertReshape[0].outputs[0]
+
     graph.cleanup()
+    graph.toposort()
     new_mode = gs.export_onnx(graph)
-    new_mode.ir_version = 10
+    new_mode.ir_version = ir_version
     shape_set.clear()  # for gs cleanup
     for init in new_mode.graph.initializer:  # for gs cleanup
         if init.name.startswith("shape_"):  # for gs cleanup
@@ -547,9 +572,11 @@ def insertSpecifiedTranspose(layerPairs,paramPath=None):
         if len(insertReshape) == 0:
             continue
         pickSecond[0].inputs[0] = insertReshape[0].outputs[0]
+
     graph.cleanup()
+    graph.toposort()
     new_mode = gs.export_onnx(graph)
-    new_mode.ir_version = 10
+    new_mode.ir_version = ir_version
     if paramPath is not None:
         onnx.save(new_mode, paramPath)
     else:
@@ -625,8 +652,11 @@ def deleteLayer(layernames,paramPath=None):
             graph.cleanup()
         else:
             assert False,"not support yet"
+
+    graph.cleanup()
+    graph.toposort()
     new_mode = gs.export_onnx(graph)
-    new_mode.ir_version = 10
+    new_mode.ir_version = ir_version
     if paramPath is not None:
         onnx.save(new_mode, paramPath)
     else:
@@ -636,13 +666,17 @@ def ncnnShapeSqueezeFlag(layerNames,paramPath=None):
         model = onnx.load(paramPath)
     else:
         model = onnx.load(targetParamPath)
+    
     graph = gs.import_onnx(model)
     for node in graph.nodes:
         if node.name in layerNames:
             node.name = node.name+'_needSqueeze'
     graph.cleanup()
+
+    graph.cleanup()
+    graph.toposort()
     new_mode = gs.export_onnx(graph)
-    new_mode.ir_version = 10
+    new_mode.ir_version = ir_version
 
     if paramPath is not None:
         onnx.save(new_mode, paramPath)
@@ -656,8 +690,8 @@ def refreshOutputShape(paramPath=None):
     # printNet(model)
     graph = gs.import_onnx(model)
     for node in graph.nodes:
-        # if node.name == '/image_encoder/trunk/blocks.0/Add_2':
-        #     print(1)
+        # if node.name == '/image_encoder/trunk/blocks.21/Add_3':
+        #     break
         # print('refresh layer shape: ',node.name)
         if node.op == 'Reshape' :
             assert len(node.inputs)==2
@@ -667,6 +701,7 @@ def refreshOutputShape(paramPath=None):
                 if node.inputs[i].dtype == 'int64':
                     shapeIdx=i
                     dataIdx = 1-i
+            assert dataIdx==0 and shapeIdx==1
             if np.sum(np.array(node.inputs[shapeIdx].shape) == -1) :
                 continue
             try:
@@ -698,14 +733,14 @@ def refreshOutputShape(paramPath=None):
                 continue
             if np.sum(np.array(node.inputs[1].shape) == -1) != 0:
                 continue
-            A = np.ones(node.inputs[0].shape)
-            B = np.ones(node.inputs[1].shape)
             try:
-                C=A@B
+                A = np.ones(node.inputs[0].shape)
+                B = np.ones(node.inputs[1].shape)
+                C = A@B
+                node.outputs[0].shape = C.shape
             except:
                 print(node)
                 assert False
-            node.outputs[0].shape = C.shape
         elif node.op == 'Softmax':
             node.outputs[0].shape = node.inputs[0].shape
         elif node.op == 'Mul':
@@ -742,27 +777,39 @@ def refreshOutputShape(paramPath=None):
                 continue
             if np.sum(np.array(node.inputs[1].shape) == -1) != 0:
                 continue
-            A = np.ones(node.inputs[0].shape)
-            B = np.ones(node.inputs[1].shape)
-            C = A/B
-            node.outputs[0].shape = C.shape
+            try:
+                A = np.ones(node.inputs[0].shape)
+                B = np.ones(node.inputs[1].shape)
+                C = A/B
+                node.outputs[0].shape = C.shape
+            except:
+                print(node)
+                assert False
         elif node.op == 'Split':
             axis = node.attrs['axis']
             splitArray = node.inputs[1].values.tolist()
             srcShape = node.inputs[0].shape
-            assert np.sum(splitArray) == node.inputs[0].shape[axis]
+            try:
+                np.sum(splitArray) == node.inputs[0].shape[axis]
+            except:
+                print(node)
+                assert False
             for i in range(len(node.outputs)):
                 node.outputs[i].shape = copy.deepcopy(srcShape)
                 node.outputs[i].shape[axis] = splitArray[i]
 
         elif node.op == 'MaxPool':
-            node.outputs[0].shape = copy.deepcopy(node.inputs[0].shape)
-            node.outputs[0].shape[-2] = node.outputs[0].shape[-2]//2
-            node.outputs[0].shape[-1] = node.outputs[0].shape[-1]//2
+            try:
+                node.outputs[0].shape = copy.deepcopy(node.inputs[0].shape)
+                node.outputs[0].shape[-2] = node.outputs[0].shape[-2]//2
+                node.outputs[0].shape[-1] = node.outputs[0].shape[-1]//2
+            except:
+                print(node)
+                assert False
     graph.cleanup()
-    # graph.toposort()
+    graph.toposort()
     new_mode = gs.export_onnx(graph)
-    new_mode.ir_version = 10
+    new_mode.ir_version = ir_version
     if paramPath is not None:
         onnx.save(new_mode, paramPath)
     else:
@@ -774,8 +821,8 @@ def convertOpencvOnnxToNcnn():
     print(len(model.graph.input))
     cut_subgraph('models/opencv_encoder.onnx',
                  ['image'],
-                 ['/Transpose_1_output_0'],
-                #  shared_out,
+                #  ['/Transpose_1_output_0'],
+                 shared_out,
                  targetParamPath)
     model = onnx.load(targetParamPath)
 
@@ -816,6 +863,11 @@ def convertOpencvOnnxToNcnn():
         'nextNodes': ['/image_encoder/trunk/blocks.8/Transpose_1'], 'targetShape': [1,576, 64,64]}
     insertReshape['/image_encoder/trunk/blocks.8/Transpose_1'] = {
         'nextNodes': ['/image_encoder/trunk/blocks.8/Add_4'], 'targetShape': [4096, 576]}
+
+    # insertReshape['/image_encoder/trunk/blocks.21/Add_3'] = {
+    #     'nextNodes': ['/image_encoder/trunk/blocks.22/norm1/LayerNormalization', '/image_encoder/trunk/blocks.22/Add_2'], 'targetShape': [1,64,64,576]}
+
+
     insertReshape['/image_encoder/trunk/blocks.44/attn/Transpose']= {
         'nextNodes': ['/image_encoder/trunk/blocks.44/attn/pool/MaxPool'], 'targetShape': [18432,1,16,16]}
     insertReshape['/image_encoder/trunk/blocks.44/attn/pool/MaxPool']= {
@@ -845,94 +897,94 @@ def convertOpencvOnnxToNcnn():
     #     'constName': '/image_encoder/trunk/blocks.2/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
     # binaryOperationConst['/image_encoder/trunk/blocks.3/attn/Mul_1'] = {
     #     'constName': '/image_encoder/trunk/blocks.3/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.4/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.4/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.5/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.5/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.6/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.6/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.7/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.7/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.8/attn/Mul_2'] = {
-    #     'constName': '/image_encoder/trunk/blocks.8/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.9/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.9/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.10/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.10/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.11/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.11/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.12/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.12/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.13/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.13/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.14/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.14/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.15/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.15/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.16/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.16/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.17/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.17/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.18/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.18/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.19/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.19/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.20/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.20/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.21/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.21/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.22/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.22/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.23/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.23/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.24/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.24/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.25/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.25/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}    
-    # binaryOperationConst['/image_encoder/trunk/blocks.26/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.26/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.27/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.27/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}    
-    # binaryOperationConst['/image_encoder/trunk/blocks.28/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.28/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.29/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.29/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.30/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.30/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.31/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.31/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.32/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.32/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.33/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.33/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.34/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.34/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.35/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.35/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.36/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.36/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.37/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.37/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.38/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.38/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.39/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.39/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.40/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.40/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.41/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.41/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.42/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.42/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.43/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.43/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.44/attn/Mul_2'] = {
-    #     'constName': '/image_encoder/trunk/blocks.44/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.45/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.45/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.46/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.46/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.47/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.47/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.4/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.4/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.5/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.5/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.6/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.6/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.7/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.7/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.8/attn/Mul_2'] = {
+        'constName': '/image_encoder/trunk/blocks.8/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.9/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.9/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.10/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.10/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.11/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.11/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.12/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.12/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.13/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.13/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.14/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.14/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.15/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.15/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.16/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.16/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.17/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.17/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.18/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.18/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.19/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.19/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.20/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.20/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.21/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.21/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.22/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.22/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.23/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.23/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.24/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.24/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.25/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.25/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}    
+    binaryOperationConst['/image_encoder/trunk/blocks.26/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.26/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.27/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.27/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}    
+    binaryOperationConst['/image_encoder/trunk/blocks.28/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.28/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.29/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.29/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.30/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.30/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.31/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.31/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.32/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.32/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.33/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.33/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.34/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.34/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.35/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.35/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.36/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.36/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.37/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.37/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.38/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.38/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.39/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.39/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.40/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.40/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.41/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.41/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.42/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.42/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.43/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.43/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.44/attn/Mul_2'] = {
+        'constName': '/image_encoder/trunk/blocks.44/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.45/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.45/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.46/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.46/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.47/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.47/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
 
 
     modifyBinaryOperationConst(binaryOperationConst)
@@ -959,179 +1011,179 @@ def convertOpencvOnnxToNcnn():
                  '/image_encoder/trunk/blocks.4/attn/Squeeze',
                  '/image_encoder/trunk/blocks.4/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.4/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.4/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.4/attn/Mul_2',
                  '/image_encoder/trunk/blocks.5/attn/Squeeze',
                  '/image_encoder/trunk/blocks.5/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.5/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.5/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.5/attn/Mul_2',
                  '/image_encoder/trunk/blocks.6/attn/Squeeze',
                  '/image_encoder/trunk/blocks.6/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.6/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.6/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.6/attn/Mul_2',
                  '/image_encoder/trunk/blocks.7/attn/Squeeze',
                  '/image_encoder/trunk/blocks.7/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.7/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.7/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.7/attn/Mul_2',
                  '/image_encoder/trunk/blocks.8/attn/Squeeze',
                  '/image_encoder/trunk/blocks.8/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.8/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.8/attn/Mul_3', 
+                 '/image_encoder/trunk/blocks.8/attn/Mul_3', 
                  '/image_encoder/trunk/blocks.9/attn/Squeeze',
                  '/image_encoder/trunk/blocks.9/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.9/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.9/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.9/attn/Mul_2',
                  '/image_encoder/trunk/blocks.10/attn/Squeeze',
                  '/image_encoder/trunk/blocks.10/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.10/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.10/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.10/attn/Mul_2',
                  '/image_encoder/trunk/blocks.11/attn/Squeeze',
                  '/image_encoder/trunk/blocks.11/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.11/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.11/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.11/attn/Mul_2',
                  '/image_encoder/trunk/blocks.12/attn/Squeeze',
                  '/image_encoder/trunk/blocks.12/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.12/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.12/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.12/attn/Mul_2',
                  '/image_encoder/trunk/blocks.13/attn/Squeeze',
                  '/image_encoder/trunk/blocks.13/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.13/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.13/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.13/attn/Mul_2',
                  '/image_encoder/trunk/blocks.14/attn/Squeeze',
                  '/image_encoder/trunk/blocks.14/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.14/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.14/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.14/attn/Mul_2',
                  '/image_encoder/trunk/blocks.15/attn/Squeeze',
                  '/image_encoder/trunk/blocks.15/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.15/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.15/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.15/attn/Mul_2',
                  '/image_encoder/trunk/blocks.16/attn/Squeeze',
                  '/image_encoder/trunk/blocks.16/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.16/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.16/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.16/attn/Mul_2',
                  '/image_encoder/trunk/blocks.17/attn/Squeeze',
                  '/image_encoder/trunk/blocks.17/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.17/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.17/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.17/attn/Mul_2',
                  '/image_encoder/trunk/blocks.18/attn/Squeeze',
                  '/image_encoder/trunk/blocks.18/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.18/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.18/attn/Mul_2',      
+                 '/image_encoder/trunk/blocks.18/attn/Mul_2',      
                  '/image_encoder/trunk/blocks.19/attn/Squeeze',
                  '/image_encoder/trunk/blocks.19/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.19/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.19/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.19/attn/Mul_2',
                  '/image_encoder/trunk/blocks.20/attn/Squeeze',
                  '/image_encoder/trunk/blocks.20/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.20/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.20/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.20/attn/Mul_2',
                  '/image_encoder/trunk/blocks.21/attn/Squeeze',
                  '/image_encoder/trunk/blocks.21/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.21/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.21/attn/Mul_2',
-                #  '/image_encoder/trunk/blocks.22/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.21/attn/Mul_2',
                  '/image_encoder/trunk/blocks.22/attn/Squeeze',
                  '/image_encoder/trunk/blocks.22/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.22/attn/Squeeze_2',
+                 '/image_encoder/trunk/blocks.22/attn/Mul_2',
                  '/image_encoder/trunk/blocks.23/attn/Squeeze',
                  '/image_encoder/trunk/blocks.23/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.23/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.23/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.23/attn/Mul_2',
                  '/image_encoder/trunk/blocks.24/attn/Squeeze',
                  '/image_encoder/trunk/blocks.24/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.24/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.24/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.24/attn/Mul_2',
                  '/image_encoder/trunk/blocks.25/attn/Squeeze',
                  '/image_encoder/trunk/blocks.25/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.25/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.25/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.25/attn/Mul_2',
                  '/image_encoder/trunk/blocks.26/attn/Squeeze',
                  '/image_encoder/trunk/blocks.26/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.26/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.26/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.26/attn/Mul_2',
                  '/image_encoder/trunk/blocks.27/attn/Squeeze',
                  '/image_encoder/trunk/blocks.27/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.27/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.27/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.27/attn/Mul_2',
                  '/image_encoder/trunk/blocks.28/attn/Squeeze',
                  '/image_encoder/trunk/blocks.28/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.28/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.28/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.28/attn/Mul_2',
                  '/image_encoder/trunk/blocks.29/attn/Squeeze',
                  '/image_encoder/trunk/blocks.29/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.29/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.29/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.29/attn/Mul_2',
                  '/image_encoder/trunk/blocks.30/attn/Squeeze',
                  '/image_encoder/trunk/blocks.30/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.30/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.30/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.30/attn/Mul_2',
                  '/image_encoder/trunk/blocks.31/attn/Squeeze',
                  '/image_encoder/trunk/blocks.31/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.31/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.31/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.31/attn/Mul_2',
                  '/image_encoder/trunk/blocks.32/attn/Squeeze',
                  '/image_encoder/trunk/blocks.32/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.32/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.32/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.32/attn/Mul_2',
                  '/image_encoder/trunk/blocks.33/attn/Squeeze',
                  '/image_encoder/trunk/blocks.33/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.33/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.33/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.33/attn/Mul_2',
                  '/image_encoder/trunk/blocks.34/attn/Squeeze',
                  '/image_encoder/trunk/blocks.34/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.34/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.34/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.34/attn/Mul_2',
                  '/image_encoder/trunk/blocks.35/attn/Squeeze',
                  '/image_encoder/trunk/blocks.35/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.35/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.35/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.35/attn/Mul_2',
                  '/image_encoder/trunk/blocks.36/attn/Squeeze',
                  '/image_encoder/trunk/blocks.36/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.36/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.36/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.36/attn/Mul_2',
                  '/image_encoder/trunk/blocks.37/attn/Squeeze',
                  '/image_encoder/trunk/blocks.37/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.37/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.37/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.37/attn/Mul_2',
                  '/image_encoder/trunk/blocks.38/attn/Squeeze',
                  '/image_encoder/trunk/blocks.38/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.38/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.38/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.38/attn/Mul_2',
                  '/image_encoder/trunk/blocks.39/attn/Squeeze',
                  '/image_encoder/trunk/blocks.39/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.39/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.39/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.39/attn/Mul_2',
                  '/image_encoder/trunk/blocks.40/attn/Squeeze',
                  '/image_encoder/trunk/blocks.40/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.40/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.40/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.40/attn/Mul_2',
                  '/image_encoder/trunk/blocks.41/attn/Squeeze',
                  '/image_encoder/trunk/blocks.41/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.41/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.41/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.41/attn/Mul_2',
                  '/image_encoder/trunk/blocks.42/attn/Squeeze',
                  '/image_encoder/trunk/blocks.42/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.42/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.42/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.42/attn/Mul_2',
                  '/image_encoder/trunk/blocks.43/attn/Squeeze',
                  '/image_encoder/trunk/blocks.43/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.43/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.43/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.43/attn/Mul_2',
                  '/image_encoder/trunk/blocks.44/attn/Squeeze',
                  '/image_encoder/trunk/blocks.44/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.44/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.44/attn/Mul_3',
+                 '/image_encoder/trunk/blocks.44/attn/Mul_3',
                  '/image_encoder/trunk/blocks.45/attn/Squeeze',
                  '/image_encoder/trunk/blocks.45/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.45/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.45/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.45/attn/Mul_2',
                  '/image_encoder/trunk/blocks.46/attn/Squeeze',
                  '/image_encoder/trunk/blocks.46/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.46/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.46/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.46/attn/Mul_2',
                  '/image_encoder/trunk/blocks.47/attn/Squeeze',
                  '/image_encoder/trunk/blocks.47/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.47/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.47/attn/Mul_2'
+                 '/image_encoder/trunk/blocks.47/attn/Mul_2'
                  ])
 # --------------------------------
     reshapeAndtargetShape = {}
@@ -1628,9 +1680,9 @@ def convertOpencvOnnxToNcnn():
     model = onnx.load(targetParamPath)
     graph = gs.import_onnx(model)
     graph.cleanup()
-    # graph.toposort()
+    graph.toposort()
     new_mode = gs.export_onnx(graph)
-    new_mode.ir_version = 10
+    new_mode.ir_version = ir_version
     onnx.save(new_mode, targetParamPath)
     model = onnx.load(targetParamPath)
     if inferShapes:
@@ -1638,60 +1690,20 @@ def convertOpencvOnnxToNcnn():
     if checkmodel:
         onnx.checker.check_model(model)
     onnx.save(model, targetParamPath)
-    return
 
-    # sys.stdout = open('test_forward2.txt', 'w')
-    # graph = gs.import_onnx(model)
-    # print(graph.nodes)
-    # sys.stdout = sys.stdout
 
-    # printNet(model)
     session = onnxruntime.InferenceSession(
         targetParamPath, providers=onnxruntime.get_available_providers())
     datain = {}
     datain['image'] =  image0.reshape([1,3,1024,1024]) 
     pointCoords = session.run(
-        None, datain)
-    
-
-    session2 = onnxruntime.InferenceSession(
-        'models/2_encoder.onnx', providers=onnxruntime.get_available_providers())
-    datain = {}
-    datain['/image_encoder/trunk/blocks.28/Add_2_output_0'] =  pointCoords[0].reshape(1,256,256,144)
-    # datain[midpoint[1]] =  pointCoords[1].reshape(1,256,256,144)
-    pointCoords = session2.run(
-        None, datain)
+        None, datain) 
 
     for i in range(len(shared_out)):
         print(shared_out[i])
         print(pointCoords[i].shape) 
         print(" ")
     return pointCoords
-
-def convertOpencvPartTailToNcnn():
-    print('for some unknown bugs,')
-    cut_subgraph('models/opencv_encoder.onnx',
-                 midpoint,
-                 shared_out,
-                 'models/tail_encoder.onnx')
-    # model = onnx.load(encoderBeginnngPath)
-    # insertReshape={}
-    # insertReshape['/image_encoder/trunk/patch_embed/proj/Conv'] = {
-    #     'nextNodes': ['/image_encoder/trunk/patch_embed/Transpose'], 'targetShape': [144,65536]}
-    # insertReshape['/image_encoder/trunk/patch_embed/Transpose'] = {
-    #     'nextNodes': ['/image_encoder/trunk/Add_1'], 'targetShape': [65536,144]}
-    # insertSpecifiedReshape(insertReshape, encoderBeginnngPath)
-    # transposeAndtargetShape={}
-    # transposeAndtargetShape['/image_encoder/trunk/patch_embed/Transpose'] = [1, 0]
-    # modifyTransposeLayer(transposeAndtargetShape, encoderBeginnngPath)
-    # reshapeAddNode(encoderBeginnngPath)
-    # refreshOutputShape(encoderBeginnngPath)
-def convertOpencvPartTwoToNcnn():
-    print('for some unknown bugs,')
-    cut_subgraph('models/opencv_encoder.onnx',
-                 ['/image_encoder/trunk/blocks.28/Add_2_output_0'],
-                 ['/image_encoder/trunk/blocks.28/Add_3_output_0'],
-                 'models/2_encoder.onnx')
 
 
 def test_matmul():
@@ -1899,6 +1911,9 @@ def test_maxpool():
 
 if __name__=='__main__':
 
+
+
+
     # test_matmul()
     # test_slice()
     # test_conv()
@@ -1907,12 +1922,11 @@ if __name__=='__main__':
     onnxParamPath='models/opencv_encoder.onnx'
     if os.path.exists(onnxParamPath):
         # test_total_forward()
-        # exit(0)
-        convertOpencvPartTwoToNcnn()
-        convertOpencvPartTailToNcnn()
+        # exit(0))
 
         a = test_forward()
-        convertOpencvOnnxToNcnn()
+        netOut = convertOpencvOnnxToNcnn()
+        '''
         cut_subgraph(targetParamPath,
                  ['image'],
                  ['/image_encoder/trunk/blocks.0/Add_2_output_0'],
@@ -1930,49 +1944,77 @@ if __name__=='__main__':
                  ['/image_encoder/trunk/blocks.23/Add_1_output_0'],
                  'models/4_encoder.onnx')
         cut_subgraph(targetParamPath,
-                 ['/image_encoder/trunk/blocks.23/Add_1_output_0'],
-                 ['/image_encoder/trunk/blocks.24/Add_3_output_0'],
-                 'models/5_encoder.onnx')
+                    ['/image_encoder/trunk/blocks.23/Add_1_output_0'],
+                    ['/image_encoder/trunk/blocks.24/Add_2_output_0'],
+                    'models/5_encoder.onnx') 
+        cut_subgraph('models/opencv_encoder.onnx', 
+                    ['/image_encoder/trunk/blocks.24/Add_2_output_0'],
+                    ['/image_encoder/trunk/blocks.24/Add_3_output_0'],
+                    'models/6_encoder.onnx') 
+        cut_subgraph(targetParamPath,
+                    ['/image_encoder/trunk/blocks.24/Add_3_output_0'],
+                    ['/image_encoder/trunk/blocks.28/Add_3_output_0'],
+                    'models/7_encoder.onnx')
+       
 
         session = onnxruntime.InferenceSession(
             'models/1_encoder.onnx', providers=onnxruntime.get_available_providers())
         datain = {}
-        datain['image'] =  image0.reshape([1,3,1024,1024]) 
+        datain[session.get_inputs()[0].name] = image0.reshape(
+            session.get_inputs()[0].shape)
         netOut = session.run(
             None, datain)
         
         session = onnxruntime.InferenceSession(
             'models/2_encoder.onnx', providers=onnxruntime.get_available_providers())
         datain = {}
-        datain['/image_encoder/trunk/blocks.0/Add_2_output_0'] =  netOut[0].reshape(1,256,256,144)
+        datain[session.get_inputs()[0].name] = netOut[0].reshape(
+            session.get_inputs()[0].shape)
         netOut = session.run(
             None, datain)
         
         session = onnxruntime.InferenceSession(
             'models/3_encoder.onnx', providers=onnxruntime.get_available_providers())
         datain = {}
-        datain['/image_encoder/trunk/blocks.0/Add_3_output_0'] =  netOut[0].reshape(256*256,144)
+        datain[session.get_inputs()[0].name] = netOut[0].reshape(
+            session.get_inputs()[0].shape)
         netOut = session.run(
             None, datain)
         
         session = onnxruntime.InferenceSession(
             'models/4_encoder.onnx', providers=onnxruntime.get_available_providers())
         datain = {}
-        datain['/image_encoder/trunk/blocks.23/Add_output_0'] =  netOut[0].reshape(1,64,64,576)
+        datain[session.get_inputs()[0].name] = netOut[0].reshape(
+            session.get_inputs()[0].shape)
         netOut = session.run(
             None, datain)
         
         session = onnxruntime.InferenceSession(
             'models/5_encoder.onnx', providers=onnxruntime.get_available_providers())
         datain = {}
-        datain['/image_encoder/trunk/blocks.23/Add_1_output_0'] =  netOut[0].reshape(64*64,576)
+        datain[session.get_inputs()[0].name] = netOut[0].reshape(
+            session.get_inputs()[0].shape)
         netOut = session.run(
             None, datain)
 
+        session = onnxruntime.InferenceSession(
+            'models/6_encoder.onnx', providers=onnxruntime.get_available_providers())
+        datain = {}
+        datain[session.get_inputs()[0].name] = netOut[0].reshape([1,64,64,576])
+        netOut = session.run(
+            None, datain)
+
+        session = onnxruntime.InferenceSession(
+            'models/7_encoder.onnx', providers=onnxruntime.get_available_providers())
+        datain = {}
+        datain[session.get_inputs()[0].name] = netOut[0].reshape([64*64,576])
+        netOut = session.run(
+            None, datain)
+'''
 
         for i in range(len(a)):
             assert a[i].size==netOut[i].size,print(a[i].shape,netOut[i].shape)
-            diff = a[i].astype(np.double).reshape(-1)-netOut[i].astype(np.double).reshape(-1)
+            diff = a[i].reshape(-1)-netOut[i].reshape(-1)
             print(shared_out[i],'\t',np.max(np.abs(diff)),np.mean(diff),np.std(diff))
             plt.plot(diff)  
             plt.savefig(str(i)+'.png')

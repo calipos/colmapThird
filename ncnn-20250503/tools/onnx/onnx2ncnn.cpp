@@ -1,9 +1,9 @@
-﻿
-#include "mat.h"
+﻿#include "mat.h"
 #include "net.h"
 #include "onnx.pb.h"
 #include <algorithm>
 #include <chrono>
+#include <numeric>
 #include <unordered_map>
 #include <float.h>
 #include <fstream>
@@ -6438,10 +6438,199 @@ int convert_main(const char* onnxPath, const char* ncnnParamPath, const char* nc
     return 0;
 }
 
+struct Tensor
+{
+    enum class OnnxType
+    {
+        onnx_float32 = 1,
+        onnx_uint8 = 2,
+        onnx_int8 = 3,
+        onnx_uint16 = 4,
+        onnx_int16 = 5,
+        onnx_int32 = 6,
+        onnx_int64 = 7,
+        onnx_string = 8,
+        onnx_bool = 9,
+        onnx_float16 = 10,
+        onnx_float64 = 11,
+        onnx_uint32 = 12,
+        onnx_uint64 = 14,
+    };
+    static OnnxType type(const int&typeId)
+    {
+        switch (typeId)
+        {
+        case 1: return OnnxType::onnx_float32;
+        case 2: return OnnxType::onnx_uint8;
+        case 3: return OnnxType::onnx_int8;
+        case 4: return OnnxType::onnx_uint16;
+        case 5: return OnnxType::onnx_int16;
+        case 6: return OnnxType::onnx_int32;
+        case 7: return OnnxType::onnx_int64;
+        case 8: return OnnxType::onnx_string;
+        case 9: return OnnxType::onnx_bool;
+        case 10: return OnnxType::onnx_float16;
+        case 11: return OnnxType::onnx_float64;
+        case 12: return OnnxType::onnx_uint32;
+        case 14: return OnnxType::onnx_uint64;
+        default:
+            break;
+        }
+        std::cout<<"unsupport dtype!!!" <<std::endl;
+        return OnnxType::onnx_float32;
+    }
+    static std::vector<int> getShape(const onnx::TensorProto&tp)
+    {
+        int dim_size = tp.dims_size();
+        std::vector<int> shape(dim_size);
+        for (int i = 0; i < dim_size; i++)
+        {
+            shape[i] = tp.dims(i);
+        }
+        return shape;
+    }
+    
+    static std::vector<unsigned char> getData(const onnx::TensorProto& tp)
+    {
+        OnnxType dataType = type(tp.data_type());
+        std::vector<int> shape = getShape(tp);
+        int dataTotalCnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
+        if (dataType == OnnxType::onnx_float32)
+        {
+            const float* bptr = tp.has_raw_data() ? (const float*)tp.raw_data().data() : tp.float_data().data();
+            std::vector<float> dataFloat;
+            dataFloat.resize(dataTotalCnt);
+            for (int j = 0; j < dataTotalCnt; j++)
+            {
+                dataFloat[j] = bptr[j];                
+            } 
+            std::vector<unsigned char> ret(dataTotalCnt * sizeof(float));
+            memcpy(&ret[0], &dataFloat[0], dataTotalCnt * sizeof(float));
+            return ret;
+        }
+        else if (dataType == OnnxType::onnx_int64)
+        {
+            const std::int64_t* bptr = tp.has_raw_data() ? (const std::int64_t*)tp.raw_data().data() : tp.int64_data().data();
+            std::vector<std::int64_t> data;
+            data.resize(dataTotalCnt);
+            for (int j = 0; j < dataTotalCnt; j++)
+            {
+                data[j] = bptr[j];
+            }
+            std::vector<unsigned char> ret(dataTotalCnt * sizeof(std::int64_t));
+            memcpy(&ret[0], &data[0], dataTotalCnt * sizeof(std::int64_t));
+        }
+        else if (dataType == OnnxType::onnx_int32)
+        {
+            const std::int32_t* bptr = tp.has_raw_data() ? (const std::int32_t*)tp.raw_data().data() : tp.int32_data().data();
+            std::vector<std::int32_t> data;
+            data.resize(dataTotalCnt);
+            for (int j = 0; j < dataTotalCnt; j++)
+            {
+                data[j] = bptr[j];
+            }
+            std::vector<unsigned char> ret(dataTotalCnt * sizeof(std::int32_t));
+            memcpy(&ret[0], &data[0], dataTotalCnt * sizeof(std::int64_t));
+        }
+            std::cout << "not support type"<<std::endl;
+        return std::vector<unsigned char>();
+        
+        
+    }
+    static bool compare(const std::vector<unsigned char>& a, const std::vector<unsigned char>& b)
+    {
+        if (a.size()!=b.size())
+        {
+            return false;
+        }
+        for (int i = 0; i < a.size(); i++)
+        {
+            if (a[i]!=b[i])
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+int test_list_weight()
+{
+    std::string path0 = "../../../../models/opencv_encoder.onnx";
+    std::string path1 = "../../../../models/ncnn_encoder.onnx";
+    onnx::ModelProto model_ocv, model_ncnn;
+    bool read0 = read_proto_from_binary(path0.c_str(), &model_ocv);
+    bool read1 = read_proto_from_binary(path1.c_str(), &model_ncnn);
+    if (!(read0 && read1))
+    {
+        std::cout << "load error." << std::endl;
+        return -1;
+    }
+    std::cout << model_ocv.ir_version() << std::endl;
+    std::cout << model_ncnn.ir_version() << std::endl;
+
+    const onnx::GraphProto& graph_ocv = model_ocv.graph();
+    int node_count0 = graph_ocv.node_size();
+    const onnx::GraphProto& graph_ncnn = model_ncnn.graph();
+    int node_count1 = graph_ncnn.node_size();
+
+    std::map<std::string, onnx::TensorProto> weights_ocv;
+    std::map<std::string, onnx::TensorProto> weights_ncnn;
+    for (int j = 0; j < graph_ocv.initializer_size(); j++)
+    {
+        const onnx::TensorProto& initializer = graph_ocv.initializer(j);
+        weights_ocv[initializer.name()] = initializer;
+    }
+    for (int j = 0; j < graph_ncnn.initializer_size(); j++)
+    {
+        const onnx::TensorProto& initializer = graph_ncnn.initializer(j);
+        weights_ncnn[initializer.name()] = initializer;
+    }
+    for (const auto& weight_ncnn : weights_ncnn)
+    {
+        const auto& weightName = weight_ncnn.first;
+        if (weights_ocv.count(weightName) != 0)
+        {
+            if (Tensor::type(weight_ncnn.second.data_type()) == Tensor::OnnxType::onnx_float32)
+            {
+                std::vector<unsigned char> opencv_onnx_data = Tensor::getData(weights_ocv.at(weightName));
+                std::vector<unsigned char> ncnn_onnx_data = Tensor::getData(weights_ncnn.at(weightName));
+                if (!Tensor::compare(opencv_onnx_data, ncnn_onnx_data))
+                {
+                    std::cout << "not the same: " << weightName<<std::endl;
+                }
+                else
+                {
+                    //std::cout << opencv_onnx_data .size() << " weightName: " << weightName << std::endl;
+                }
+            }
+        }
+    }
+
+
+
+
+    //for (size_t i = 0; i < graph_ocv.node_size(); i++)
+    //{
+    //    const onnx::NodeProto& node = graph_ocv.node(i);
+    //    const std::string nodeName = node.name();
+    //    const std::string& op = node.op_type();
+    //    std::cout << nodeName << std::endl;
+    //}
+    //for (size_t i = 0; i < graph_ncnn.node_size(); i++)
+    //{
+    //    const onnx::NodeProto& node = graph_ncnn.node(i);
+    //    const std::string nodeName = node.name();
+    //    const std::string& op = node.op_type();
+    //    std::cout << nodeName << std::endl;
+    //}
+
+    return 0;
+}
 
 int main()
-{ 
-    if (0)
+{
+    return test_list_weight();
+    if (1)
     {
         const char* onnxpb = "../../../../models/ncnn_encoder.onnx";
         const char* ncnn_prototxt = "../../../../models/ncnnEncoder.param";
@@ -6455,6 +6644,7 @@ int main()
         const char* ncnn_modelbin = "../../../../models/ncnnEncoderBeginning.bin";
         convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
     }
-    test_beginning_forward("../../../../models/ncnnEncoderBeginning.param", "../../../../models/ncnnEncoderBeginning.bin");
+    //test_beginning_forward("../../../../models/ncnnEncoderBeginning.param", "../../../../models/ncnnEncoderBeginning.bin");
+    test_forward("../../../../models/ncnnEncoder.param", "../../../../models/ncnnEncoder.bin");
     return 0;
 }
