@@ -1644,7 +1644,7 @@ namespace sam2
 	class Sam2
 	{
 	public:
-		Sam2(const std::filesystem::path& ncnnEncoderBeginningParamPath, const std::filesystem::path& ncnnEncoderBeginningBinPath,
+		Sam2(
 			const std::filesystem::path& ncnnEncoderParamPath, const std::filesystem::path& ncnnEncoderBinPath, 
 			const std::filesystem::path& onnxDecoderPath);
 		~Sam2();
@@ -1652,9 +1652,7 @@ namespace sam2
 		bool inputAnchor();
         cv::Size oringalSize;
 	private:
-		ncnn::Net encoderBeginningNet;
 		ncnn::Net encoderNet;
-		std::optional<ncnn::Extractor> ex_encoderBeginning;
 		std::optional<ncnn::Extractor> ex_encoder;
         std::optional < cv::dnn::Net> positionDecoderNet;
 		cv::Mat high_res_feats_0;
@@ -1663,20 +1661,9 @@ namespace sam2
 	};
 
 	Sam2::Sam2(
-		const std::filesystem::path& ncnnEncoderBeginningParamPath, const std::filesystem::path& ncnnEncoderBeginningBinPath, 
 		const std::filesystem::path& ncnnEncoderParamPath, const std::filesystem::path& ncnnEncoderBinPath, 
 		const std::filesystem::path& onnxDecoderPath)
 	{
-		if (!std::filesystem::exists(ncnnEncoderBeginningParamPath))
-		{
-			LOG_ERR_OUT << "not found : " << ncnnEncoderBeginningParamPath;
-			return;
-		}
-		if (!std::filesystem::exists(ncnnEncoderBeginningBinPath))
-		{
-			LOG_ERR_OUT << "not found : " << ncnnEncoderBeginningBinPath;
-			return;
-		}
 		if (!std::filesystem::exists(ncnnEncoderParamPath))
 		{
 			LOG_ERR_OUT << "not found : " << ncnnEncoderParamPath;
@@ -1692,12 +1679,6 @@ namespace sam2
             LOG_ERR_OUT << "not found : " << onnxDecoderPath;
             return;
         }
-		encoderBeginningNet.opt.use_vulkan_compute = true;
-		if (encoderBeginningNet.load_param(ncnnEncoderBeginningParamPath.string().c_str()))
-			exit(-1);
-		if (encoderBeginningNet.load_model(ncnnEncoderBeginningBinPath.string().c_str()))
-			exit(-1);
-		ex_encoderBeginning = encoderBeginningNet.create_extractor();
 		encoderNet.opt.use_vulkan_compute = true;
 		if (encoderNet.load_param(ncnnEncoderParamPath.string().c_str()))
 			exit(-1);
@@ -1712,7 +1693,7 @@ namespace sam2
 		high_res_feats_0 = cv::Mat();
 		high_res_feats_1 = cv::Mat();
 		image_embed = cv::Mat();
-		if (ex_encoderBeginning == std::nullopt|| ex_encoder == std::nullopt)
+		if (ex_encoder == std::nullopt)
 		{
 			LOG_ERR_OUT << "not innitialed!";
 			return false;
@@ -1725,23 +1706,15 @@ namespace sam2
 		const float norm_vals[3] = { 0.00390625 / 0.229, 0.00390625 / 0.224, 0.00390625 / 0.225 };
 		imgBlob.substract_mean_normalize(mean_vals, norm_vals);
         //ncnnHelper::printBlob(imgBlob);
-		ncnn::Mat encoderBeginningOut;
 		ncnn::Mat high_res_feats_0_blob;
 		ncnn::Mat high_res_feats_1_blob;
 		ncnn::Mat imgEmbedding_blob;
-		{
-			auto start1 = std::chrono::steady_clock::now();
-			ex_encoderBeginning->input("image", imgBlob);
-			ex_encoderBeginning->extract("/image_encoder/trunk/Add_1_output_0", encoderBeginningOut);
-			auto end1 = std::chrono::steady_clock::now();
-			auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
-			std::cout << "beginning Elapsed time: " << elapsed1 * 0.001 << " s" << std::endl;
-		}
+
 
 
 		{
 			auto start1 = std::chrono::steady_clock::now();
-			ex_encoder->input("/image_encoder/trunk/Add_1_output_0", encoderBeginningOut);
+			ex_encoder->input("image", imgBlob);
 			ex_encoder->extract("high_res_feats_0", high_res_feats_0_blob);
 			ex_encoder->extract("high_res_feats_1", high_res_feats_1_blob);
 			ex_encoder->extract("/Transpose_1_output_0", imgEmbedding_blob);
@@ -1749,17 +1722,17 @@ namespace sam2
 			auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
 			std::cout << "encoder Elapsed time: " << elapsed1*0.001 << " s" << std::endl;
 
-            ncnnHelper::printBlob(high_res_feats_0_blob);
-            ncnnHelper::printBlob(high_res_feats_1_blob);
-            ncnnHelper::printBlob(imgEmbedding_blob);
+            //ncnnHelper::printBlob(high_res_feats_0_blob);
+            //ncnnHelper::printBlob(high_res_feats_1_blob);
+            //ncnnHelper::printBlob(imgEmbedding_blob);
 
             ocvHelper::convertNcnnBlobToOpencv(high_res_feats_0_blob, { 1,32,256,256 }, high_res_feats_0);
             ocvHelper::convertNcnnBlobToOpencv(high_res_feats_1_blob, { 1, 64, 128, 128 }, high_res_feats_1);
             ocvHelper::convertNcnnBlobToOpencv(imgEmbedding_blob, { 1, 256, 64, 64, }, image_embed);
 		}
-        ncnnHelper::printBlob(high_res_feats_0_blob);
-        ncnnHelper::printBlob(high_res_feats_1_blob);
-        ncnnHelper::printBlob(imgEmbedding_blob);
+        //ncnnHelper::printBlob(high_res_feats_0_blob);
+        //ncnnHelper::printBlob(high_res_feats_1_blob);
+        //ncnnHelper::printBlob(imgEmbedding_blob);
 		return true;
 	}
 
@@ -1853,7 +1826,7 @@ int test_sam2()
 
 
 
-	sam2::Sam2 sam2Ins("../models/ncnnEncoderBeginning.param","../models/ncnnEncoderBeginning.bin","../models/ncnnEncoder.param","../models/ncnnEncoder.bin", "../models/opencv_decoder.onnx");
+	sam2::Sam2 sam2Ins("../models/ncnnEncoder.param","../models/ncnnEncoder.bin", "../models/opencv_decoder.onnx");
 	sam2Ins.inputImage("../a.bmp");
     sam2Ins.inputAnchor();
 	return 0;

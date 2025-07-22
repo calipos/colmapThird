@@ -20,39 +20,9 @@ inferShapes = False
 ir_version = 10
 # shared_input = ['/image_encoder/trunk/Add_1_output_0']
 shared_out = [ 
-    '/image_encoder/trunk/blocks.0/attn/MatMul_output_0',
-    '/image_encoder/trunk/blocks.0/mlp/layers.1/MatMul_output_0',
-    '/image_encoder/trunk/blocks.1/attn/qkv/MatMul_output_0',
-    '/image_encoder/trunk/blocks.1/attn/MatMul_output_0',
-    '/image_encoder/trunk/blocks.1/attn/MatMul_1_output_0',
-    '/image_encoder/trunk/blocks.1/attn/proj/MatMul_output_0',
-    '/image_encoder/trunk/blocks.1/mlp/act/Mul_output_0',
 
-
-    '/image_encoder/trunk/blocks.2/attn/qkv/MatMul_output_0',
-    '/image_encoder/trunk/blocks.2/attn/MatMul_output_0',
-    '/image_encoder/trunk/blocks.2/attn/MatMul_1_output_0',
-    '/image_encoder/trunk/blocks.2/attn/proj/MatMul_output_0',
-    '/image_encoder/trunk/blocks.2/mlp/act/Mul_output_0',
-
-
-    '/image_encoder/trunk/blocks.3/attn/MatMul_output_0',
-    '/image_encoder/trunk/blocks.6/attn/MatMul_output_0',
-    '/image_encoder/trunk/blocks.9/attn/MatMul_output_0',
-    '/image_encoder/trunk/blocks.12/attn/MatMul_output_0',
-    '/image_encoder/trunk/blocks.15/attn/MatMul_output_0',
-    '/image_encoder/trunk/blocks.18/attn/MatMul_output_0',
-    '/image_encoder/trunk/blocks.21/attn/MatMul_output_0',
-    '/image_encoder/trunk/blocks.21/Add_3_output_0',    #1.049041748046875e-05 
-    '/image_encoder/trunk/blocks.22/Add_3_output_0',
-    '/image_encoder/trunk/blocks.23/Add_output_0',
-    '/image_encoder/trunk/blocks.23/Add_1_output_0',
-    '/image_encoder/trunk/blocks.24/Add_3_output_0',    
-    '/image_encoder/trunk/blocks.25/Add_3_output_0',    
-    '/image_encoder/trunk/blocks.26/Add_3_output_0',    
-    '/image_encoder/trunk/blocks.27/Add_3_output_0',
-    '/image_encoder/trunk/blocks.28/Add_3_output_0',    #0.008251190185546875
-    '/image_encoder/trunk/blocks.41/Add_3_output_0',    #0.008251190185546875
+    # '/image_encoder/trunk/blocks.33/attn/Transpose_3_output_0',
+    # '/image_encoder/trunk/Transpose_4_output_0',
 
     # '/Transpose_1_output_0'
  
@@ -62,7 +32,6 @@ shared_out = [
 
 ]
 
-midpoint=['/image_encoder/trunk/blocks.0/Add_3_output_0']
 targetParamPath = 'models/ncnn_encoder.onnx'
 encoderBeginnngPath = 'models/ncnn_encoder_beginnng.onnx'
 image0 = np.ones([3, 1024, 1024]).astype(np.float32)
@@ -628,8 +597,9 @@ def deleteLayer(layernames,paramPath=None):
     graph = gs.import_onnx(model)
     for name in layernames:
         pick = [node for node in graph.nodes if node.name == name]
-        if len(pick)==0:
-            continue
+        if len(pick) != 1:
+            print(name)
+            assert len(pick) == 1
         remove_node = pick[0]
         if remove_node.op == 'Squeeze':
             output_node = remove_node.o(0)
@@ -863,11 +833,6 @@ def convertOpencvOnnxToNcnn():
         'nextNodes': ['/image_encoder/trunk/blocks.8/Transpose_1'], 'targetShape': [1,576, 64,64]}
     insertReshape['/image_encoder/trunk/blocks.8/Transpose_1'] = {
         'nextNodes': ['/image_encoder/trunk/blocks.8/Add_4'], 'targetShape': [4096, 576]}
-
-    # insertReshape['/image_encoder/trunk/blocks.21/Add_3'] = {
-    #     'nextNodes': ['/image_encoder/trunk/blocks.22/norm1/LayerNormalization', '/image_encoder/trunk/blocks.22/Add_2'], 'targetShape': [1,64,64,576]}
-
-
     insertReshape['/image_encoder/trunk/blocks.44/attn/Transpose']= {
         'nextNodes': ['/image_encoder/trunk/blocks.44/attn/pool/MaxPool'], 'targetShape': [18432,1,16,16]}
     insertReshape['/image_encoder/trunk/blocks.44/attn/pool/MaxPool']= {
@@ -889,14 +854,14 @@ def convertOpencvOnnxToNcnn():
 
 # --------------------------------
     binaryOperationConst = {}    
-    # binaryOperationConst['/image_encoder/trunk/blocks.0/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.0/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.1/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.1/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.2/attn/Mul_2'] = {
-    #     'constName': '/image_encoder/trunk/blocks.2/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
-    # binaryOperationConst['/image_encoder/trunk/blocks.3/attn/Mul_1'] = {
-    #     'constName': '/image_encoder/trunk/blocks.3/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.0/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.0/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.1/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.1/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.2/attn/Mul_2'] = {
+        'constName': '/image_encoder/trunk/blocks.2/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
+    binaryOperationConst['/image_encoder/trunk/blocks.3/attn/Mul_1'] = {
+        'constName': '/image_encoder/trunk/blocks.3/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
     binaryOperationConst['/image_encoder/trunk/blocks.4/attn/Mul_1'] = {
         'constName': '/image_encoder/trunk/blocks.4/attn/Sqrt_1_output_0', 'value': [0.11785113019775792073]}
     binaryOperationConst['/image_encoder/trunk/blocks.5/attn/Mul_1'] = {
@@ -989,25 +954,29 @@ def convertOpencvOnnxToNcnn():
 
     modifyBinaryOperationConst(binaryOperationConst)
 # --------------------------------
-    ncnnShapeSqueezeFlag(['/image_encoder/neck/convs.3/conv/Conv', '/image_encoder/neck/convs.2/conv/Conv'])
+    ncnnShapeSqueezeFlag([
+        '/image_encoder/neck/convs.3/conv/Conv', 
+        '/image_encoder/neck/convs.2/conv/Conv',
+        '/image_encoder/neck/convs.1/conv/Conv', 
+        '/image_encoder/neck/convs.0/conv/Conv'])
 # --------------------------------
     deleteLayer([
                  '/image_encoder/trunk/blocks.0/attn/Squeeze_2',
                  '/image_encoder/trunk/blocks.0/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.0/attn/Squeeze', 
-                #  '/image_encoder/trunk/blocks.0/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.0/attn/Mul_2',
                  '/image_encoder/trunk/blocks.1/attn/Squeeze_2',
                  '/image_encoder/trunk/blocks.1/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.1/attn/Squeeze',
-                #  '/image_encoder/trunk/blocks.1/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.1/attn/Mul_2',
                  '/image_encoder/trunk/blocks.2/attn/Squeeze',
                  '/image_encoder/trunk/blocks.2/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.2/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.2/attn/Mul_3',
+                 '/image_encoder/trunk/blocks.2/attn/Mul_3',
                  '/image_encoder/trunk/blocks.3/attn/Squeeze',
                  '/image_encoder/trunk/blocks.3/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.3/attn/Squeeze_2',
-                #  '/image_encoder/trunk/blocks.3/attn/Mul_2',
+                 '/image_encoder/trunk/blocks.3/attn/Mul_2',
                  '/image_encoder/trunk/blocks.4/attn/Squeeze',
                  '/image_encoder/trunk/blocks.4/attn/Squeeze_1',
                  '/image_encoder/trunk/blocks.4/attn/Squeeze_2',
@@ -1353,7 +1322,7 @@ def convertOpencvOnnxToNcnn():
     reshapeAndtargetShape['/image_encoder/trunk/blocks.27/Reshape_1']= [16*16*16, 576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.27/attn/Reshape']=[ 16, 256, 24, 72]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.27/attn/Reshape_1']= [16*16*16, 576]
-    reshapeAndtargetShape['/image_encoder/trunk/blocks.27/Reshape_2']= [4, 16, 4, 16*576]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.27/Reshape_2']= [4, 4, 16, 16*576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.27/Reshape_3']= [16*16*16, 576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.28/Reshape']= [4, 16, 4, 16*576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.28/Reshape_1']= [16*16*16, 576]
@@ -1387,7 +1356,7 @@ def convertOpencvOnnxToNcnn():
     reshapeAndtargetShape['/image_encoder/trunk/blocks.32/Reshape_3'] = [64*64, 576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.33/Reshape'] = [4, 16, 4, 16*576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.33/Reshape_1'] = [16*16*16, 576]
-    reshapeAndtargetShape['/image_encoder/trunk/blocks.33/attn/Reshape'] = [16, 256, 24, 72]
+    reshapeAndtargetShape['/image_encoder/trunk/blocks.33/attn/Reshape'] = [1, 4096, 24, 72]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.33/attn/Reshape_1'] = [16*16*16, 576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.33/Reshape_2'] = [4, 4, 16, 16*576]
     reshapeAndtargetShape['/image_encoder/trunk/blocks.33/Reshape_3'] = [64*64, 576]
@@ -1702,6 +1671,7 @@ def convertOpencvOnnxToNcnn():
     for i in range(len(shared_out)):
         print(shared_out[i])
         print(pointCoords[i].shape) 
+        print(pointCoords[i]) 
         print(" ")
     return pointCoords
 
@@ -1911,110 +1881,28 @@ def test_maxpool():
 
 if __name__=='__main__':
 
-
-
+    print(
+        '需要先通过sam2_onnx_adaptor.py 把sam2_hiera_large_encoder.onnx转成opencv_encoder.onnx,'
+        '这一步去除掉里面ncnn不支持的gather,cast等算子',
+        '再通过当前py把opencv_encoder.onnx转成ncnn_encoder.onnx,修改成ncnn支持的通道特征',
+        '最后通过colmapThird/ncnn-20250503/tools/onnx/onnx2ncnn这个工程,转成ncnn需要的模型文件')
+    exit(0)
 
     # test_matmul()
     # test_slice()
     # test_conv()
     # test_maxpool()
     # exit(0)
-    onnxParamPath='models/opencv_encoder.onnx'
+    onnxParamPath = 'models/opencv_encoder.onnx'
     if os.path.exists(onnxParamPath):
         # test_total_forward()
         # exit(0))
 
         a = test_forward()
         netOut = convertOpencvOnnxToNcnn()
-        '''
-        cut_subgraph(targetParamPath,
-                 ['image'],
-                 ['/image_encoder/trunk/blocks.0/Add_2_output_0'],
-                 'models/1_encoder.onnx')
-        cut_subgraph('models/opencv_encoder.onnx',
-                 ['/image_encoder/trunk/blocks.0/Add_2_output_0'],
-                 ['/image_encoder/trunk/blocks.0/Add_3_output_0'],
-                 'models/2_encoder.onnx')
-        cut_subgraph(targetParamPath,
-                 ['/image_encoder/trunk/blocks.0/Add_3_output_0'],
-                 ['/image_encoder/trunk/blocks.23/Add_output_0'],
-                 'models/3_encoder.onnx')        
-        cut_subgraph('models/opencv_encoder.onnx',
-                 ['/image_encoder/trunk/blocks.23/Add_output_0'],
-                 ['/image_encoder/trunk/blocks.23/Add_1_output_0'],
-                 'models/4_encoder.onnx')
-        cut_subgraph(targetParamPath,
-                    ['/image_encoder/trunk/blocks.23/Add_1_output_0'],
-                    ['/image_encoder/trunk/blocks.24/Add_2_output_0'],
-                    'models/5_encoder.onnx') 
-        cut_subgraph('models/opencv_encoder.onnx', 
-                    ['/image_encoder/trunk/blocks.24/Add_2_output_0'],
-                    ['/image_encoder/trunk/blocks.24/Add_3_output_0'],
-                    'models/6_encoder.onnx') 
-        cut_subgraph(targetParamPath,
-                    ['/image_encoder/trunk/blocks.24/Add_3_output_0'],
-                    ['/image_encoder/trunk/blocks.28/Add_3_output_0'],
-                    'models/7_encoder.onnx')
-       
-
-        session = onnxruntime.InferenceSession(
-            'models/1_encoder.onnx', providers=onnxruntime.get_available_providers())
-        datain = {}
-        datain[session.get_inputs()[0].name] = image0.reshape(
-            session.get_inputs()[0].shape)
-        netOut = session.run(
-            None, datain)
-        
-        session = onnxruntime.InferenceSession(
-            'models/2_encoder.onnx', providers=onnxruntime.get_available_providers())
-        datain = {}
-        datain[session.get_inputs()[0].name] = netOut[0].reshape(
-            session.get_inputs()[0].shape)
-        netOut = session.run(
-            None, datain)
-        
-        session = onnxruntime.InferenceSession(
-            'models/3_encoder.onnx', providers=onnxruntime.get_available_providers())
-        datain = {}
-        datain[session.get_inputs()[0].name] = netOut[0].reshape(
-            session.get_inputs()[0].shape)
-        netOut = session.run(
-            None, datain)
-        
-        session = onnxruntime.InferenceSession(
-            'models/4_encoder.onnx', providers=onnxruntime.get_available_providers())
-        datain = {}
-        datain[session.get_inputs()[0].name] = netOut[0].reshape(
-            session.get_inputs()[0].shape)
-        netOut = session.run(
-            None, datain)
-        
-        session = onnxruntime.InferenceSession(
-            'models/5_encoder.onnx', providers=onnxruntime.get_available_providers())
-        datain = {}
-        datain[session.get_inputs()[0].name] = netOut[0].reshape(
-            session.get_inputs()[0].shape)
-        netOut = session.run(
-            None, datain)
-
-        session = onnxruntime.InferenceSession(
-            'models/6_encoder.onnx', providers=onnxruntime.get_available_providers())
-        datain = {}
-        datain[session.get_inputs()[0].name] = netOut[0].reshape([1,64,64,576])
-        netOut = session.run(
-            None, datain)
-
-        session = onnxruntime.InferenceSession(
-            'models/7_encoder.onnx', providers=onnxruntime.get_available_providers())
-        datain = {}
-        datain[session.get_inputs()[0].name] = netOut[0].reshape([64*64,576])
-        netOut = session.run(
-            None, datain)
-'''
-
         for i in range(len(a)):
             assert a[i].size==netOut[i].size,print(a[i].shape,netOut[i].shape)
-            diff = a[i].reshape(-1)-netOut[i].reshape(-1)
+            diff = a[i].astype(np.float64).reshape(-1)-netOut[i].astype(np.float64).reshape(-1)
             print(shared_out[i],'\t',np.max(np.abs(diff)),np.mean(diff),np.std(diff))
             plt.plot(diff)  
             plt.savefig(str(i)+'.png')

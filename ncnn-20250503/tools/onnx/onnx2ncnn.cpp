@@ -3057,7 +3057,7 @@ int test_forward(const char* ncnnParamPath, const char* ncnnBinPath)
     ncnn::Mat out0;
     auto start1 = std::chrono::steady_clock::now();
     ex1.extract("/Transpose_1_output_0", out0);
-    //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_1", out1);
+    //ex1.extract("/image_encoder/trunk/blocks.41/Add_3_output_0", out0);
     //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_2", out2);
     auto end1 = std::chrono::steady_clock::now();
     auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
@@ -6629,19 +6629,12 @@ int test_list_weight()
 
 int main()
 {
-    return test_list_weight();
+    //return test_list_weight();
     if (1)
     {
         const char* onnxpb = "../../../../models/ncnn_encoder.onnx";
         const char* ncnn_prototxt = "../../../../models/ncnnEncoder.param";
         const char* ncnn_modelbin = "../../../../models/ncnnEncoder.bin";
-        convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
-    }
-    if (0)
-    {
-        const char* onnxpb = "../../../../models/ncnn_encoder_beginnng.onnx";
-        const char* ncnn_prototxt = "../../../../models/ncnnEncoderBeginning.param";
-        const char* ncnn_modelbin = "../../../../models/ncnnEncoderBeginning.bin";
         convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
     }
     //test_beginning_forward("../../../../models/ncnnEncoderBeginning.param", "../../../../models/ncnnEncoderBeginning.bin");
