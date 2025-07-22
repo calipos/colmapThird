@@ -1,3 +1,4 @@
+import struct
 import sys
 import numpy as np
 import onnx
@@ -29,9 +30,14 @@ shared_out = [
     ]
 checkmodel = True
 inferShapes = True
+# point_coords = np.array(
+#     [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
+# point_labels = np.array([[1, 1,1,1,-1,1]]).astype(np.float32)
+
 point_coords = np.array(
-    [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
-point_labels = np.array([[1, 1,1,1,-1,1]]).astype(np.float32)
+    [[[1399./1920*1024., 586./1920*1024]]]).astype(np.float32)
+point_labels = np.array([[1]]).astype(np.float32)
+
 ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
         [[[0., 0.]]]).astype(np.float32)), axis=1)/1024.
 Unsqueeze_8_output_0 = np.expand_dims(np.concatenate(
@@ -1277,6 +1283,7 @@ def convert_sam2_decoder_point_label():
         pointCoords = session.run(
             None, datain)
         for i in range(len(shared_out)):
+            print(shared_out[i])
             print(pointCoords[i].shape)
             print(pointCoords[i])
         return
@@ -1354,10 +1361,34 @@ def test_dynamic_reshape():
     print(out[0])
     print(out[0].shape)
 
+
+def readBlob(path):
+    with open(path, 'rb') as file:
+        dims = struct.unpack('I', file.read(4))[0] 
+        shape=[]
+        total = 1
+        for i in range(dims):
+            s = struct.unpack('I', file.read(4))[0]
+            shape.append(s)
+            total*=s
+        d = np.zeros(total)
+        for i in range(total):
+            float_num = struct.unpack('f', file.read(4))[0]  
+            d[i] = float_num
+        return d.astype(np.float32).reshape(shape)
+
+
 if __name__=='__main__':
-    convert_sam2_hiera_large_encoder_to_opencvOnnx()
-    # test_forward()
-    convert_sam2_decoder_point_label()
+
+    high_res_feats_0 = readBlob('D:/repo/colmapThird/high_res_feats_0_blob.dat')
+    high_res_feats_1 = readBlob('D:/repo/colmapThird/high_res_feats_1_blob.dat')
+    image_embed = readBlob('D:/repo/colmapThird/imgEmbedding_blob.dat')
+    image_embed = image_embed.reshape(1, 256, 64, 64)
+
+    if True:
+        # convert_sam2_hiera_large_encoder_to_opencvOnnx()
+        test_forward()
+    # convert_sam2_decoder_point_label()
     # test_dynamic_reshape()
 
 

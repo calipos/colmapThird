@@ -127,18 +127,82 @@ namespace sam2
         }
         void printBlob(const ncnn::Mat& out)
         {
-            cv::dnn::MatShape shape = getBlobShape(out);
-            std::cout << "shape= ";
-            for (size_t i = 0; i < shape.size(); i++)
+            ncnn::Mat shape = out.shape();
+            std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << ")  dim=" << out.dims << std::endl;
+            int cstep = out.cstep;
+            int dstep = out.cstep;
+            const float* data = (float*)out.data;
+            const int elemSize = out.elemsize;
+            if (shape.d > 1) dstep /= shape.d;
+            for (int c = 0; c < shape.c; c++)
             {
-                std::cout << shape[i] << ", ";
+                for (int d = 0; d < shape.d; d++)
+                {
+                    data = (float*)out.data + d * dstep + c * cstep;
+                    for (int h = 0; h < shape.h; ++h)
+                    {
+                        const float* data2 = data + h * shape.w;
+                        std::cout << "[" << c << "," << d << "," << h << ":];  ";
+                        for (int w = 0; w < shape.w; ++w)
+                        {
+                            std::cout << data2[w] << " ";
+                            if (w == 2)
+                            {
+                                int newW = shape.w - 4;
+                                if (newW > w)
+                                {
+                                    std::cout << " ... ";
+                                    w = newW;
+                                }
+                            }
+                        }
+                        std::cout << std::endl;
+                        if (h == 2)
+                        {
+                            int newH = shape.h - 4;
+                            if (newH > h)
+                            {
+                                std::cout << " ... " << std::endl;
+                                h = newH;
+                            }
+                        }
+                    }
+                    if (d == 2)
+                    {
+                        int newD = shape.d - 4;
+                        if (newD > d)
+                        {
+                            std::cout << " ... " << std::endl;
+                            d = newD;
+                        }
+                    }
+                    else
+                    {
+                        std::cout << std::endl;
+                    }
+                }
+                if (c == 2)
+                {
+                    int newC = shape.c - 4;
+                    if (newC > c)
+                    {
+                        std::cout << " ... " << std::endl;
+                        c = newC;
+                    }
+                }
             }
-            std::cout << std::endl;
+        }
+        void writeBlob(const std::string& path, const ncnn::Mat& out)
+        {
+            std::fstream fout(path, std::ios::out | std::ios::binary);
+            cv::dnn::MatShape shape = getBlobShape(out);
+            int dims = shape.size();
+            fout.write((char*)&dims, sizeof(int));
+            fout.write((char*)&shape[0], dims * sizeof(int));
             std::vector<int>denominators = getDenominators(shape);
-
             int cstep = out.cstep;
             int dstep = 0;
-            if (shape.size()==4)
+            if (shape.size() == 4)
             {
                 dstep = shape[2] * shape[3];
             }
@@ -147,34 +211,10 @@ namespace sam2
             {
                 total *= shape[c];
             }
-            int lineCnt = shape.back();
-            bool slashN = true;
-            int dotCount = 0;
-            int dotCountMax = 10;
             for (int i = 0; i < total; i++)
             {
-                if (i % lineCnt == 0 && i > 0 && slashN)
-                {
-                    std::cout << std::endl;
-                }
                 std::vector<int>pos = getPos(i, denominators);
-                int showFlag = 0;
-                for (size_t j = 0; j < shape.size(); j++)
                 {
-                    if (shape[j] > 10 && (pos[j] == 4 || pos[j] == (shape[j] - 4)))
-                    {
-                        showFlag = 1;
-                        break;
-                    }
-                    if (shape[j] > 10 && pos[j] > 4 && pos[j] < (shape[j] - 4))
-                    {
-                        showFlag = 2;
-                        break;
-                    }
-                }
-                if (showFlag == 0)
-                {
-                    dotCount = 0;
                     int c = 0;
                     int d = 0;
                     int h = 0;
@@ -201,26 +241,12 @@ namespace sam2
                     {
                         w = pos[0];
                     }
-                    float*data = (float*)out.data + d * dstep + c * cstep;
+                    float* data = (float*)out.data + d * dstep + c * cstep;
                     const float* data2 = data + h * out.w;
-                    std::cout << data2[w] << " ";
-                    slashN = true;
-                }
-                else if (showFlag == 1)
-                {
-                    if (dotCount < dotCountMax)
-                    {
-                        std::cout << " ... ";
-                        dotCount += 1;
-                    }
-                    slashN = true;
-                }
-                else if (showFlag == 2)
-                {
-                    slashN = false;
+                    fout.write((char*)data2, sizeof(float));
                 }
             }
-            std::cout << std::endl;
+            fout.close();
             return;
         }
     }
@@ -602,7 +628,7 @@ namespace sam2
         public:
             dtype* data{ nullptr };
         };
-        bool generTestBlob(cv::Mat& blob, const cv::dnn::MatShape& shape, const OnnxType& type = OnnxType::onnx_float32)
+        bool generDnnBlob(cv::Mat& blob, const cv::dnn::MatShape& shape, const OnnxType& type = OnnxType::onnx_float32)
         {
             switch (type)
             {
@@ -738,48 +764,37 @@ namespace sam2
             }
             std::cout << std::endl;
             int lineCnt = shape.back();
-            bool slashN = true;
-            int dotCount = 0;
-            int dotCountMax = 10;
+            bool slashN = false;
             for (int i = 0; i < total; i++)
             {
-                if (i % lineCnt == 0 && i > 0 && slashN)
-                {
-                    std::cout << std::endl;
-                }
-                std::vector<int>pos = getPos(i, denominators);
                 int showFlag = 0;
+                std::vector<int>pos = getPos(i, denominators);
                 for (size_t j = 0; j < shape.size(); j++)
                 {
                     if (shape[j] > 10 && (pos[j] == 4 || pos[j] == (shape[j] - 4)))
                     {
-                        showFlag = 1;
+                        showFlag = 1;//...
                         break;
                     }
                     if (shape[j] > 10 && pos[j] > 4 && pos[j] < (shape[j] - 4))
                     {
-                        showFlag = 2;
+                        showFlag = 2;//omit
                         break;
                     }
                 }
                 if (showFlag == 0)
                 {
-                    dotCount = 0;
                     std::cout << ((float*)blob.data)[i] << " ";
-                    slashN = true;
+                    slashN = false;
                 }
-                else if (showFlag == 1)
+                else if (showFlag == 1&& slashN==false)
                 {
-                    if (dotCount < dotCountMax)
-                    {
-                        std::cout << " ... ";
-                        dotCount += 1;
-                    }
+                    std::cout << " ... ";
                     slashN = true;
                 }
                 else if (showFlag == 2)
                 {
-                    slashN = false;
+                    continue;
                 }
             }
             std::cout << std::endl;
@@ -1212,7 +1227,7 @@ namespace dnn
     public:
         dtype* data{ nullptr };
     };
-    bool generTestBlob(cv::Mat& blob, const cv::dnn::MatShape& shape, const OnnxType& type = OnnxType::onnx_float32)
+    bool generDnnBlob(cv::Mat& blob, const cv::dnn::MatShape& shape, const OnnxType& type = OnnxType::onnx_float32)
     {
         switch (type)
         {
@@ -1413,7 +1428,7 @@ namespace dnn
     int test_dynamic_reshape()
     {
         cv::Mat input;
-        generTestBlob(input, { 1, 3,2 });
+        generDnnBlob(input, { 1, 3,2 });
         float* p = (float*)input.data;
         p[0] = 1;
         p[1] = 2;
@@ -1531,15 +1546,15 @@ namespace dnn
         cv::Mat point_label_blob;
         cv::Mat inputArrayPlus6;
         generPositionBlob(point_coord, point_label, point_coord_blob, point_label_blob, originalImgSize);
-        generTestBlob(inputArrayPlus6, { 1,static_cast<int>(point_coord.size()) + 6,1 });
+        generDnnBlob(inputArrayPlus6, { 1,static_cast<int>(point_coord.size()) + 6,1 });
         cv::Mat mask_input;
-        generTestBlob(mask_input, { 1, 1, 1024 / 4, 1024 / 4 });
+        generDnnBlob(mask_input, { 1, 1, 1024 / 4, 1024 / 4 });
         mask_input.setTo(0);
         cv::Mat has_mask_input;
-        generTestBlob(has_mask_input, { 1 });
+        generDnnBlob(has_mask_input, { 1 });
         has_mask_input.setTo(1);
         cv::Mat orig_im_size;
-        generTestBlob(orig_im_size, { 2 }, OnnxType::onnx_int32);
+        generDnnBlob(orig_im_size, { 2 }, OnnxType::onnx_int32);
         ((int*)orig_im_size.data)[0] = originalImgSize.width;
         ((int*)orig_im_size.data)[1] = originalImgSize.height;
         cv::Mat mask;
@@ -1648,8 +1663,10 @@ namespace sam2
 			const std::filesystem::path& ncnnEncoderParamPath, const std::filesystem::path& ncnnEncoderBinPath, 
 			const std::filesystem::path& onnxDecoderPath);
 		~Sam2();
-		bool inputImage(const std::filesystem::path& imgPath); 
-		bool inputAnchor();
+        bool inputImage(const std::filesystem::path& imgPath);
+        bool inputImage(const cv::Mat& img);
+        bool inputHint();
+        bool inputHint(const std::vector<std::pair<int, cv::Point2i>>& hint, cv::Mat& mask);
         cv::Size oringalSize;
 	private:
 		ncnn::Net encoderNet;
@@ -1699,44 +1716,53 @@ namespace sam2
 			return false;
 		}
 		cv::Mat img = cv::imread(imgPath.string());
-		oringalSize = img.size();
-		const int netImgSize = 1024;
-		ncnn::Mat imgBlob = ncnn::Mat::from_pixels_resize(img.data, ncnn::Mat::PIXEL_BGR2RGB, img.cols, img.rows, netImgSize, netImgSize);
-		const float mean_vals[3] = { 0.485 * 256.,0.456 * 256., 0.406 * 256. };
-		const float norm_vals[3] = { 0.00390625 / 0.229, 0.00390625 / 0.224, 0.00390625 / 0.225 };
-		imgBlob.substract_mean_normalize(mean_vals, norm_vals);
+        return inputImage(img);
+	}
+    bool Sam2::inputImage(const cv::Mat& img)
+    {
+        if (img.empty())
+        {
+            LOG_ERR_OUT << "empty img";
+            return false;
+        }
+        if (ex_encoder == std::nullopt)
+        {
+            LOG_ERR_OUT << "not innitialed!";
+            return false;
+        }
+        oringalSize = img.size();
+        const int netImgSize = 1024;
+        ncnn::Mat imgBlob = ncnn::Mat::from_pixels_resize(img.data, ncnn::Mat::PIXEL_BGR2RGB, img.cols, img.rows, netImgSize, netImgSize);
+        const float mean_vals[3] = { 0.485 * 256.,0.456 * 256., 0.406 * 256. };
+        const float norm_vals[3] = { 0.00390625 / 0.229, 0.00390625 / 0.224, 0.00390625 / 0.225 };
+        imgBlob.substract_mean_normalize(mean_vals, norm_vals);
         //ncnnHelper::printBlob(imgBlob);
-		ncnn::Mat high_res_feats_0_blob;
-		ncnn::Mat high_res_feats_1_blob;
-		ncnn::Mat imgEmbedding_blob;
-
-
-
-		{
-			auto start1 = std::chrono::steady_clock::now();
-			ex_encoder->input("image", imgBlob);
-			ex_encoder->extract("high_res_feats_0", high_res_feats_0_blob);
-			ex_encoder->extract("high_res_feats_1", high_res_feats_1_blob);
-			ex_encoder->extract("/Transpose_1_output_0", imgEmbedding_blob);
-			auto end1 = std::chrono::steady_clock::now();
-			auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
-			std::cout << "encoder Elapsed time: " << elapsed1*0.001 << " s" << std::endl;
-
+        ncnn::Mat high_res_feats_0_blob;
+        ncnn::Mat high_res_feats_1_blob;
+        ncnn::Mat imgEmbedding_blob;
+        {
+            auto start1 = std::chrono::steady_clock::now();
+            ex_encoder->input("image", imgBlob);
+            ex_encoder->extract("high_res_feats_0", high_res_feats_0_blob);
+            ex_encoder->extract("high_res_feats_1", high_res_feats_1_blob);
+            ex_encoder->extract("/Transpose_1_output_0", imgEmbedding_blob);
+            auto end1 = std::chrono::steady_clock::now();
+            auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+            std::cout << "encoder Elapsed time: " << elapsed1 * 0.001 << " s" << std::endl;
             //ncnnHelper::printBlob(high_res_feats_0_blob);
             //ncnnHelper::printBlob(high_res_feats_1_blob);
             //ncnnHelper::printBlob(imgEmbedding_blob);
-
             ocvHelper::convertNcnnBlobToOpencv(high_res_feats_0_blob, { 1,32,256,256 }, high_res_feats_0);
             ocvHelper::convertNcnnBlobToOpencv(high_res_feats_1_blob, { 1, 64, 128, 128 }, high_res_feats_1);
             ocvHelper::convertNcnnBlobToOpencv(imgEmbedding_blob, { 1, 256, 64, 64, }, image_embed);
-		}
-        //ncnnHelper::printBlob(high_res_feats_0_blob);
-        //ncnnHelper::printBlob(high_res_feats_1_blob);
-        //ncnnHelper::printBlob(imgEmbedding_blob);
-		return true;
-	}
+        }
+        ncnnHelper::writeBlob("../high_res_feats_0_blob.dat",high_res_feats_0_blob);
+        ncnnHelper::writeBlob("../high_res_feats_1_blob.dat",high_res_feats_1_blob);
+        ncnnHelper::writeBlob("../imgEmbedding_blob.dat",imgEmbedding_blob);
+        return true;
+    }
 
-	bool Sam2::inputAnchor()
+	bool Sam2::inputHint()
 	{
         if (positionDecoderNet == std::nullopt)
         {
@@ -1760,23 +1786,23 @@ namespace sam2
         }
 		//std::vector<cv::Vec2f>point_coord = { {10., 10.} ,{500., 400.},{200., 600.},{100., 300.},{200., 300.},{1,1} };
 		//std::vector<float>point_label = { 1,1,1,1,-1 ,1 };
-		std::vector<cv::Vec2f>point_coord = { {1131,611} };
+		std::vector<cv::Vec2f>point_coord = { {1399,586} };
 		std::vector<float>point_label = { 1 };
 		cv::Mat point_coord_blob;
 		cv::Mat point_label_blob;
 		cv::Mat inputArrayPlus6;
 		ocvHelper::generPositionBlob(point_coord, point_label, point_coord_blob, point_label_blob, oringalSize);
-        ocvHelper::generTestBlob(inputArrayPlus6, { 1,static_cast<int>(point_coord.size()) + 6,1 });
+        ocvHelper::generDnnBlob(inputArrayPlus6, { 1,static_cast<int>(point_coord.size()) + 6,1 });
 		cv::Mat mask_input;
-        ocvHelper::generTestBlob(mask_input, { 1, 1, 1024 / 4, 1024 / 4 });
+        ocvHelper::generDnnBlob(mask_input, { 1, 1, 1024 / 4, 1024 / 4 });
 		mask_input.setTo(0);
 		cv::Mat has_mask_input;
-        ocvHelper::generTestBlob(has_mask_input, { 1 });
+        ocvHelper::generDnnBlob(has_mask_input, { 1 });
 		has_mask_input.setTo(1);
 		cv::Mat orig_im_size;
-        ocvHelper::generTestBlob(orig_im_size, { 2 }, ocvHelper::OnnxType::onnx_int32);
-		((int*)orig_im_size.data)[0] = oringalSize.width;
-		((int*)orig_im_size.data)[1] = oringalSize.height;
+        ocvHelper::generDnnBlob(orig_im_size, { 2 }, ocvHelper::OnnxType::onnx_int32);
+		//((int*)orig_im_size.data)[0] = oringalSize.width;
+		//((int*)orig_im_size.data)[1] = oringalSize.height;
 		cv::Mat mask;
 		std::vector<float> iou_predictions;
 		{
@@ -1797,6 +1823,12 @@ namespace sam2
 			std::vector<cv::Mat> out;
 			auto start2 = std::chrono::steady_clock::now();
 			positionDecoderNet->forward(out, outLayersNames);
+
+            ocvHelper::printBlob(out[0]);
+            ocvHelper::printBlob(out[1]);
+            ocvHelper::printBlob(out[2]);
+            ocvHelper::printBlob(out[3]);
+
 			auto end2 = std::chrono::steady_clock::now();
 			auto elapsed2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - start2).count();
             LOG_OUT << "Elapsed time: " << elapsed2*0.001 << " s";
@@ -1809,15 +1841,145 @@ namespace sam2
 		}
 		return true;
 	}
+    bool Sam2::inputHint(const std::vector<std::pair<int, cv::Point2i>>& hint,cv::Mat&mask)
+    {
+        if (positionDecoderNet == std::nullopt)
+        {
+            LOG_ERR_OUT << "decoder not innitialed!";
+            return false;
+        }
+        if (high_res_feats_0.empty())
+        {
+            LOG_ERR_OUT << "high_res_feats_0 empty";
+            return false;
+        }
+        if (high_res_feats_1.empty())
+        {
+            LOG_ERR_OUT << "high_res_feats_1 empty";
+            return false;
+        }
+        if (image_embed.empty())
+        {
+            LOG_ERR_OUT << "image_embed empty";
+            return false;
+        }
+        if (hint.size()==0)
+        {
+            LOG_ERR_OUT << "hint empty";
+            return false;
+        }
+        std::vector<cv::Vec2f>point_coord(hint.size());
+        std::vector<float>point_label(hint.size());
+        for (size_t i = 0; i < hint.size(); i++)
+        {
+            point_coord[i][0] = hint[i].second.x;
+            point_coord[i][1] = hint[i].second.y;
+            point_label[i] = hint[i].first;
+            LOG_OUT << point_label[i] << " " << point_coord[i];
+        }
 
+        cv::Mat point_coord_blob;
+        cv::Mat point_label_blob;
+        cv::Mat inputArrayPlus6;
+        ocvHelper::generPositionBlob(point_coord, point_label, point_coord_blob, point_label_blob, oringalSize);
+        ocvHelper::generDnnBlob(inputArrayPlus6, { 1,static_cast<int>(point_coord.size()) + 6,1 });
+        cv::Mat mask_input;
+        ocvHelper::generDnnBlob(mask_input, { 1, 1, 1024 / 4, 1024 / 4 });
+        mask_input.setTo(0);
+        cv::Mat has_mask_input;
+        ocvHelper::generDnnBlob(has_mask_input, { 1 });
+        has_mask_input.setTo(1);
+        cv::Mat orig_im_size;
+        ocvHelper::generDnnBlob(orig_im_size, { 2 }, ocvHelper::OnnxType::onnx_int32);
+
+        std::vector<float> iou_predictions;
+        {
+            positionDecoderNet->setInput(high_res_feats_0, "high_res_feats_0");
+            positionDecoderNet->setInput(high_res_feats_1, "high_res_feats_1");
+            positionDecoderNet->setInput(image_embed, "image_embed");
+            positionDecoderNet->setInput(point_coord_blob, "/ScatterND_1_output_0");
+            positionDecoderNet->setInput(inputArrayPlus6, "inputArrayPlus6");
+            positionDecoderNet->setInput(point_label_blob, "/Unsqueeze_8_output_0");
+            positionDecoderNet->setInput(mask_input, "mask_input");
+            positionDecoderNet->setInput(has_mask_input, "has_mask_input");
+            //positionDecoderNet.setInput(orig_im_size, "orig_im_size");
+            std::vector<std::string> layersNames = positionDecoderNet->getLayerNames();
+            std::vector<std::string> unconnectedOutLayersNames = positionDecoderNet->getUnconnectedOutLayersNames();
+            std::vector<std::string> outLayersNames = {
+                    "/Reshape_12_output_0","/GreaterOrEqual_output_0","/iou_prediction_head/Sigmoid_output_0","/ArgMax_output_0"
+            };
+            std::vector<cv::Mat> out;
+            auto start2 = std::chrono::steady_clock::now();
+            positionDecoderNet->forward(out, outLayersNames);
+            auto end2 = std::chrono::steady_clock::now();
+            auto elapsed2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - start2).count();
+            LOG_OUT << "Elapsed time: " << elapsed2 * 0.001 << " s";
+            decoderTails(1080, 1920, out[0], out[1], out[2], out[3], mask, iou_predictions);
+            LOG_OUT << "done ";
+            cv::Mat asd2;
+            cv::threshold(mask, asd2, 0, 255, cv::THRESH_BINARY);
+            asd2.convertTo(mask, CV_8UC1);
+        }
+        return true;
+    }
 
 	Sam2::~Sam2()
 	{
 	}
 #endif
 }
+
+static cv::Mat gui_img;
+static cv::Mat gui_mask;
+static std::vector<std::pair<int, cv::Point2i>> gui_hint;
+static void sam2_onMouse(int event, int x, int y, int flags, void* sam2Ins)
+{
+    if (x >= 0 && x < gui_img.cols && y >= 0 && y < gui_img.rows)
+    {
+
+    }
+    if (event == cv::MouseEventTypes::EVENT_LBUTTONUP )
+    {
+        LOG_OUT <<"add  " << x << " " << y;
+        gui_hint.emplace_back(std::make_pair(1, cv::Point2i(x, y)));
+    }
+    if (event == cv::MouseEventTypes::EVENT_RBUTTONUP)
+    {
+        LOG_OUT << "minus  " << x << " " << y;
+        gui_hint.emplace_back(std::make_pair(-1, cv::Point2i(x, y)));
+    }
+    if (event == cv::MouseEventTypes::EVENT_LBUTTONUP || event == cv::MouseEventTypes::EVENT_RBUTTONUP)
+    {
+        gui_hint.clear();
+        gui_hint.emplace_back(std::make_pair(1, cv::Point2i(1399., 586.)));
+        ((sam2::Sam2*)sam2Ins)->inputHint(gui_hint, gui_mask);
+
+        cv::imwrite("../mask.png", gui_mask);
+        LOG_OUT << "done.";
+    }
+    
+    
+
+}
+int test_sam_gui()
+{
+    gui_hint.clear();
+    std::string imgPath= "../a.bmp";
+    gui_img = cv::imread(imgPath);;
+    sam2::Sam2 sam2Ins("../models/ncnnEncoder.param", "../models/ncnnEncoder.bin", "../models/opencv_decoder.onnx");
+    sam2Ins.inputImage(gui_img);
+    cv::imshow("image", gui_img);
+    cv::setMouseCallback("image", sam2_onMouse, &sam2Ins);
+    for (;;)
+    {
+        cv::waitKey(25);
+        //cv::imshow("image", img);
+    }
+    return 0;
+}
 int test_sam2()
 {
+    //return test_sam_gui();
     //dnn::test();
 
     //sam2::ncnnHelper::convertImgToMemFile("../a.bmp");
@@ -1828,6 +1990,6 @@ int test_sam2()
 
 	sam2::Sam2 sam2Ins("../models/ncnnEncoder.param","../models/ncnnEncoder.bin", "../models/opencv_decoder.onnx");
 	sam2Ins.inputImage("../a.bmp");
-    sam2Ins.inputAnchor();
+    sam2Ins.inputHint();
 	return 0;
 }
