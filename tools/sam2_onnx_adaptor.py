@@ -35,7 +35,7 @@ inferShapes = True
 # point_labels = np.array([[1, 1,1,1,-1,1]]).astype(np.float32)
 
 point_coords = np.array(
-    [[[1399./1920*1024., 586./1920*1024]]]).astype(np.float32)
+    [[[1399./1920*1024., 586./1080*1024]]]).astype(np.float32)
 point_labels = np.array([[1]]).astype(np.float32)
 
 ScatterND_1_output_0 = np.concatenate((point_coords, np.array(
