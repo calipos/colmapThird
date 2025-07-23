@@ -42,8 +42,7 @@ int test_bitmap()
 
 int test_incremental()
 {
-
-    //test_bitmap();
+    /// input img sort
     std::vector<image_t>incrementalImages = { 0,1,2,3,4 };
     std::filesystem::path dataPath = "../data2";
     std::map<Camera, std::vector<Image>> dataset = loadImageData(dataPath, ImageIntrType::SHARED_ALL);
@@ -66,6 +65,7 @@ int test_incremental()
             bool EstimateRet = EstimateTwoViewGeometryPose(camera1, image1, camera2, image2, &two_view_geometry);
             if (!EstimateRet)
             {
+                LOG_ERR_OUT << "EstimateTwoViewGeometryPose failed!";
                 return -1;
             }
 

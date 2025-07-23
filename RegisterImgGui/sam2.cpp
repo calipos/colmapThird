@@ -1734,6 +1734,7 @@ namespace sam2
             return;
         }
 		encoderNet.opt.use_vulkan_compute = true;
+        encoderNet.opt.num_threads = 8;
 		if (encoderNet.load_param(ncnnEncoderParamPath.string().c_str()))
 			exit(-1);
 		if (encoderNet.load_model(ncnnEncoderBinPath.string().c_str()))
@@ -1966,6 +1967,7 @@ namespace sam2
 
 static cv::Mat gui_img;
 static cv::Mat gui_mask;
+static cv::Mat gui_addWeight;
 static std::vector<std::pair<int, cv::Point2i>> gui_hint;
 static void sam2_onMouse(int event, int x, int y, int flags, void* sam2Ins)
 {
@@ -1983,10 +1985,25 @@ static void sam2_onMouse(int event, int x, int y, int flags, void* sam2Ins)
         LOG_OUT << "minus  " << x << " " << y;
         gui_hint.emplace_back(std::make_pair(-1, cv::Point2i(x, y)));
     }
+    if (event == cv::MouseEventTypes::EVENT_MBUTTONUP)
+    { 
+        LOG_OUT << "clear  ";
+        gui_hint.clear();
+        gui_img.copyTo(gui_addWeight);
+    }
     if (event == cv::MouseEventTypes::EVENT_LBUTTONUP || event == cv::MouseEventTypes::EVENT_RBUTTONUP)
     {
         ((sam2::Sam2*)sam2Ins)->inputHint(gui_hint, gui_mask);
-        cv::imwrite("../mask.png", gui_mask);
+        //cv::imwrite("../mask.png", gui_mask);
+
+        cv::Mat greenMask = cv::Mat::zeros(gui_mask.size(), CV_8UC1);
+        cv::Mat blueMask = cv::Mat::zeros(gui_mask.size(), CV_8UC1);
+        cv::Mat mask;
+        cv::merge(std::vector<cv::Mat>{ blueMask ,greenMask ,gui_mask }, mask);
+
+        float gamma = 0;
+        float maskWeight = 0.5;
+        cv::addWeighted(gui_img, maskWeight, mask, 1 - maskWeight, gamma, gui_addWeight);
         LOG_OUT << "done.";
     }
     
@@ -1998,14 +2015,15 @@ int test_sam_gui()
     gui_hint.clear();
     std::string imgPath= "../a.bmp";
     gui_img = cv::imread(imgPath);;
+    gui_img.copyTo(gui_addWeight);
     sam2::Sam2 sam2Ins("../models/ncnnEncoder.param", "../models/ncnnEncoder.bin", "../models/opencv_decoder.onnx");
     sam2Ins.inputImage(gui_img);
-    cv::imshow("image", gui_img);
+    cv::imshow("image", gui_addWeight);
     cv::setMouseCallback("image", sam2_onMouse, &sam2Ins);
     for (;;)
     {
         cv::waitKey(25);
-        //cv::imshow("image", img);
+        cv::imshow("image", gui_addWeight);
     }
     return 0;
 }
