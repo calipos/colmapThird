@@ -172,6 +172,10 @@
     <ClCompile Include="imgui_draw.cpp" />
     <ClCompile Include="imgui_impl_glfw.cpp" />
     <ClCompile Include="imgui_impl_opengl3.cpp" />
+    <ClCompile Include="imgui_listComponent.cpp" />
+    <ClCompile Include="imgui_process.cpp" />
+    <ClCompile Include="imgui_segment.cpp" />
+    <ClCompile Include="imgui_showImg.cpp" />
     <ClCompile Include="imgui_tables.cpp" />
     <ClCompile Include="imgui_widgets.cpp" />
     <ClCompile Include="incremental.cpp" />
@@ -209,6 +213,7 @@
     <ClInclude Include="estimate.h" />
     <ClInclude Include="essential_matrix.h" />
     <ClInclude Include="image.h" />
+    <ClInclude Include="imgui_tools.h" />
     <ClInclude Include="labelme.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="manifold.h" />
@@ -220,6 +225,7 @@
     <ClInclude Include="registerFrame.h" />
     <ClInclude Include="rigid3.h" />
     <ClInclude Include="scene.h" />
+    <ClInclude Include="segmentFrame.h" />
     <ClInclude Include="sim3.h" />
     <ClInclude Include="threading.h" />
     <ClInclude Include="timer.h" />

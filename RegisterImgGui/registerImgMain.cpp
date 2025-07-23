@@ -1,3 +1,6 @@
+#include <iostream>
+#include <vector>
+#include <fstream>
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -8,6 +11,7 @@
 #endif
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 #include "registerFrame.h"
+#include "segmentFrame.h"
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif 
@@ -16,15 +20,19 @@ static void glfw_error_callback(int error, const char* description)
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
 bool show_imgRegister_window = false;
+bool show_segment_window = false;
 bool show_main_window = true;
 
 extern int test_sam2();
 extern int test_geometry();
 extern int test_incremental(); 
+
+
+
 int main(int, char**)
 {
-    return test_sam2();
-    return test_incremental();
+    //return test_sam2();
+    //return test_incremental();
 
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
@@ -66,11 +74,19 @@ int main(int, char**)
         if (ImGui::Button("register") && !show_imgRegister_window)
         {
             show_imgRegister_window = !show_imgRegister_window;
-        } 
+        }
+        if (ImGui::Button("segment") && !show_segment_window)
+        {
+            show_segment_window = !show_segment_window;
+        }
         ImGui::End();
         if (show_imgRegister_window)
         {
             registFrame(&show_imgRegister_window);
+        }
+        if (show_segment_window)
+        {
+            segmentFrame(&show_segment_window);
         }
         
         ImGui::Render();

@@ -223,7 +223,7 @@ if __name__ == '__main__':
 
 
     img = cv2.imread(
-        'D:/ucl360/UCL360Calib/CameraCalibGui/pro37/out/1_-90.bmp')
+        'D:/repo/colmapThird/a.bmp')
     # img = img.astype(np.float32)
     # img -= 0.5
     # img *= 2.
@@ -240,9 +240,11 @@ if __name__ == '__main__':
 
 
 
-    point_coords = [np.array([[673, 284]]), np.array([[819, 586], [1064,635]]), np.array([[870, 496]]),
-                    np.array([[1611,243]])]
-    point_labels = [np.array([1]), np.array([1, 1]), np.array([1]), np.array([1])]
+    # point_coords = [np.array([[673, 284]]), np.array([[819, 586], [1064,635]]), np.array([[870, 496]]),
+    #                 np.array([[1611,243]])]
+    # point_labels = [np.array([1]), np.array([1, 1]), np.array([1]), np.array([1])]
+    point_coords = [np.array([[1197, 429], [1355, 441]])]
+    point_labels = [np.array([1,0])]
 
     for label_id, (point_coord, point_label) in enumerate(zip(point_coords, point_labels)):
         for i in range(point_label.shape[0]):

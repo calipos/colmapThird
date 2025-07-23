@@ -10,8 +10,8 @@
 #include "browser.h"
 #include "labelme.h"
 static bool showImgDirBrowser = false;
-std::filesystem::path imgPath;
-browser::Browser* filePicker = nullptr;
+static std::filesystem::path imgPath;
+static browser::Browser* filePicker = nullptr;
 
   
 class ImgDir
