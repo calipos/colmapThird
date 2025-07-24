@@ -6,7 +6,7 @@
 #include <filesystem>
 #include <numeric>
 #include <fstream>
-
+#include "sam2.h"
 namespace sam2
 {
     namespace ncnnHelper
@@ -249,7 +249,58 @@ namespace sam2
             fout.close();
             return;
         }
-
+        bool serializationBlob(const ncnn::Mat& out, cv::dnn::MatShape&shape,std::vector<float>&dat)
+        {
+            shape = getBlobShape(out);
+            int dims = shape.size();
+            std::vector<int>denominators = getDenominators(shape);
+            int cstep = out.cstep;
+            int dstep = 0;
+            if (shape.size() == 4)
+            {
+                dstep = shape[2] * shape[3];
+            }
+            int total = 1;
+            for (int c = 0; c < shape.size(); c++)
+            {
+                total *= shape[c];
+            }
+            dat.resize(total);
+            for (int i = 0; i < total; i++)
+            {
+                std::vector<int>pos = getPos(i, denominators);
+                int c = 0;
+                int d = 0;
+                int h = 0;
+                int w = 0;
+                if (pos.size() == 4)
+                {
+                    c = pos[0];
+                    d = pos[1];
+                    h = pos[2];
+                    w = pos[3];
+                }
+                if (pos.size() == 3)
+                {
+                    c = pos[0];
+                    h = pos[1];
+                    w = pos[2];
+                }
+                if (pos.size() == 2)
+                {
+                    h = pos[0];
+                    w = pos[1];
+                }
+                if (pos.size() == 1)
+                {
+                    w = pos[0];
+                }
+                float* data = (float*)out.data + d * dstep + c * cstep;
+                const float* data2 = data + h * out.w + w;
+                dat[i] = *data2;
+            }
+            return true;
+        }
     }
 
     namespace ocvHelper
@@ -270,6 +321,22 @@ namespace sam2
             onnx_uint32 = 12,
             onnx_uint64 = 14,
         };
+        std::ostream& operator<<(std::ostream& os, const cv::dnn::MatShape& shape)
+        {
+            os << "shape = [";
+            for (int i = 0; i < shape.size(); i++)
+            {
+                if (i==shape.size()-1)
+                {
+                    os << shape[i] << "]";
+                }
+                else
+                {
+                    os << shape[i] << ", ";
+                }
+            }
+            return os;
+        }
         bool operator==(const cv::dnn::MatShape& shape1, const cv::dnn::MatShape& shape2)
         {
             if (shape1.size() != shape2.size())
@@ -715,6 +782,14 @@ namespace sam2
             }
             out.create(targetShape.size(), &targetShape[0], CV_32F);
             memcpy(out.data, data.data, tarTotal * sizeof(float));
+            return true;
+        }
+        bool serializationBlob(const cv::Mat& blob, cv::dnn::MatShape& shape, std::vector<float>& dat)
+        {
+            shape = getBlobShape(blob);
+            int totalcnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
+            dat.resize(totalcnt);
+            memcpy(&dat[0], blob.data, sizeof(float) * totalcnt);
             return true;
         }
         cv::dnn::MatShape getBlobShape(const cv::Mat& blob)
@@ -1692,28 +1767,9 @@ namespace sam2
         return 0;
     }
 
-#if 1
-	class Sam2
-	{
-	public:
-		Sam2(
-			const std::filesystem::path& ncnnEncoderParamPath, const std::filesystem::path& ncnnEncoderBinPath, 
-			const std::filesystem::path& onnxDecoderPath);
-		~Sam2();
-        bool inputImage(const std::filesystem::path& imgPath);
-        bool inputImage(const cv::Mat& img);
-        bool inputHint();
-        bool inputHint(const std::vector<std::pair<int, cv::Point2i>>& hint, cv::Mat& mask);
-        cv::Size oringalSize;
-	private:
-		ncnn::Net encoderNet;
-		std::optional<ncnn::Extractor> ex_encoder;
-        std::optional < cv::dnn::Net> positionDecoderNet;
-		cv::Mat high_res_feats_0;
-		cv::Mat high_res_feats_1;
-		cv::Mat image_embed;
-	};
-
+    const std::vector<int>Sam2::high_res_feats_0_shape = { 1,32,256,256 };
+    const std::vector<int>Sam2::high_res_feats_1_shape = { 1, 64, 128, 128 };;
+    const std::vector<int>Sam2::image_embed_shape = { 1, 256, 64, 64 };;
 	Sam2::Sam2(
 		const std::filesystem::path& ncnnEncoderParamPath, const std::filesystem::path& ncnnEncoderBinPath, 
 		const std::filesystem::path& onnxDecoderPath)
@@ -1739,7 +1795,8 @@ namespace sam2
 			exit(-1);
 		if (encoderNet.load_model(ncnnEncoderBinPath.string().c_str()))
 			exit(-1);
-		ex_encoder = encoderNet.create_extractor();
+        encoderNet.opt.blob_allocator;
+        encoderNet.opt.workspace_allocator;
         positionDecoderNet = cv::dnn::readNetFromONNX(onnxDecoderPath.string());
         positionDecoderNet->setPreferableBackend(cv::dnn::DNN_TARGET_CPU);
 	}
@@ -1748,7 +1805,7 @@ namespace sam2
 		high_res_feats_0 = cv::Mat();
 		high_res_feats_1 = cv::Mat();
 		image_embed = cv::Mat();
-		if (ex_encoder == std::nullopt)
+		if (encoderNet.layers().size()==0)
 		{
 			LOG_ERR_OUT << "not innitialed!";
 			return false;
@@ -1758,16 +1815,15 @@ namespace sam2
 	}
     bool Sam2::inputImage(const cv::Mat& img)
     {
+        high_res_feats_0 = cv::Mat();
+        high_res_feats_1 = cv::Mat();
+        image_embed = cv::Mat();
         if (img.empty())
         {
             LOG_ERR_OUT << "empty img";
             return false;
         }
-        if (ex_encoder == std::nullopt)
-        {
-            LOG_ERR_OUT << "not innitialed!";
-            return false;
-        }
+        ncnn::Extractor ex_encoder = encoderNet.create_extractor();
         oringalSize = img.size();
         const int netImgSize = 1024;
         ncnn::Mat imgBlob = ncnn::Mat::from_pixels_resize(img.data, ncnn::Mat::PIXEL_BGR2RGB, img.cols, img.rows, netImgSize, netImgSize);
@@ -1780,10 +1836,10 @@ namespace sam2
         ncnn::Mat imgEmbedding_blob;
         {
             auto start1 = std::chrono::steady_clock::now();
-            ex_encoder->input("image", imgBlob);
-            ex_encoder->extract("high_res_feats_0", high_res_feats_0_blob);
-            ex_encoder->extract("high_res_feats_1", high_res_feats_1_blob);
-            ex_encoder->extract("/Transpose_1_output_0", imgEmbedding_blob);
+            ex_encoder.input("image", imgBlob);
+            ex_encoder.extract("/Transpose_1_output_0", imgEmbedding_blob);
+            ex_encoder.extract("high_res_feats_0", high_res_feats_0_blob);
+            ex_encoder.extract("high_res_feats_1", high_res_feats_1_blob);
             auto end1 = std::chrono::steady_clock::now();
             auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
             std::cout << "encoder Elapsed time: " << elapsed1 * 0.001 << " s" << std::endl;
@@ -1793,6 +1849,10 @@ namespace sam2
             ocvHelper::convertNcnnBlobToOpencv(high_res_feats_0_blob, { 1,32,256,256 }, high_res_feats_0);
             ocvHelper::convertNcnnBlobToOpencv(high_res_feats_1_blob, { 1, 64, 128, 128 }, high_res_feats_1);
             ocvHelper::convertNcnnBlobToOpencv(imgEmbedding_blob, { 1, 256, 64, 64, }, image_embed);
+            //using namespace sam2::ocvHelper;
+            //LOG_OUT << ocvHelper::getBlobShape(high_res_feats_0);
+            //LOG_OUT << ocvHelper::getBlobShape(high_res_feats_1);
+            //LOG_OUT << ocvHelper::getBlobShape(image_embed);
         }
         //ncnnHelper::writeBlob("../high_res_feats_0_blob.dat",high_res_feats_0_blob);
         //ncnnHelper::writeBlob("../high_res_feats_1_blob.dat",high_res_feats_1_blob);
@@ -1958,11 +2018,60 @@ namespace sam2
         }
         return true;
     }
+    bool Sam2::serializationFeat(const std::filesystem::path&path)
+    {
+        cv::dnn::MatShape feat0;
+        cv::dnn::MatShape feat1;
+        cv::dnn::MatShape imbed;
+        cv::dnn::MatShape feat0_shape;
+        cv::dnn::MatShape feat1_shape;
+        cv::dnn::MatShape imbed_shape;
+        std::vector<float> feat0_dat;
+        std::vector<float> feat1_dat;
+        std::vector<float> imbed_dat;
+        ocvHelper::serializationBlob(high_res_feats_0, feat0_shape, feat0_dat);
+        ocvHelper::serializationBlob(high_res_feats_1, feat1_shape, feat1_dat);
+        ocvHelper::serializationBlob(image_embed, imbed_shape, imbed_dat);
+        std::fstream fout(path, std::ios::out | std::ios::binary);
+        fout.write((char*)&feat0_dat[0], sizeof(float) * feat0_dat.size());
+        fout.write((char*)&feat1_dat[0], sizeof(float) * feat1_dat.size());
+        fout.write((char*)&imbed_dat[0], sizeof(float) * imbed_dat.size());
+        fout.close();
+        return true;
+    }
+    bool Sam2::deserializationFeat(const std::filesystem::path& path)
+    {
+        if (!std::filesystem::exists(path))
+        {
+            return false;
+        }
+        try
+        {
+            high_res_feats_0.create(high_res_feats_0_shape.size(), &high_res_feats_0_shape[0], CV_32F);
+            high_res_feats_1.create(high_res_feats_1_shape.size(), &high_res_feats_1_shape[0], CV_32F);
+            image_embed.create(image_embed_shape.size(), &image_embed_shape[0], CV_32F);
+            std::fstream fin(path, std::ios::in | std::ios::binary);
+            int dataTotalCnt = std::accumulate(high_res_feats_0_shape.begin(), high_res_feats_0_shape.end(), 1, std::multiplies<int>());
+            fin.write((char*)high_res_feats_0.data, sizeof(float) * dataTotalCnt);
+            dataTotalCnt = std::accumulate(high_res_feats_1_shape.begin(), high_res_feats_1_shape.end(), 1, std::multiplies<int>());
+            fin.write((char*)high_res_feats_1.data, sizeof(float) * dataTotalCnt);
+            dataTotalCnt = std::accumulate(image_embed_shape.begin(), image_embed_shape.end(), 1, std::multiplies<int>());
+            fin.write((char*)image_embed.data, sizeof(float) * dataTotalCnt);
+            fin.close();
+            return true;
+        }
+        catch (const std::exception&)
+        {
+            return false;
+        }
+    }
+
 
 	Sam2::~Sam2()
 	{
+        positionDecoderNet = std::nullopt;
 	}
-#endif
+
 }
 
 static cv::Mat gui_img;
@@ -2078,10 +2187,20 @@ int test_decoder()
         //sam2::ocvHelper::printBlob(out[3]);
         return 0;
 }
+int test_multitimes_construction()
+{
+    sam2::Sam2 sam2Ins("../models/ncnnEncoder.param", "../models/ncnnEncoder.bin", "../models/opencv_decoder.onnx");
+    for (size_t i = 0; i < 40; i++)
+    {
+        sam2Ins.inputImage("../a.bmp");
+    }
+    return 0;
+}
 int test_sam2()
 {
+    return test_multitimes_construction();
     //return test_decoder();
-    return test_sam_gui();
+    //return test_sam_gui();
     //dnn::test();
 
     //sam2::ncnnHelper::convertImgToMemFile("../a.bmp");

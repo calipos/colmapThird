@@ -224,6 +224,7 @@
     <ClInclude Include="reconstruction.h" />
     <ClInclude Include="registerFrame.h" />
     <ClInclude Include="rigid3.h" />
+    <ClInclude Include="sam2.h" />
     <ClInclude Include="scene.h" />
     <ClInclude Include="segmentFrame.h" />
     <ClInclude Include="sim3.h" />

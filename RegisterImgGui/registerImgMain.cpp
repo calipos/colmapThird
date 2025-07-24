@@ -31,7 +31,7 @@ extern int test_incremental();
 
 int main(int, char**)
 {
-    //return test_sam2();
+    return test_sam2();
     //return test_incremental();
 
     glfwSetErrorCallback(glfw_error_callback);

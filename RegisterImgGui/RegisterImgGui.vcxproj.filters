@@ -239,5 +239,8 @@
     <ClInclude Include="imgui_tools.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="sam2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
