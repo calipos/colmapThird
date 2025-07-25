@@ -6,7 +6,7 @@ from PIL import Image
 import cv2
 import saverloader
 import imageio.v2 as imageio
-from nets.pips import Pips
+from nets.pips import Pips,Pips2
 import utils.improc
 from utils.improc import ColorMap2d
 import random
@@ -14,11 +14,13 @@ import glob
 import torch
 import torch.nn.functional as F  
 
-device='cuda'  #cpu #cuda
+device = 'cpu'  # cpu #cuda
 
 def draw_circ_on_images_py(rgbPaths, traj, vis, linewidth=1, show_dots=False, cmap='coolwarm', maxdist=None):
  
     if device=='cuda' :traj=traj.cpu().numpy()
+    if isinstance(traj, torch.Tensor):
+        traj = traj.numpy()
     B=1 
     T=8
     S = len(rgbPaths) 
@@ -136,7 +138,7 @@ def run_model2(model, rgbPaths, xy0):
 if __name__ == '__main__':    
     
     exp_name = '00' # (exp_name is used for logging notes that correspond to different runs)
-    init_dir = './reference_model'
+    init_dir = 'models'
 
     ## choose hyps
     B = 1
@@ -145,7 +147,7 @@ if __name__ == '__main__':
     xy0=xy0.reshape(B,-1,2)
     N = xy0.shape[1]  # number of points to track
 
-    filenames = glob.glob('../viewer/*.jpg')
+    filenames = glob.glob('data2/a/*.jpg')
     filenames = sorted(filenames) 
     ## autogen a name
     model_name = "%02d_%d_%d" % (B, S, N)
@@ -160,11 +162,43 @@ if __name__ == '__main__':
     if device != 'cpu' :model=model.cuda()
     parameters = list(model.parameters())
     if init_dir:
-        _ = saverloader.load(init_dir, model)
+        _ = saverloader.load(init_dir, model, device=device)
     global_step = 0
     model.eval()
 
-        
+############
+    model2 = Pips2(stride=8)
+    saverloader.load(init_dir, model2, device=device)
+    model2.eval()
+    # # 2. 创建示例输入（确保形状正确）
+    # dummy_input = torch.randn( 8,3, 256, 256) 
+    # onnx_path = "nested_unet.onnx"
+    # torch.onnx.export(
+    #     model2,
+    #     dummy_input,
+    #     onnx_path,
+    #     export_params=True,
+    #     opset_version=11,  # 确保兼容性
+    #     do_constant_folding=True,
+    #     dynamic_axes={
+    #         "input": {2: "input_height", 3: "input_width"},
+    #         "output": { 2: "output_height", 3: "output_width"}}
+    # )
+    #----------------------------------------------------
+    fmaps = torch.randn(8,128, 32,32)
+    ffeat = torch.randn(1,3, 128)
+    input_dict = {"fmaps": fmaps, "ffeat": ffeat}
+    onnx_path = "nested_unet.onnx"
+    torch.onnx.export(
+        model2,
+        input_dict,
+        onnx_path,
+        export_params=True,
+        opset_version=16,  # 确保兼容性
+        do_constant_folding=True
+    )
+    exit(0)
+# ######################
 
     try:
         with torch.no_grad():
