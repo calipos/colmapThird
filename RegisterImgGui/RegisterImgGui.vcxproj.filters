@@ -132,6 +132,12 @@
     <ClCompile Include="imgui_process.cpp">
       <Filter>Header Files</Filter>
     </ClCompile>
+    <ClCompile Include="pips2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="dnnHelper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">
@@ -240,6 +246,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="sam2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pips2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dnnHelper.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -2,16 +2,21 @@ import time
 import numpy as np
 import saverloader
 from nets.pips2 import Pips
+from nets.pips2 import Pips_BasicEncoder
 import utils.improc
 from utils.basic import print_, print_stats
 import torch
-from tensorboardX import SummaryWriter
 import torch.nn.functional as F
 import sys
 import cv2
 import imageio.v2 as imageio
 from pathlib import Path
-
+import onnx
+import onnxruntime
+import onnx_graphsurgeon as gs
+checkmodel = False
+inferShapes = False
+ir_version = 10
 def read_mp4(fn):
     vidcap = cv2.VideoCapture(fn)
     frames = []
@@ -24,7 +29,7 @@ def read_mp4(fn):
     return frames
 class ColorMap2d:
     def __init__(self, filename=None):
-        self._img = cv2.imread('utils/bremm.png')
+        self._img = cv2.imread('models/bremm.png')
         
         self._height = self._img.shape[0]
         self._width = self._img.shape[1]
@@ -124,7 +129,7 @@ def run_model(model, rgbs, S_max=128, N=64, iters=16):
 
 
 def main(
-        filename='./stock_videos/camel.mp4',
+        filename='./models/camel.mp4',
         S=48, # seqlen
         N=1024, # number of points per clip
         stride=8, # spatial stride of the model
@@ -132,10 +137,7 @@ def main(
         iters=16, # inference steps of the model
         image_size=(512,896), # input resolution
         max_iters=4, # number of clips to run
-        shuffle=False, # dataset shuffling
-        log_freq=1, # how often to make image summaries
-        log_dir='./logs_demo',
-        init_dir='./reference_model',
+        init_dir='./models',
         device_ids=[0],
 ):
 
@@ -200,8 +202,84 @@ def main(
         
         print('%s; step %06d/%d; itime %.2f' % (
             model_name, global_step, max_iters, iter_time))
-        
-            
+def fix_baseEncoder_shape():
+    model = onnx.load('models/pips2_base_opencv.onnx')
+    graph = gs.import_onnx(model)
+    for node in graph.nodes:
+        if node.op == 'Resize':
+            value = np.array([1, 2, 3, 4]).astype(np.int64)
+            inputNames = node.name+"_shape"
+            constValue = gs.Constant(inputNames, value)
+            find=False
+            for i in range(1,len(node.inputs)):
+                if node.inputs[i].name.find('Concat')>0:
+                    find=True
+                    node.inputs[i] = constValue
+            assert find
+        if node.name == '/fnet/conv1/Conv':
+            node.name = node.name+'_needSqueeze'
+    graph.cleanup()
+    graph.toposort()
+    new_mode = gs.export_onnx(graph)
+    new_mode.ir_version = ir_version
+    onnx.save(new_mode, 'models/pips2_base_opencv.onnx')
+def export_baseEncoder():           
+    init_dir = './models'
+    model = Pips_BasicEncoder(stride=8).cpu()
+    parameters = list(model.parameters())
+    if init_dir:
+        _ = saverloader.load(init_dir, model)
+    global_step = 0
+    model.eval()
+    dummy_input = torch.randn(8,3, 256, 256)
+    input_names = ["rgbs"]        # 定义onnx 输入节点名称
+    output_names = ["fmaps"]      # 定义onnx 输出节点名称
+    onnx_path = "models/pips2_base_opencv.onnx"
+    torch.onnx.export(
+        model,
+        (dummy_input),
+        onnx_path,
+        input_names=input_names,
+        output_names=output_names,
+        export_params=True,
+        opset_version=11,  # 确保兼容性
+        dynamic_axes={'rgbs':  {2: "height", 3: 'width'},
+                      'fmaps': {2: 'height', 3: 'width'}}
+    )
+
+
+    model = onnx.load('models/pips2_base_opencv.onnx')
+    # model.graph.output.extend(
+    #     [onnx.ValueInfoProto(name='/fnet/Concat_4_output_0')])
+    # model.graph.output.extend(
+    #     [onnx.ValueInfoProto(name='/fnet/Concat_5_output_0')])
+    # model.graph.output.extend(
+    #     [onnx.ValueInfoProto(name='/fnet/Concat_6_output_0')])
+    # model.graph.output.extend(
+    #     [onnx.ValueInfoProto(name='/fnet/Concat_7_output_0')])
+    # model.graph.output.extend(
+    #     [onnx.ValueInfoProto(name='/fnet/Resize_output_0')])
+    # model.graph.output.extend(
+    #     [onnx.ValueInfoProto(name='/fnet/Resize_1_output_0')])
+    
+    onnx.save(model, 'models/pips2_base_opencv.onnx')
+    images = np.ones([8,3, 1024, 1024]).astype(np.float32)
+    session = onnxruntime.InferenceSession(
+        "models/pips2_base_opencv.onnx", providers=onnxruntime.get_available_providers())
+
+    datain = {}
+    datain['rgbs'] = images
+    netOut = session.run(
+        None, datain)
+
+    for i in range(len(netOut)):
+        print(netOut[i].shape)
+        print(netOut[i])
+        print(" ")
+
+    # fix_baseEncoder_shape()
+    return
 
 if __name__ == '__main__':
-    main()
+    # main()
+    export_baseEncoder()

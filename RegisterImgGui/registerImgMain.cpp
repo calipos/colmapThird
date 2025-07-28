@@ -26,11 +26,12 @@ bool show_main_window = true;
 extern int test_sam2();
 extern int test_geometry();
 extern int test_incremental(); 
-
+extern int test_pips2();
 
 
 int main(int, char**)
 {
+    return test_pips2();
     return test_sam2();
     //return test_incremental();
 

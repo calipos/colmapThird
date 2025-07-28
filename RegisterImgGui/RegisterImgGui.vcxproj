@@ -164,6 +164,7 @@
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="camera_rig.cpp" />
     <ClCompile Include="colString.cpp" />
+    <ClCompile Include="dnnHelper.cpp" />
     <ClCompile Include="essential_matrix.cpp" />
     <ClCompile Include="estimate.cpp" />
     <ClCompile Include="image.cpp" />
@@ -182,6 +183,7 @@
     <ClCompile Include="labelme.cpp" />
     <ClCompile Include="log.cpp" />
     <ClCompile Include="misc.cpp" />
+    <ClCompile Include="pips2.cpp" />
     <ClCompile Include="pose.cpp" />
     <ClCompile Include="projection.cpp" />
     <ClCompile Include="reconstruction.cpp" />
@@ -207,6 +209,7 @@
     <ClInclude Include="colmath.h" />
     <ClInclude Include="colString.h" />
     <ClInclude Include="cost_functions.h" />
+    <ClInclude Include="dnnHelper.h" />
     <ClInclude Include="eigen_alignment.h" />
     <ClInclude Include="essential_matrix_coeffs.h" />
     <ClInclude Include="essential_matrix_poly.h" />
@@ -219,6 +222,7 @@
     <ClInclude Include="manifold.h" />
     <ClInclude Include="matrix.h" />
     <ClInclude Include="misc.h" />
+    <ClInclude Include="pips2.h" />
     <ClInclude Include="pose.h" />
     <ClInclude Include="projection.h" />
     <ClInclude Include="reconstruction.h" />

@@ -21,7 +21,7 @@ def save(ckpt_dir, optimizer, model, global_step, scheduler=None, keep_latest=5,
     print("saved a checkpoint: %s" % (model_path))
 
 def load(ckpt_dir, model, step=0, model_name='model'):
-    model_name = 'model-000200000.pth' 
+    model_name = 'pips2-000200000.pth' 
     path = os.path.join(ckpt_dir, model_name)
     if not os.path.exists(path):
         print('...there is no full checkpoint here!')

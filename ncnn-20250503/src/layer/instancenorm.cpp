@@ -62,8 +62,8 @@ int InstanceNorm::forward_inplace(Mat& bottom_top_blob, const Option& opt) const
         float* ptr = bottom_top_blob.channel(q);
 
         // mean and var
-        float sum = 0.f;
-        float sqsum = 0.f;
+        double sum = 0.;
+        double sqsum = 0.;
         for (int i = 0; i < size; i++)
         {
             sum += ptr[i];
