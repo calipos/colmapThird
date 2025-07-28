@@ -577,6 +577,8 @@ if not exist %pwd%\install\flatbuffers-24.12.23 (
     cd %pwd%
 ) 
 
+
+
 if not exist %pwd%\install\ncnn-20250503 (
     echo  -----------build ncnn-20250503----------
     cmake  -G "Visual Studio 16 2019"    -B %pwd%\build\ncnn-20250503  -S %pwd%\ncnn-20250503   ^
@@ -589,6 +591,7 @@ if not exist %pwd%\install\ncnn-20250503 (
     -Dprotobuf_DIR:PATH=%pwd%/install/protobuf-3.20.0-rc3/cmake   ^
     -DNCNN_BUILD_TOOLS:BOOL="1"   ^
     -DNCNN_VULKAN:BOOL="0"   ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/ncnn-20250503   ^
     -DProtobuf_LIBRARY_RELEASE:FILEPATH=%pwd%/install/protobuf-3.20.0-rc3/lib/libprotobuf.lib    ^
     -DProtobuf_PROTOC_EXECUTABLE:FILEPATH=%pwd%/install/protobuf-3.20.0-rc3/bin/protoc.exe    ^
     -DProtobuf_LITE_LIBRARY_DEBUG:FILEPATH=%pwd%/install/protobuf-3.20.0-rc3/lib/libprotobuf-lited.lib    ^
@@ -599,8 +602,7 @@ if not exist %pwd%\install\ncnn-20250503 (
     -DProtobuf_LIBRARY_DEBUG:FILEPATH=%pwd%/install/protobuf-3.20.0-rc3/lib/libprotobufd.lib   ^
     -DZLIB_INCLUDE_DIR:PATH=%pwd%/install/zlib-1.2.13/include    ^
     -DZLIB_LIBRARY_DEBUG:FILEPATH=%pwd%/install/zlib-1.2.13/lib/zlib.lib    ^
-    -DZLIB_LIBRARY_RELEASE:FILEPATH=%pwd%/install/zlib-1.2.13/lib/zlib.lib   ^
-    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/ncnn-20250503
+    -DZLIB_LIBRARY_RELEASE:FILEPATH=%pwd%/install/zlib-1.2.13/lib/zlib.lib   
     TIMEOUT /T 1
     msbuild %pwd%\build\ncnn-20250503\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
     msbuild %pwd%\build\ncnn-20250503\INSTALL.vcxproj -t:Rebuild -p:Configuration=Debug
