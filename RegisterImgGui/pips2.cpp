@@ -47,10 +47,10 @@ namespace pips2
         float H_f = blob.h;
         int max_x = blob.w - 1;
         int max_y = blob.h - 1;
-        ncnn::Mat v_y0_x0(C, N, (size_t)4);
-        ncnn::Mat v_y0_x1(C, N, (size_t)4);
-        ncnn::Mat v_y1_x0(C, N, (size_t)4);
-        ncnn::Mat v_y1_x1(C, N, (size_t)4);
+        ncnn::Mat v_y0_x0(N, C, (size_t)4);
+        ncnn::Mat v_y0_x1(N, C, (size_t)4);
+        ncnn::Mat v_y1_x0(N, C, (size_t)4);
+        ncnn::Mat v_y1_x1(N, C, (size_t)4);
         ncnn::Mat w_y0_x0(1, N, (size_t)4);
         ncnn::Mat w_y0_x1(1, N, (size_t)4);
         ncnn::Mat w_y1_x0(1, N, (size_t)4);
@@ -77,7 +77,7 @@ namespace pips2
 
             for (int c = 0; c < C; c++)
             {
-                int pp = c + i* v_y0_x0.w;
+                int pp = i + c* v_y0_x0.w;
                 int p0 = x0 + W * y0;
                 int p1 = x1 + W * y0;
                 int p2 = x0 + W * y1;

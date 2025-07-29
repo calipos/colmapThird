@@ -6741,9 +6741,122 @@ int convert_BilinearOpNet()
     convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
     return 0;
 }
+std::string getBilinearOpNet()
+{
+    std::string paramStr = "7767517\n"
+                           "15 15\n"
+                           "Input      v_y0_x0         0 1 v_y0_x0\n"
+                           "Input      v_y0_x1         0 1 v_y0_x1\n"
+                           "Input      v_y1_x0         0 1 v_y1_x0\n"
+                           "Input      v_y1_x1         0 1 v_y1_x1\n"
+                           "Input      w_y0_x0         0 1 w_y0_x0\n"
+                           "Input      w_y0_x1         0 1 w_y0_x1\n"
+                           "Input      w_y1_x0         0 1 w_y1_x0\n"
+                           "Input      w_y1_x1         0 1 w_y1_x1\n"
+                           "MatMul      m1            2 1 v_y0_x0 w_y0_x0 m1\n"
+                           "MatMul      m2            2 1 v_y0_x1 w_y0_x1 m2\n"
+                           "MatMul      m3            2 1 v_y1_x0 w_y1_x0 m3\n"
+                           "MatMul      m4            2 1 v_y1_x1 w_y1_x1 m4\n"
+                           "BinaryOp     a1            2 1 m1 m2 a1 0=0\n"
+                           "BinaryOp     a2            2 1 m3 m4 a2 0=0\n"
+                           "BinaryOp     output          2 1 a1 a2 output 0=0\n";
+    return paramStr;
+}
+ncnn::Mat bilinear_sample2d(const ncnn::Mat& blob, const std::vector<float>& xs, const std::vector<float>& ys, std::shared_ptr<ncnn::Net> bilinearOpNet)
+{
+    int C = blob.c;
+    int N = xs.size();
+    int W = blob.w;
+    float W_f = blob.w;
+    float H_f = blob.h;
+    int max_x = blob.w - 1;
+    int max_y = blob.h - 1;
+    ncnn::Mat v_y0_x0(N, C, (size_t)4);
+    ncnn::Mat v_y0_x1(N, C, (size_t)4);
+    ncnn::Mat v_y1_x0(N, C, (size_t)4);
+    ncnn::Mat v_y1_x1(N, C, (size_t)4);
+    ncnn::Mat w_y0_x0(1, N, (size_t)4);
+    ncnn::Mat w_y0_x1(1, N, (size_t)4);
+    ncnn::Mat w_y1_x0(1, N, (size_t)4);
+    ncnn::Mat w_y1_x1(1, N, (size_t)4);
+    for (size_t i = 0; i < N; i++)
+    {
+        int x0 = std::floor(xs[i]);
+        int x1 = x0 + 1;
+        int y0 = std::floor(ys[i]);
+        int y1 = y0 + 1;
+        if (x0 < 0) x0 = 0;
+        if (y0 < 0) y0 = 0;
+        if (x0 > max_x) x0 = max_x;
+        if (y0 > max_y) y0 = max_y;
+        if (x1 < 1) x1 = 1;
+        if (y1 < 1) y1 = 1;
+        if (x1 > max_x) x1 = max_x;
+        if (y1 > max_y) y1 = max_y;
+
+        ((float*)w_y0_x0.data)[i] = (x1 - xs[i]) * (y1 - ys[i]);
+        ((float*)w_y0_x1.data)[i] = (xs[i] - x0) * (y1 - ys[i]);
+        ((float*)w_y1_x0.data)[i] = (x1 - xs[i]) * (ys[i] - y0);
+        ((float*)w_y1_x1.data)[i] = (xs[i] - x0) * (ys[i] - y0);
+
+        for (int c = 0; c < C; c++)
+        {
+            int pp = i + c * v_y0_x0.w;
+            int p0 = x0 + W * y0;
+            int p1 = x1 + W * y0;
+            int p2 = x0 + W * y1;
+            int p3 = x1 + W * y1;
+            ((float*)v_y0_x0.data)[pp] = ((const float*)blob.data)[p0 + c * blob.cstep];
+            ((float*)v_y0_x1.data)[pp] = ((const float*)blob.data)[p1 + c * blob.cstep];
+            ((float*)v_y1_x0.data)[pp] = ((const float*)blob.data)[p2 + c * blob.cstep];
+            ((float*)v_y1_x1.data)[pp] = ((const float*)blob.data)[p3 + c * blob.cstep];
+        }
+    }
+
+    ncnn::Extractor ex2 = bilinearOpNet->create_extractor();
+    ex2.input("v_y0_x0", v_y0_x0);
+    ex2.input("v_y0_x1", v_y0_x1);
+    ex2.input("v_y1_x0", v_y1_x0);
+    ex2.input("v_y1_x1", v_y1_x1);
+    ex2.input("w_y0_x0", w_y0_x0);
+    ex2.input("w_y0_x1", w_y0_x1);
+    ex2.input("w_y1_x0", w_y1_x0);
+    ex2.input("w_y1_x1", w_y1_x1);
+    auto start1 = std::chrono::steady_clock::now();
+
+    ncnn::Mat bilinear_sample_out;
+    ex2.extract("output", bilinear_sample_out);
+    auto end1 = std::chrono::steady_clock::now();
+    auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+    //dnn::ncnnHelper::printBlob(bilinear_sample_out);
+    std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
+
+    return bilinear_sample_out;
+}
+int test_bilinearOp()
+{
+    std::string paramStr = getBilinearOpNet();
+    std::shared_ptr<ncnn::Net> bilinearOpNet(new ncnn::Net());
+    bilinearOpNet->load_param_mem(paramStr.c_str());
+
+    std::vector<int> shape = {128, 64, 64};
+    int totalcnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
+    std::vector<float> indata(totalcnt);
+    for (int i = 0; i < indata.size(); i++)
+    {
+        indata[i] = i % 200 - 100;
+    }
+    ncnn::Mat in(shape[2], shape[1], shape[0], (void*)&indata[0], 4);
+    std::vector<float> xs = {12.5000, 13.3000, 23.3000};
+    std::vector<float> ys = {1.2000, 45.1000, 15.1000};
+
+    bilinear_sample2d(in, xs, ys, bilinearOpNet);
+
+    return 0;
+}
 int main()
 {
-    //return convert_BilinearOpNet();
+    return test_bilinearOp();
     if (1)
     {
         const char* onnxpb = "../../../../models/pips2_base_opencv.onnx";
