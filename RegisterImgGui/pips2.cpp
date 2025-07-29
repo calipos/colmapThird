@@ -38,7 +38,7 @@ namespace pips2
             "BinaryOp     output          2 1 a1 a2 output 0=0\n";
         return paramStr;
     }
-    std::vector<float>bilinear_sample2d(const ncnn::Mat& blob, const std::vector<float>& xs, const std::vector<float>& ys, std::shared_ptr<ncnn::Net> bilinearOpNet)
+    ncnn::Mat bilinear_sample2d(const ncnn::Mat& blob, const std::vector<float>& xs, const std::vector<float>& ys, std::shared_ptr<ncnn::Net> bilinearOpNet)
     {
         int C = blob.c;
         int N = xs.size();
@@ -47,14 +47,14 @@ namespace pips2
         float H_f = blob.h;
         int max_x = blob.w - 1;
         int max_y = blob.h - 1;
-        ncnn::Mat v_y0_x0(C, N, 4);
-        ncnn::Mat v_y0_x1(C, N, 4);
-        ncnn::Mat v_y1_x0(C, N, 4);
-        ncnn::Mat v_y1_x1(C, N, 4);
-        ncnn::Mat w_y0_x0(1, N, 4);
-        ncnn::Mat w_y0_x1(1, N, 4);
-        ncnn::Mat w_y1_x0(1, N, 4);
-        ncnn::Mat w_y1_x1(1, N, 4);
+        ncnn::Mat v_y0_x0(C, N, (size_t)4);
+        ncnn::Mat v_y0_x1(C, N, (size_t)4);
+        ncnn::Mat v_y1_x0(C, N, (size_t)4);
+        ncnn::Mat v_y1_x1(C, N, (size_t)4);
+        ncnn::Mat w_y0_x0(1, N, (size_t)4);
+        ncnn::Mat w_y0_x1(1, N, (size_t)4);
+        ncnn::Mat w_y1_x0(1, N, (size_t)4);
+        ncnn::Mat w_y1_x1(1, N, (size_t)4);
         for (size_t i = 0; i < N; i++)
         {
             int x0 = std::floor(xs[i]);
@@ -77,7 +77,7 @@ namespace pips2
 
             for (int c = 0; c < C; c++)
             {
-                int pp = c * C + i;
+                int pp = c + i* v_y0_x0.w;
                 int p0 = x0 + W * y0;
                 int p1 = x1 + W * y0;
                 int p2 = x0 + W * y1;
@@ -89,9 +89,25 @@ namespace pips2
             }
         }
 
-        bilinearOpNet.
+        ncnn::Extractor ex2 = bilinearOpNet->create_extractor();
+        ex2.input("v_y0_x0", v_y0_x0);
+        ex2.input("v_y0_x1", v_y0_x1);
+        ex2.input("v_y1_x0", v_y1_x0);
+        ex2.input("v_y1_x1", v_y1_x1);
+        ex2.input("w_y0_x0", w_y0_x0);
+        ex2.input("w_y0_x1", w_y0_x1);
+        ex2.input("w_y1_x0", w_y1_x0);
+        ex2.input("w_y1_x1", w_y1_x1);
+        auto start1 = std::chrono::steady_clock::now();
 
-        return std::vector<float>();
+        ncnn::Mat bilinear_sample_out;
+        ex2.extract("output", bilinear_sample_out);
+        auto end1 = std::chrono::steady_clock::now();
+        auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+        dnn::ncnnHelper::printBlob(bilinear_sample_out);
+        std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
+
+        return bilinear_sample_out;
     }
 
     bool Pips2::changeParamResizeParam(const std::string& path, const std::pair<int, int>& d)

@@ -255,8 +255,6 @@ def fix_baseEncoder_shape():
     new_mode.ir_version = ir_version
     onnx.save(new_mode, 'models/pips2_base_opencv.onnx')
 def export_baseEncoder():           
-    print('opencv 的onnx 似乎要快一点,但是动态的shape总是调不好,ncnn直接操作param更方便')
-    print('先运行这个生成models/pips2_base_opencv.onnx,再运行ncnn的onnx_pips2')
     batch=1
     init_dir = './models'
     model = Pips_BasicEncoder(stride=8).cpu()
@@ -280,10 +278,10 @@ def export_baseEncoder():
     )
 
 
-    img = cv2.imread('D:/repo/colmapThird/data2/a/00000.jpg')
-    images = np.expand_dims(img.transpose(
-        [2, 0, 1]), axis=0).astype(np.float32)
-    # images = np.ones([batch,3, 1024, 1024]).astype(np.float32)
+    # img = cv2.imread('D:/repo/colmapThird/data2/a/00000.jpg')
+    # images = np.expand_dims(img.transpose(
+    #     [2, 0, 1]), axis=0).astype(np.float32)
+    images = np.ones([batch,3, 1024, 1024]).astype(np.float32)
     session = onnxruntime.InferenceSession(
         "models/pips2_base_opencv.onnx", providers=onnxruntime.get_available_providers())
 
@@ -426,6 +424,8 @@ def test_bilinearOp():
     print(1)
 
 if __name__ == '__main__':
+    print('opencv 的onnx 似乎要快一点,但是动态的shape总是调不好,ncnn直接操作param更方便')
+    print('先运行export_baseEncoder()生成models/pips2_base_opencv.onnx,再运行ncnn的onnx_pips2')
     test_bilinearOp()
     # main()
     # export_baseEncoder()
