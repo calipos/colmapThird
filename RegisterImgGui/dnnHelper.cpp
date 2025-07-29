@@ -1,5 +1,4 @@
 #include "dnnHelper.h"
-
 namespace dnn
 {
     namespace ncnnHelper
@@ -832,4 +831,5 @@ namespace dnn
         //printBlob(out[1]);
         return 0;
     }
+
 }

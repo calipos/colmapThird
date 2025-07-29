@@ -2,7 +2,7 @@ import time
 import numpy as np
 import saverloader
 from nets.pips2 import Pips
-from nets.pips2 import Pips_BasicEncoder
+from nets.pips2 import Pips_BasicEncoder, Pips_CorrBlock2
 import utils.improc
 from utils.basic import print_, print_stats
 import torch
@@ -14,6 +14,7 @@ from pathlib import Path
 import onnx
 import onnxruntime
 import onnx_graphsurgeon as gs
+from onnx import helper
 checkmodel = False
 inferShapes = False
 ir_version = 10
@@ -206,14 +207,44 @@ def fix_baseEncoder_shape():
     model = onnx.load('models/pips2_base_opencv.onnx')
     graph = gs.import_onnx(model)
     for node in graph.nodes:
-        if node.op == 'Resize':
-            value = np.array([1, 2, 3, 4]).astype(np.int64)
+        if node.name == '/fnet/Resize':
+            value = np.array([8, 64, 128, 128]).astype(np.int64)
             inputNames = node.name+"_shape"
             constValue = gs.Constant(inputNames, value)
-            find=False
-            for i in range(1,len(node.inputs)):
-                if node.inputs[i].name.find('Concat')>0:
-                    find=True
+            find = False
+            for i in range(1, len(node.inputs)):
+                if node.inputs[i].name.find('Concat') > 0:
+                    find = True
+                    node.inputs[i] = constValue
+            assert find
+        if node.name == '/fnet/Resize_1':
+            value = np.array([8, 96, 128, 128]).astype(np.int64)
+            inputNames = node.name+"_shape"
+            constValue = gs.Constant(inputNames, value)
+            find = False
+            for i in range(1, len(node.inputs)):
+                if node.inputs[i].name.find('Concat') > 0:
+                    find = True
+                    node.inputs[i] = constValue
+            assert find
+        if node.name == '/fnet/Resize_2':
+            value = np.array([8, 128, 128, 128]).astype(np.int64)
+            inputNames = node.name+"_shape"
+            constValue = gs.Constant(inputNames, value)
+            find = False
+            for i in range(1, len(node.inputs)):
+                if node.inputs[i].name.find('Concat') > 0:
+                    find = True
+                    node.inputs[i] = constValue
+            assert find
+        if node.name == '/fnet/Resize_3':
+            value = np.array([8, 128, 128, 128]).astype(np.int64)
+            inputNames = node.name+"_shape"
+            constValue = gs.Constant(inputNames, value)
+            find = False
+            for i in range(1, len(node.inputs)):
+                if node.inputs[i].name.find('Concat') > 0:
+                    find = True
                     node.inputs[i] = constValue
             assert find
         if node.name == '/fnet/conv1/Conv':
@@ -224,14 +255,15 @@ def fix_baseEncoder_shape():
     new_mode.ir_version = ir_version
     onnx.save(new_mode, 'models/pips2_base_opencv.onnx')
 def export_baseEncoder():           
+    print('opencv 的onnx 似乎要快一点,但是动态的shape总是调不好,ncnn直接操作param更方便')
+    print('先运行这个生成models/pips2_base_opencv.onnx,再运行ncnn的onnx_pips2')
+    batch=1
     init_dir = './models'
     model = Pips_BasicEncoder(stride=8).cpu()
-    parameters = list(model.parameters())
     if init_dir:
         _ = saverloader.load(init_dir, model)
-    global_step = 0
     model.eval()
-    dummy_input = torch.randn(8,3, 256, 256)
+    dummy_input = torch.randn(batch, 3, 1024, 1024)
     input_names = ["rgbs"]        # 定义onnx 输入节点名称
     output_names = ["fmaps"]      # 定义onnx 输出节点名称
     onnx_path = "models/pips2_base_opencv.onnx"
@@ -248,22 +280,10 @@ def export_baseEncoder():
     )
 
 
-    model = onnx.load('models/pips2_base_opencv.onnx')
-    # model.graph.output.extend(
-    #     [onnx.ValueInfoProto(name='/fnet/Concat_4_output_0')])
-    # model.graph.output.extend(
-    #     [onnx.ValueInfoProto(name='/fnet/Concat_5_output_0')])
-    # model.graph.output.extend(
-    #     [onnx.ValueInfoProto(name='/fnet/Concat_6_output_0')])
-    # model.graph.output.extend(
-    #     [onnx.ValueInfoProto(name='/fnet/Concat_7_output_0')])
-    # model.graph.output.extend(
-    #     [onnx.ValueInfoProto(name='/fnet/Resize_output_0')])
-    # model.graph.output.extend(
-    #     [onnx.ValueInfoProto(name='/fnet/Resize_1_output_0')])
-    
-    onnx.save(model, 'models/pips2_base_opencv.onnx')
-    images = np.ones([8,3, 1024, 1024]).astype(np.float32)
+    img = cv2.imread('D:/repo/colmapThird/data2/a/00000.jpg')
+    images = np.expand_dims(img.transpose(
+        [2, 0, 1]), axis=0).astype(np.float32)
+    # images = np.ones([batch,3, 1024, 1024]).astype(np.float32)
     session = onnxruntime.InferenceSession(
         "models/pips2_base_opencv.onnx", providers=onnxruntime.get_available_providers())
 
@@ -277,9 +297,136 @@ def export_baseEncoder():
         print(netOut[i])
         print(" ")
 
-    # fix_baseEncoder_shape()
+    fix_baseEncoder_shape()
     return
 
+
+def export_CorrBlock():
+    batch = 1
+    init_dir = './models'
+    model = Pips_CorrBlock2(stride=8).cpu()
+    if init_dir:
+        _ = saverloader.load(init_dir, model)
+    model.eval()
+    dummy_input = torch.randn(8, 128, 120, 67)
+    input_names = ["fmaps"]        # 定义onnx 输入节点名称
+    output_names = ["fmaps"]      # 定义onnx 输出节点名称
+    onnx_path = "models/pips2_base_opencv.onnx"
+    torch.onnx.export(
+        model,
+        (dummy_input),
+        onnx_path,
+        input_names=input_names,
+        output_names=output_names,
+        export_params=True,
+        opset_version=11,  # 确保兼容性
+        dynamic_axes={'fmaps':  {2: "height", 3: 'width'},
+                      'fmaps': {2: 'height', 3: 'width'}}
+    )
+
+    img = cv2.imread('D:/repo/colmapThird/data2/a/00000.jpg')
+    images = np.expand_dims(img.transpose(
+        [2, 0, 1]), axis=0).astype(np.float32)
+    # images = np.ones([batch,3, 1024, 1024]).astype(np.float32)
+    session = onnxruntime.InferenceSession(
+        "models/pips2_base_opencv.onnx", providers=onnxruntime.get_available_providers())
+
+    datain = {}
+    datain['rgbs'] = images
+    netOut = session.run(
+        None, datain)
+
+    for i in range(len(netOut)):
+        print(netOut[i].shape)
+        print(netOut[i])
+        print(" ")
+
+    fix_baseEncoder_shape()
+    return
+
+
+def test_bilinearOp():
+    v_y0_x0 = helper.make_tensor_value_info(
+        'v_y0_x0', onnx.TensorProto.FLOAT, [32, 4])
+    v_y0_x1 = helper.make_tensor_value_info(
+        'v_y0_x1', onnx.TensorProto.FLOAT, [32, 4])
+    v_y1_x0 = helper.make_tensor_value_info(
+        'v_y1_x0', onnx.TensorProto.FLOAT, [32, 4])
+    v_y1_x1 = helper.make_tensor_value_info(
+        'v_y1_x1', onnx.TensorProto.FLOAT, [32, 4])
+    w_y0_x0 = helper.make_tensor_value_info(
+        'w_y0_x0', onnx.TensorProto.FLOAT, [4, 1])
+    w_y0_x1 = helper.make_tensor_value_info(
+        'w_y0_x1', onnx.TensorProto.FLOAT, [4, 1])
+    w_y1_x0 = helper.make_tensor_value_info(
+        'w_y1_x0', onnx.TensorProto.FLOAT, [4, 1])
+    w_y1_x1 = helper.make_tensor_value_info(
+        'w_y1_x1', onnx.TensorProto.FLOAT, [4, 1])
+    output = helper.make_tensor_value_info(
+        'output', onnx.TensorProto.FLOAT, [32, 1]) 
+    m1 = onnx.helper.make_node(
+        op_type='MatMul',
+        inputs=['v_y0_x0', 'w_y0_x0'],
+        outputs=['m1'],
+        name='m1')
+    m2 = onnx.helper.make_node(
+        op_type='MatMul',
+        inputs=['v_y0_x1', 'w_y0_x1'],
+        outputs=['m2'],
+        name='m2')
+    m3 = onnx.helper.make_node(
+        op_type='MatMul',
+        inputs=['v_y1_x0', 'w_y1_x0'],
+        outputs=['m3'],
+        name='m3')
+    m4 = onnx.helper.make_node(
+        op_type='MatMul',
+        inputs=['v_y1_x1', 'w_y1_x1'],
+        outputs=['m4'],
+        name='m4')
+    a1 = onnx.helper.make_node(
+        op_type='Add',
+        inputs=['m1', 'm2'],
+        outputs=['a1'],
+        name='a1')
+    a2 = onnx.helper.make_node(
+        op_type='Add',
+        inputs=['m3', 'm4'],
+        outputs=['a2'],
+        name='a2')
+    a3 = onnx.helper.make_node(
+        op_type='Add',
+        inputs=['a1', 'a2'],
+        outputs=['output'],
+        name='output')
+    graph = onnx.helper.make_graph(
+        [m1,m2,m3,m4,a1,a2,a3],
+        'TwoLayerFC',
+        [v_y0_x0, v_y0_x1, v_y1_x0, v_y1_x1,w_y0_x0, w_y0_x1, w_y1_x0, w_y1_x1],
+        [output]
+    )
+    # model = helper.make_model(graph, producer_name='onnx-example')
+    # model = onnx.shape_inference.infer_shapes(model)
+    # onnx.checker.check_model(model)
+    # model.ir_version = 10
+    # model.opset_import[0].version = 21
+    # onnx.save(model, 'test.onnx')
+
+    shape=[128,64,64]
+    inputData = np.array([x % 200-100 for x in range(shape[0]
+                         * shape[1]*shape[2])]).astype(np.float32).reshape(shape)
+    inputData = torch.Tensor(inputData)
+    xy0 = torch.Tensor([[[12.5, 1.2], [13.3, 45.1], [23.3, 15.1]]]).type(torch.float32)
+    coords = xy0.unsqueeze(1).repeat(1, 8, 1, 1)
+    feat1 = utils.samp.bilinear_sample2d(
+        inputData.unsqueeze(0), coords[:, 0, :, 0], coords[:, 0, :, 1]).permute(0, 2, 1)
+
+
+
+    print(1)
+
 if __name__ == '__main__':
+    test_bilinearOp()
     # main()
-    export_baseEncoder()
+    # export_baseEncoder()
+    # export_CorrBlock()

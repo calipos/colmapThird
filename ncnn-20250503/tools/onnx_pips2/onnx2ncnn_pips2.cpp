@@ -3160,10 +3160,10 @@ int test_pips2_forward(const char* ncnnParamPath, const char* ncnnBinPath)
     ncnn::Extractor ex1 = testNet.create_extractor();
     std::vector<float> indata(3 * 1024 * 1024, 1);
     ncnn::Mat in(1024, 1024, 3, (void*)&indata[0], 4);
-    ex1.input("rgb", in);
+    ex1.input("rgbs", in);
     ncnn::Mat out0;
     auto start1 = std::chrono::steady_clock::now();
-    ex1.extract("/fnet/Resize_1_output_0", out0);
+    ex1.extract("fmaps", out0);
     //ex1.extract("/image_encoder/trunk/blocks.41/Add_3_output_0", out0);
     //ex1.extract("/image_encoder/trunk/blocks.0/attn/Split_output_2", out2);
     auto end1 = std::chrono::steady_clock::now();
@@ -5949,13 +5949,13 @@ int convert_main(const char* onnxPath, const char* ncnnParamPath, const char* nc
             {
                 resize_type = 1;
             }
-            else if (mode == "bilinear")
+            else if (mode == "linear")
             {
-                resize_type = 2;
+                resize_type = 2;//bilinear
             }
-            else if (mode == "bicubic")
+            else if (mode == "cubic")
             {
-                resize_type = 3;
+                resize_type = 3;//bicubic
             }
 
             if (scales.empty() && sizes.empty())
@@ -6733,11 +6733,18 @@ int test_list_weight()
 
     return 0;
 }
-
+int convert_BilinearOpNet()
+{
+    const char* onnxpb = "../../../../test.onnx";
+    const char* ncnn_prototxt = "../../../../test.param";
+    const char* ncnn_modelbin = "../../../../test.bin";
+    convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
+    return 0;
+}
 int main()
 {
-    //return test_list_weight();
-    if (0)
+    //return convert_BilinearOpNet();
+    if (1)
     {
         const char* onnxpb = "../../../../models/pips2_base_opencv.onnx";
         const char* ncnn_prototxt = "../../../../models/pips2_base_ncnn.param";
@@ -6745,6 +6752,6 @@ int main()
         convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
     }
     //test_beginning_forward("../../../../models/ncnnEncoderBeginning.param", "../../../../models/ncnnEncoderBeginning.bin");
-    test_pips2_forward("../../../../models/pips2_base_ncnn.param", "../../../../models/pips2_base_ncnn.bin");
+    //test_pips2_forward("../../../../models/pips2_base_ncnn.param", "../../../../models/pips2_base_ncnn.bin");
     return 0;
 }

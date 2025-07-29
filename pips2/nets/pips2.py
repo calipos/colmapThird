@@ -252,8 +252,7 @@ class BasicEncoder(nn.Module):
         x = self.relu2(x)
         x = self.conv3(x)
 
-        if self.training and self.dropout is not None:
-            x = self.dropout(x)
+
         return x
 
 class DeltaBlock(nn.Module):
@@ -533,7 +532,7 @@ class Pips(nn.Module):
 
 
 class BasicEncoder2(nn.Module):
-    def __init__(self, input_dim=3, output_dim=128, stride=8, norm_fn='batch', dropout=0.0):
+    def __init__(self, input_dim=3, output_dim=128, stride=8, norm_fn='batch'):
         super(BasicEncoder2, self).__init__()
         self.stride = stride
         self.norm_fn = norm_fn
@@ -592,9 +591,8 @@ class BasicEncoder2(nn.Module):
 
     def forward(self, x):
 
-        _,_, H, W = x.shape
-        outH = H//self.stride
-        outW = W//self.stride
+        N, C, H, W = x.shape
+
         x = self.conv1(x)
         x = self.norm1(x)
         x = self.relu1(x)
@@ -603,19 +601,77 @@ class BasicEncoder2(nn.Module):
         b = self.layer2(a)
         c = self.layer3(b)
         d = self.layer4(c)
-        a = F.interpolate(a, (outH, outW),
+        a = F.interpolate(a, (H//self.stride, W//self.stride),
                           mode='bilinear', align_corners=True)
-        b = F.interpolate(b, (outH, outW),
+        b = F.interpolate(b, (H//self.stride, W//self.stride),
                           mode='bilinear', align_corners=True)
-        c = F.interpolate(c, (outH, outW),
+        c = F.interpolate(c, (H//self.stride, W//self.stride),
                           mode='bilinear', align_corners=True)
-        d = F.interpolate(d, (outH, outW),
+        d = F.interpolate(d, (H//self.stride, W//self.stride),
                           mode='bilinear', align_corners=True)
         x = self.conv2(torch.cat([a, b, c, d], dim=1))
         x = self.norm2(x)
         x = self.relu2(x)
         x = self.conv3(x)
         return x
+
+
+class CorrBlock2:
+    def __init__(self, fmaps, num_levels=4, radius=4):
+        B, S, C, H, W = fmaps.shape
+        self.S, self.C, self.H, self.W = S, C, H, W
+        self.num_levels = num_levels
+        self.radius = radius
+        self.fmaps_pyramid = []
+        self.fmaps_pyramid.append(fmaps)
+        for i in range(self.num_levels-1):
+            fmaps_ = fmaps.reshape(B*S, C, H, W)
+            fmaps_ = F.avg_pool2d(fmaps_, 2, stride=2)
+            _, _, H, W = fmaps_.shape
+            fmaps = fmaps_.reshape(B, S, C, H, W)
+            self.fmaps_pyramid.append(fmaps)
+
+    def sample(self, coords):
+        r = self.radius
+        B, S, N, D = coords.shape
+        assert (D == 2)
+
+        x0 = coords[:, 0, :, 0].round().clamp(0, self.W-1).long()
+        y0 = coords[:, 0, :, 1].round().clamp(0, self.H-1).long()
+
+        H, W = self.H, self.W
+        out_pyramid = []
+        for i in range(self.num_levels):
+            corrs = self.corrs_pyramid[i]  # B,S,N,H,W
+            _, _, _, H, W = corrs.shape
+
+            dx = torch.linspace(-r, r, 2*r+1)
+            dy = torch.linspace(-r, r, 2*r+1)
+            delta = torch.stack(torch.meshgrid(
+                dy, dx, indexing='ij'), axis=-1).to(coords.device)
+
+            centroid_lvl = coords.reshape(B*S*N, 1, 1, 2) / 2**i
+            delta_lvl = delta.view(1, 2*r+1, 2*r+1, 2)
+            coords_lvl = centroid_lvl + delta_lvl
+
+            corrs = bilinear_sampler(corrs.reshape(B*S*N, 1, H, W), coords_lvl)
+            corrs = corrs.view(B, S, N, -1)
+            out_pyramid.append(corrs)
+
+        out = torch.cat(out_pyramid, dim=-1)  # B,S,N,LRR*2
+        return out.contiguous().float()
+
+    def corr(self, targets):
+        B, S, N, C = targets.shape
+        assert (C == self.C)
+        self.corrs_pyramid = []
+        for fmaps in self.fmaps_pyramid:
+            _, _, _, H, W = fmaps.shape
+            fmap2s = fmaps.view(B, S, C, H*W)
+            corrs = torch.matmul(targets, fmap2s)
+            corrs = corrs.view(B, S, N, H, W)
+            corrs = corrs / torch.sqrt(torch.tensor(C).float())
+            self.corrs_pyramid.append(corrs)
 
 class Pips_BasicEncoder(nn.Module):
     def __init__(self, stride=8):
@@ -629,12 +685,32 @@ class Pips_BasicEncoder(nn.Module):
         self.corr_radius = 3
 
         self.fnet = BasicEncoder2(
-            output_dim=self.latent_dim, norm_fn='instance', dropout=0, stride=stride)
+            output_dim=self.latent_dim, norm_fn='instance', stride=stride)
 
-
-    def forward(self,  rgbs, iters=3):        
+    def forward(self,  rgbs, iters=3):  # forward_encoder
         # B, S, C, H, W = rgbs.shape
         rgbs = 2 * (rgbs / 255.0) - 1.0
         device = rgbs.device
         fmaps = self.fnet(rgbs)
+        return fmaps
+
+
+class Pips_CorrBlock2(nn.Module):
+    def __init__(self, stride=8):
+        super(Pips_CorrBlock2, self).__init__()
+
+        self.stride = stride
+
+        self.hidden_dim = hdim = 256
+        self.latent_dim = latent_dim = 128
+        self.corr_levels = 4
+        self.corr_radius = 3
+
+    def forward(self,  fmaps,feats, iters=3):
+        fcorr_fn1 = CorrBlock2(
+            fmaps, num_levels=self.corr_levels, radius=self.corr_radius)
+        fcorr_fn2 = CorrBlock2(
+            fmaps, num_levels=self.corr_levels, radius=self.corr_radius)
+        fcorr_fn4 = CorrBlock2(
+            fmaps, num_levels=self.corr_levels, radius=self.corr_radius)
         return fmaps
