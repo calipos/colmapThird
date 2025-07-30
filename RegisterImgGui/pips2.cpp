@@ -33,10 +33,10 @@ namespace pips2
             "Input      w_y0_x1         0 1 w_y0_x1\n"
             "Input      w_y1_x0         0 1 w_y1_x0\n"
             "Input      w_y1_x1         0 1 w_y1_x1\n"
-            "BinaryOp      m1            2 1 v_y0_x0 w_y0_x0 m1  0=2\n"
-            "BinaryOp      m2            2 1 v_y0_x1 w_y0_x1 m2  0=2\n"
-            "BinaryOp      m3            2 1 v_y1_x0 w_y1_x0 m3  0=2\n"
-            "BinaryOp      m4            2 1 v_y1_x1 w_y1_x1 m4  0=2\n"
+            "MatMul      m1            2 1 v_y0_x0 w_y0_x0 m1\n"
+            "MatMul      m2            2 1 v_y0_x1 w_y0_x1 m2\n"
+            "MatMul      m3            2 1 v_y1_x0 w_y1_x0 m3\n"
+            "MatMul      m4            2 1 v_y1_x1 w_y1_x1 m4\n"
             "BinaryOp     a1            2 1 m1 m2 a1 0=0\n"
             "BinaryOp     a2            2 1 m3 m4 a2 0=0\n"
             "BinaryOp     output          2 1 a1 a2 output 0=0\n";
@@ -89,22 +89,32 @@ namespace pips2
     }
     ncnn::Mat Pips2::bilinear_sample2d(const ncnn::Mat& blob, const std::vector<float>& xs, const std::vector<float>& ys, std::shared_ptr<ncnn::Net> bilinearOpNet)
     {
-        int C = blob.c;
-        int N = xs.size();
-        int W = blob.w;
+        int ptsCnt = xs.size();
+        int featDim = 0;
         float W_f = blob.w;
         float H_f = blob.h;
         int max_x = blob.w - 1;
         int max_y = blob.h - 1;
-        ncnn::Mat v_y0_x0(C, N, (size_t)4);
-        ncnn::Mat v_y0_x1(C, N, (size_t)4);
-        ncnn::Mat v_y1_x0(C, N, (size_t)4);
-        ncnn::Mat v_y1_x1(C, N, (size_t)4);
-        ncnn::Mat w_y0_x0(1, N, (size_t)4);
-        ncnn::Mat w_y0_x1(1, N, (size_t)4);
-        ncnn::Mat w_y1_x0(1, N, (size_t)4);
-        ncnn::Mat w_y1_x1(1, N, (size_t)4);
-        for (size_t i = 0; i < N; i++)
+        ncnn::Mat value;
+        ncnn::Mat weight;
+        if (blob.dims==3)
+        {
+            featDim = blob.c;
+            value = ncnn::Mat(4, featDim, ptsCnt, (size_t)4);
+            weight = ncnn::Mat(1, 4, ptsCnt, (size_t)4);
+        }
+        else if (blob.dims == 4)
+        {
+
+            featDim = blob.d;
+            value = ncnn::Mat(4, featDim, ptsCnt * blob.c, (size_t)4);
+            weight = ncnn::Mat(1, 4, ptsCnt * blob.c, (size_t)4);
+        }
+        else
+        {
+            return ncnn::Mat();
+        }
+        for (size_t i = 0; i < ptsCnt; i++)
         {
             int x0 = std::floor(xs[i]);
             int x1 = x0 + 1;
@@ -118,11 +128,10 @@ namespace pips2
             if (y1 < 1)y1 = 1;
             if (x1 > max_x)x1 = max_x;
             if (y1 > max_y)y1 = max_y;
-
-            ((float*)w_y0_x0.data)[i] = (x1 - xs[i]) * (y1 - ys[i]);
-            ((float*)w_y0_x1.data)[i] = (xs[i] - x0) * (y1 - ys[i]);
-            ((float*)w_y1_x0.data)[i] = (x1 - xs[i]) * (ys[i] - y0);
-            ((float*)w_y1_x1.data)[i] = (xs[i] - x0) * (ys[i] - y0);
+            float w_y0_x0 = (x1 - xs[i]) * (y1 - ys[i]);
+            float w_y0_x1 = (xs[i] - x0) * (y1 - ys[i]);
+            float w_y1_x0 = (x1 - xs[i]) * (ys[i] - y0);
+            float w_y1_x1 = (xs[i] - x0) * (ys[i] - y0);
 
             for (int c = 0; c < C; c++)
             {
@@ -377,14 +386,14 @@ int test_bilinearOp()
     bilinearOpNet->load_param_mem(paramStr.c_str());
     bilinearOpNet->load_model((const unsigned char*)0);
 
-    std::vector<int>shape={128,64,64};
+    std::vector<int>shape={8,128,64,64};
     int totalcnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
     std::vector<float> indata(totalcnt);
     for (int i = 0; i < indata.size(); i++)
     {
         indata[i] = i%200-100;
     }
-    ncnn::Mat in(shape[2], shape[1], shape[0], (void*)&indata[0], 4);
+    ncnn::Mat in(shape[3], shape[2], shape[1], shape[0], (void*)&indata[0], 4);
     std::vector<float>xs = { 12.5000, 13.3000, 23.3000 };
     std::vector<float>ys = { 1.2000, 45.1000, 15.1000 };
 
@@ -396,7 +405,7 @@ int test_pips2()
 {
     using dnn::ocvHelper::operator<<;
     using dnn::ncnnHelper::operator<<;
-    //return test_bilinearOp();
+    return test_bilinearOp();
 
     std::vector<std::string>paths = {
     "D:/repo/colmapThird/data2/a/00000.jpg", 
