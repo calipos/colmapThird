@@ -13,12 +13,22 @@ namespace pips2
 		Pips2(
 			const std::filesystem::path& ncnnEncoderParamPath, const std::filesystem::path& ncnnEncoderBinPath);
 		~Pips2();
-		bool inputImage(const std::vector<std::string>& imgPath, std::vector<ncnn::Mat>& fmap);
+		bool inputImage(const std::vector<std::string>& imgPath, std::vector<ncnn::Mat>& fmaps);
 		bool inputImage(const cv::Mat& img,ncnn::Mat& fmap);
 		//bool serializationFeat(const std::filesystem::path& path);
 		//bool deserializationFeat(const std::filesystem::path& path);
 		cv::Size imgSize;
+		static std::string getBilinearOpNet();
+		static std::string getCorrsNet(const int& sequenceLength, const int& imgHeight, const int& imgWidth);
+		static ncnn::Mat bilinear_sample2d(const ncnn::Mat& blob, const std::vector<float>& xs, const std::vector<float>& ys, std::shared_ptr<ncnn::Net> bilinearOpNet);
+		static ncnn::Mat concatFmaps(const std::vector<ncnn::Mat>&fmap, const std::vector<int>& picks);
+		static ncnn::Mat repeatFeat(const ncnn::Mat&feat, const int&s);
+		std::shared_ptr<ncnn::Net> bilinearOpNet = 0;
+		std::shared_ptr<ncnn::Net> corrsNet = 0;
+		static const int stride;
+		static const int latent_dim;
 	private:
+		
 		bool changeParamResizeParam(const std::string& path, const std::pair<int, int>& d);
 		ncnn::Net encoderNet;
 		std::filesystem::path ncnnEncoderParamPath_, ncnnEncoderBinPath_;

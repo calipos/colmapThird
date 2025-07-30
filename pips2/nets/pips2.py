@@ -618,17 +618,14 @@ class BasicEncoder2(nn.Module):
 
 class CorrBlock2:
     def __init__(self, fmaps, num_levels=4, radius=4):
-        B, S, C, H, W = fmaps.shape
-        self.S, self.C, self.H, self.W = S, C, H, W
+        S_C, H, W = fmaps.shape
+        self.H, self.W = H, W
         self.num_levels = num_levels
         self.radius = radius
         self.fmaps_pyramid = []
         self.fmaps_pyramid.append(fmaps)
         for i in range(self.num_levels-1):
-            fmaps_ = fmaps.reshape(B*S, C, H, W)
-            fmaps_ = F.avg_pool2d(fmaps_, 2, stride=2)
-            _, _, H, W = fmaps_.shape
-            fmaps = fmaps_.reshape(B, S, C, H, W)
+            fmaps = F.avg_pool2d(fmaps, 2, stride=2)
             self.fmaps_pyramid.append(fmaps)
 
     def sample(self, coords):
@@ -662,15 +659,22 @@ class CorrBlock2:
         return out.contiguous().float()
 
     def corr(self, targets):
-        B, S, N, C = targets.shape
-        assert (C == self.C)
+        S,N, C = targets.shape
+        # assert (C == self.C)
         self.corrs_pyramid = []
-        for fmaps in self.fmaps_pyramid:
-            _, _, _, H, W = fmaps.shape
-            fmap2s = fmaps.view(B, S, C, H*W)
+        for i,fmaps in enumerate(self.fmaps_pyramid):
+            _, H, W = fmaps.shape
+            if i==0:
+                fmap2s = fmaps.view(8, 128, 120*67)
+            elif i==1:
+                fmap2s = fmaps.view(8, 128, 60*33)
+            elif i == 2:
+                fmap2s = fmaps.view(8, 128, 30*16)
+            else:
+                fmap2s = fmaps.view(8, 128, 15*8)
             corrs = torch.matmul(targets, fmap2s)
-            corrs = corrs.view(B, S, N, H, W)
-            corrs = corrs / torch.sqrt(torch.tensor(C).float())
+            # corrs = corrs.view(S, N, H, W)
+            corrs = corrs / 11.313708498984760390413509   # torch.sqrt(torch.tensor(C).float())
             self.corrs_pyramid.append(corrs)
 
 class Pips_BasicEncoder(nn.Module):
@@ -707,10 +711,7 @@ class Pips_CorrBlock2(nn.Module):
         self.corr_radius = 3
 
     def forward(self,  fmaps,feats, iters=3):
-        fcorr_fn1 = CorrBlock2(
+        fcorr_fn = CorrBlock2(
             fmaps, num_levels=self.corr_levels, radius=self.corr_radius)
-        fcorr_fn2 = CorrBlock2(
-            fmaps, num_levels=self.corr_levels, radius=self.corr_radius)
-        fcorr_fn4 = CorrBlock2(
-            fmaps, num_levels=self.corr_levels, radius=self.corr_radius)
-        return fmaps
+        fcorr_fn.corr(feats)
+        return fcorr_fn.corrs_pyramid

@@ -6741,127 +6741,86 @@ int convert_BilinearOpNet()
     convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
     return 0;
 }
-std::string getBilinearOpNet()
+
+std::string getCorrsNet(const int& sequenceLength, const int& imgHeight, const int& imgWidth)
 {
     std::string paramStr = "7767517\n"
-                           "15 15\n"
-                           "Input      v_y0_x0         0 1 v_y0_x0\n"
-                           "Input      v_y0_x1         0 1 v_y0_x1\n"
-                           "Input      v_y1_x0         0 1 v_y1_x0\n"
-                           "Input      v_y1_x1         0 1 v_y1_x1\n"
-                           "Input      w_y0_x0         0 1 w_y0_x0\n"
-                           "Input      w_y0_x1         0 1 w_y0_x1\n"
-                           "Input      w_y1_x0         0 1 w_y1_x0\n"
-                           "Input      w_y1_x1         0 1 w_y1_x1\n"
-                           "MatMul      m1            2 1 v_y0_x0 w_y0_x0 m1\n"
-                           "MatMul      m2            2 1 v_y0_x1 w_y0_x1 m2\n"
-                           "MatMul      m3            2 1 v_y1_x0 w_y1_x0 m3\n"
-                           "MatMul      m4            2 1 v_y1_x1 w_y1_x1 m4\n"
-                           "BinaryOp     a1            2 1 m1 m2 a1 0=0\n"
-                           "BinaryOp     a2            2 1 m3 m4 a2 0=0\n"
-                           "BinaryOp     output          2 1 a1 a2 output 0=0\n";
+                           "21 31\n"
+                           "Input            fmaps                    0 1 fmaps\n"
+                           "Split            splitncnn_input0         1 2 fmaps fmaps_splitncnn_0 fmaps_splitncnn_1\n"
+                           "Input            feats                    0 1 feats\n"
+                           "Split            splitncnn_input1         1 4 feats feats_splitncnn_0 feats_splitncnn_1 feats_splitncnn_2 feats_splitncnn_3\n"
+                           "Pooling          /AveragePool             1 1 fmaps_splitncnn_1 /AveragePool_output_0 0=1 1=2 11=2 2=2 12=2 3=0 13=0 14=0 15=0 5=1 6=1\n"
+                           "Split            splitncnn_0              1 2 /AveragePool_output_0 /AveragePool_output_0_splitncnn_0 /AveragePool_output_0_splitncnn_1\n"
+                           "Pooling          /AveragePool_1           1 1 /AveragePool_output_0_splitncnn_1 /AveragePool_1_output_0 0=1 1=2 11=2 2=2 12=2 3=0 13=0 14=0 15=0 5=1 6=1\n"
+                           "Split            splitncnn_1              1 2 /AveragePool_1_output_0 /AveragePool_1_output_0_splitncnn_0 /AveragePool_1_output_0_splitncnn_1\n"
+                           "Pooling          /AveragePool_2           1 1 /AveragePool_1_output_0_splitncnn_1 /AveragePool_2_output_0 0=1 1=2 11=2 2=2 12=2 3=0 13=0 14=0 15=0 5=1 6=1\n";
+    int h = imgHeight / 8;
+    int w = imgWidth / 8;
+    std::string reshape0Str = "Reshape /Reshape 1 1 fmaps_splitncnn_0 /Reshape_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(128) + " 0=" + std::to_string(h * w) + "\n";
+    paramStr += reshape0Str;
+    paramStr += "MatMul           /MatMul                  2 1 feats_splitncnn_3 /Reshape_output_0 /MatMul_output_0\n";
+    std::string div0Str = "BinaryOp  /Div  1 1 /MatMul_output_0 corrs_pyramid_0  0=3  1=1  2=" + std::to_string(sqrt(double(128))) + "\n";
+    paramStr += div0Str;
+    h = h / 2;
+    w = w / 2;
+    std::string reshape1Str = "Reshape /Reshape_1 1 1 /AveragePool_output_0_splitncnn_0 /Reshape_1_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(128) + " 0=" + std::to_string(h * w) + "\n";
+    paramStr += reshape1Str;
+    paramStr += "MatMul           /MatMul_1                2 1 feats_splitncnn_2 /Reshape_1_output_0 /MatMul_1_output_0\n";
+    std::string div1Str = "BinaryOp  /Div_1  1 1 /MatMul_1_output_0 corrs_pyramid_1  0=3  1=1  2=" + std::to_string(sqrt(double(128))) + "\n";
+    paramStr += div1Str;
+    h = h / 2;
+    w = w / 2;
+    std::string reshape2Str = "Reshape /Reshape_2 1 1 /AveragePool_1_output_0_splitncnn_0 /Reshape_2_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(128) + " 0=" + std::to_string(h * w) + "\n";
+    paramStr += reshape2Str;
+    paramStr += "MatMul           /MatMul_2                2 1 feats_splitncnn_1 /Reshape_2_output_0 /MatMul_2_output_0\n";
+    std::string div2Str = "BinaryOp  /Div_2  1 1 /MatMul_2_output_0 corrs_pyramid_2  0=3  1=1  2=" + std::to_string(sqrt(double(128))) + "\n";
+    paramStr += div2Str;
+    h = h / 2;
+    w = w / 2;
+    std::string reshape3Str = "Reshape /Reshape_3 1 1 /AveragePool_2_output_0 /Reshape_3_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(128) + " 0=" + std::to_string(h * w) + "\n";
+    paramStr += reshape3Str;
+    paramStr += "MatMul           /MatMul_3                2 1 feats_splitncnn_0 /Reshape_3_output_0 /MatMul_3_output_0\n";
+    std::string div3Str = "BinaryOp  /Div_3  1 1 /MatMul_3_output_0 corrs_pyramid_3 0=3  1=1  2=" + std::to_string(sqrt(double(128))) + "\n";
+    paramStr += div3Str;
     return paramStr;
 }
-ncnn::Mat bilinear_sample2d(const ncnn::Mat& blob, const std::vector<float>& xs, const std::vector<float>& ys, std::shared_ptr<ncnn::Net> bilinearOpNet)
+int test_corrs() 
 {
-    int C = blob.c;
-    int N = xs.size();
-    int W = blob.w;
-    float W_f = blob.w;
-    float H_f = blob.h;
-    int max_x = blob.w - 1;
-    int max_y = blob.h - 1;
-    ncnn::Mat v_y0_x0(N, C, (size_t)4);
-    ncnn::Mat v_y0_x1(N, C, (size_t)4);
-    ncnn::Mat v_y1_x0(N, C, (size_t)4);
-    ncnn::Mat v_y1_x1(N, C, (size_t)4);
-    ncnn::Mat w_y0_x0(1, N, (size_t)4);
-    ncnn::Mat w_y0_x1(1, N, (size_t)4);
-    ncnn::Mat w_y1_x0(1, N, (size_t)4);
-    ncnn::Mat w_y1_x1(1, N, (size_t)4);
-    for (size_t i = 0; i < N; i++)
-    {
-        int x0 = std::floor(xs[i]);
-        int x1 = x0 + 1;
-        int y0 = std::floor(ys[i]);
-        int y1 = y0 + 1;
-        if (x0 < 0) x0 = 0;
-        if (y0 < 0) y0 = 0;
-        if (x0 > max_x) x0 = max_x;
-        if (y0 > max_y) y0 = max_y;
-        if (x1 < 1) x1 = 1;
-        if (y1 < 1) y1 = 1;
-        if (x1 > max_x) x1 = max_x;
-        if (y1 > max_y) y1 = max_y;
+    std::string paramStr = getCorrsNet(8,960,540);
+    std::cout << paramStr << std::endl;
+    ncnn::Net corrsNet;
+    corrsNet.load_param_mem(paramStr.c_str());
+    corrsNet.load_model((const unsigned char*)0);
 
-        ((float*)w_y0_x0.data)[i] = (x1 - xs[i]) * (y1 - ys[i]);
-        ((float*)w_y0_x1.data)[i] = (xs[i] - x0) * (y1 - ys[i]);
-        ((float*)w_y1_x0.data)[i] = (x1 - xs[i]) * (ys[i] - y0);
-        ((float*)w_y1_x1.data)[i] = (xs[i] - x0) * (ys[i] - y0);
+    ncnn::Mat fmaps (67,120,8*128,(size_t)4);
+    ncnn::Mat feats(128, 3, 8, (size_t)4);
 
-        for (int c = 0; c < C; c++)
-        {
-            int pp = i + c * v_y0_x0.w;
-            int p0 = x0 + W * y0;
-            int p1 = x1 + W * y0;
-            int p2 = x0 + W * y1;
-            int p3 = x1 + W * y1;
-            ((float*)v_y0_x0.data)[pp] = ((const float*)blob.data)[p0 + c * blob.cstep];
-            ((float*)v_y0_x1.data)[pp] = ((const float*)blob.data)[p1 + c * blob.cstep];
-            ((float*)v_y1_x0.data)[pp] = ((const float*)blob.data)[p2 + c * blob.cstep];
-            ((float*)v_y1_x1.data)[pp] = ((const float*)blob.data)[p3 + c * blob.cstep];
-        }
-    }
-
-    ncnn::Extractor ex2 = bilinearOpNet->create_extractor();
-    ex2.input("v_y0_x0", v_y0_x0);
-    ex2.input("v_y0_x1", v_y0_x1);
-    ex2.input("v_y1_x0", v_y1_x0);
-    ex2.input("v_y1_x1", v_y1_x1);
-    ex2.input("w_y0_x0", w_y0_x0);
-    ex2.input("w_y0_x1", w_y0_x1);
-    ex2.input("w_y1_x0", w_y1_x0);
-    ex2.input("w_y1_x1", w_y1_x1);
-    auto start1 = std::chrono::steady_clock::now();
-
-    ncnn::Mat bilinear_sample_out;
-    ex2.extract("output", bilinear_sample_out);
-    auto end1 = std::chrono::steady_clock::now();
-    auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
-    //dnn::ncnnHelper::printBlob(bilinear_sample_out);
-    std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
-
-    return bilinear_sample_out;
-}
-int test_bilinearOp()
-{
-    std::string paramStr = getBilinearOpNet();
-    std::shared_ptr<ncnn::Net> bilinearOpNet(new ncnn::Net());
-    bilinearOpNet->load_param_mem(paramStr.c_str());
-
-    std::vector<int> shape = {128, 64, 64};
-    int totalcnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
-    std::vector<float> indata(totalcnt);
-    for (int i = 0; i < indata.size(); i++)
-    {
-        indata[i] = i % 200 - 100;
-    }
-    ncnn::Mat in(shape[2], shape[1], shape[0], (void*)&indata[0], 4);
-    std::vector<float> xs = {12.5000, 13.3000, 23.3000};
-    std::vector<float> ys = {1.2000, 45.1000, 15.1000};
-
-    bilinear_sample2d(in, xs, ys, bilinearOpNet);
-
+    ncnn::Extractor ex_corrs = corrsNet.create_extractor();
+    ex_corrs.input("fmaps", fmaps);
+    ex_corrs.input("feats", feats);
+    ncnn::Mat corrs_pyramid0, corrs_pyramid1, corrs_pyramid2, corrs_pyramid3;
+    ex_corrs.extract("corrs_pyramid_0", corrs_pyramid0);
+    ex_corrs.extract("corrs_pyramid_1", corrs_pyramid1);
+    ex_corrs.extract("corrs_pyramid_2", corrs_pyramid2);
+    ex_corrs.extract("corrs_pyramid_3", corrs_pyramid3);
     return 0;
 }
 int main()
 {
-    return test_bilinearOp();
-    if (1)
+    return test_corrs();
+    if (0)
     {
         const char* onnxpb = "../../../../models/pips2_base_opencv.onnx";
         const char* ncnn_prototxt = "../../../../models/pips2_base_ncnn.param";
         const char* ncnn_modelbin = "../../../../models/pips2_base_ncnn.bin";
+        convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
+    }
+    if (0)
+    {
+        const char* onnxpb = "../../../../models/pips2_corrBlock_opencv.onnx";
+        const char* ncnn_prototxt = "../../../../models/pips2_corrBlock_ncnn.param";
+        const char* ncnn_modelbin = "../../../../models/pips2_corrBlock_ncnn.bin";
         convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
     }
     //test_beginning_forward("../../../../models/ncnnEncoderBeginning.param", "../../../../models/ncnnEncoderBeginning.bin");

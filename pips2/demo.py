@@ -18,6 +18,7 @@ from onnx import helper
 checkmodel = False
 inferShapes = False
 ir_version = 10
+debug_self_data = True
 def read_mp4(fn):
     vidcap = cv2.VideoCapture(fn)
     frames = []
@@ -111,7 +112,11 @@ def run_model(model, rgbs, S_max=128, N=64, iters=16):
     grid_y = 8 + grid_y.reshape(B, -1)/float(N_-1) * (H-16)
     grid_x = 8 + grid_x.reshape(B, -1)/float(N_-1) * (W-16)
     #[1,1024,2]
-    xy0 = torch.stack([grid_x, grid_y], dim=-1) # B, N_*N_, 2
+    if debug_self_data:
+        xy0 = torch.Tensor(
+        [[[12.5, 1.2], [13.3, 45.1], [23.3, 15.1]]]).type(torch.float32)
+    else:
+        xy0 = torch.stack([grid_x, grid_y], dim=-1) # B, N_*N_, 2
     _, S, C, H, W = rgbs.shape
 
     # zero-vel init [1,48,1024,2]
@@ -151,11 +156,36 @@ def main(
     name = Path(filename).stem
     print('name', name)
     
-    rgbs = read_mp4(filename)
-    rgbs = np.stack(rgbs, axis=0) # S,H,W,3
-    rgbs = rgbs[:,:,:,::-1].copy() # BGR->RGB
-    rgbs = rgbs[::timestride]
-    S_here,H,W,C = rgbs.shape
+    if not debug_self_data: 
+        rgbs = read_mp4(filename)
+        rgbs = np.stack(rgbs, axis=0) # S,H,W,3
+        rgbs = rgbs[:,:,:,::-1].copy() # BGR->RGB
+        rgbs = rgbs[::timestride]
+        S_here,H,W,C = rgbs.shape
+    else:
+        imgPaths = ["D:/repo/colmapThird/data2/a/00000.jpg",
+                    "D:/repo/colmapThird/data2/a/00001.jpg",
+                    "D:/repo/colmapThird/data2/a/00002.jpg",
+                    "D:/repo/colmapThird/data2/a/00003.jpg",
+                    "D:/repo/colmapThird/data2/a/00004.jpg",
+                    "D:/repo/colmapThird/data2/a/00005.jpg",
+                    "D:/repo/colmapThird/data2/a/00006.jpg",
+                    "D:/repo/colmapThird/data2/a/00007.jpg"]
+        rgbs = []
+        for i in range(len(imgPaths)):
+            img = cv2.imread(imgPaths[i])
+            rgbs.append(img)
+        rgbs = np.stack(rgbs, axis=0)  # S,H,W,3
+        # rgbs = rgbs[:, :, :, ::-1].copy()  # BGR->RGB
+        rgbs = rgbs[::timestride]
+        S_here, H, W, C = rgbs.shape
+        image_size = (H, W)
+
+
+
+
+
+
     print('rgbs', rgbs.shape)
 
     # autogen a name
@@ -306,22 +336,25 @@ def export_CorrBlock():
     if init_dir:
         _ = saverloader.load(init_dir, model)
     model.eval()
-    dummy_input = torch.randn(8, 128, 120, 67)
-    input_names = ["fmaps"]        # 定义onnx 输入节点名称
-    output_names = ["fmaps"]      # 定义onnx 输出节点名称
-    onnx_path = "models/pips2_base_opencv.onnx"
+    dummy_fmaps = torch.randn(8*128, 120, 67)
+    dummy_feats = torch.randn(8,3, 128)
+    input_names = ["fmaps", "feats"]        # 定义onnx 输入节点名称
+    output_names = ["corrs0", "corrs1", "corrs2", "corrs3"]      # 定义onnx 输出节点名称
+    onnx_path = "models/pips2_corrBlock_opencv.onnx"
     torch.onnx.export(
         model,
-        (dummy_input),
+        (dummy_fmaps, dummy_feats),
         onnx_path,
         input_names=input_names,
         output_names=output_names,
         export_params=True,
         opset_version=11,  # 确保兼容性
-        dynamic_axes={'fmaps':  {2: "height", 3: 'width'},
-                      'fmaps': {2: 'height', 3: 'width'}}
+        dynamic_axes={'fmaps':  {0:"seq",1: "height", 2: 'width'},
+                      'feats': {0: "seq",1:"ptCnt"}}
     )
 
+
+    return
     img = cv2.imread('D:/repo/colmapThird/data2/a/00000.jpg')
     images = np.expand_dims(img.transpose(
         [2, 0, 1]), axis=0).astype(np.float32)
@@ -420,13 +453,12 @@ def test_bilinearOp():
         inputData.unsqueeze(0), coords[:, 0, :, 0], coords[:, 0, :, 1]).permute(0, 2, 1)
 
 
-
-    print(1)
+    print(feat1)
 
 if __name__ == '__main__':
     print('opencv 的onnx 似乎要快一点,但是动态的shape总是调不好,ncnn直接操作param更方便')
     print('先运行export_baseEncoder()生成models/pips2_base_opencv.onnx,再运行ncnn的onnx_pips2')
-    test_bilinearOp()
-    # main()
+    # test_bilinearOp()
+    main()
     # export_baseEncoder()
     # export_CorrBlock()

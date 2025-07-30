@@ -117,10 +117,10 @@ namespace dnn
             }
             return pos;
         }
-        void printBlob(const ncnn::Mat& out)
+        std::ostream& printBlob(const ncnn::Mat& out,std::ostream&os)
         {
             ncnn::Mat shape = out.shape();
-            std::cout << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << ")  dim=" << out.dims << std::endl;
+            os << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << ")  dim=" << out.dims << std::endl;
             int cstep = out.cstep;
             int dstep = out.cstep;
             const float* data = (float*)out.data;
@@ -134,27 +134,27 @@ namespace dnn
                     for (int h = 0; h < shape.h; ++h)
                     {
                         const float* data2 = data + h * shape.w;
-                        std::cout << "[" << c << "," << d << "," << h << ":];  ";
+                        os << "[" << c << "," << d << "," << h << ":];  ";
                         for (int w = 0; w < shape.w; ++w)
                         {
-                            std::cout << data2[w] << " ";
+                            os << data2[w] << " ";
                             if (w == 2)
                             {
                                 int newW = shape.w - 4;
                                 if (newW > w)
                                 {
-                                    std::cout << " ... ";
+                                    os << " ... ";
                                     w = newW;
                                 }
                             }
                         }
-                        std::cout << std::endl;
+                        os << std::endl;
                         if (h == 2)
                         {
                             int newH = shape.h - 4;
                             if (newH > h)
                             {
-                                std::cout << " ... " << std::endl;
+                                os << " ... " << std::endl;
                                 h = newH;
                             }
                         }
@@ -164,13 +164,13 @@ namespace dnn
                         int newD = shape.d - 4;
                         if (newD > d)
                         {
-                            std::cout << " ... " << std::endl;
+                            os << " ... " << std::endl;
                             d = newD;
                         }
                     }
                     else
                     {
-                        std::cout << std::endl;
+                        os << std::endl;
                     }
                 }
                 if (c == 2)
@@ -178,11 +178,12 @@ namespace dnn
                     int newC = shape.c - 4;
                     if (newC > c)
                     {
-                        std::cout << " ... " << std::endl;
+                        os << " ... " << std::endl;
                         c = newC;
                     }
                 }
             }
+            return os;
         }
         void writeBlob(const std::string& path, const ncnn::Mat& out)
         {
@@ -292,6 +293,10 @@ namespace dnn
                 dat[i] = *data2;
             }
             return true;
+        }
+        std::ostream& operator<<(std::ostream& os, const ncnn::Mat& out)
+        {
+            return printBlob(out,os);
         }
     }
 
