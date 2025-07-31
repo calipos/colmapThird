@@ -18,28 +18,18 @@
 namespace pips2
 {
     const int Pips2::stride = 8;
+    const int Pips2::corrsBlockCnt = 3;
     const int Pips2::latent_dim = 128;
+    const int Pips2::pyramid_level = 4;
 
 
     std::string Pips2::getBilinearOpNet()
     {
         std::string paramStr = "7767517\n"
-            "15 15\n"
-            "Input      v_y0_x0         0 1 v_y0_x0\n"
-            "Input      v_y0_x1         0 1 v_y0_x1\n"
-            "Input      v_y1_x0         0 1 v_y1_x0\n"
-            "Input      v_y1_x1         0 1 v_y1_x1\n"
-            "Input      w_y0_x0         0 1 w_y0_x0\n"
-            "Input      w_y0_x1         0 1 w_y0_x1\n"
-            "Input      w_y1_x0         0 1 w_y1_x0\n"
-            "Input      w_y1_x1         0 1 w_y1_x1\n"
-            "MatMul      m1            2 1 v_y0_x0 w_y0_x0 m1\n"
-            "MatMul      m2            2 1 v_y0_x1 w_y0_x1 m2\n"
-            "MatMul      m3            2 1 v_y1_x0 w_y1_x0 m3\n"
-            "MatMul      m4            2 1 v_y1_x1 w_y1_x1 m4\n"
-            "BinaryOp     a1            2 1 m1 m2 a1 0=0\n"
-            "BinaryOp     a2            2 1 m3 m4 a2 0=0\n"
-            "BinaryOp     output          2 1 a1 a2 output 0=0\n";
+            "3 3\n"
+            "Input      v         0 1 v\n"
+            "Input      w         0 1 w\n"
+            "MatMul      output            2 1 v w output\n";
         return paramStr;
     }
 
@@ -47,7 +37,7 @@ namespace pips2
     {
         std::string paramStr =
             "7767517\n"
-            "21 31\n"
+            "25 35\n"
             "Input            fmaps                    0 1 fmaps\n"
             "Split            splitncnn_input0         1 2 fmaps fmaps_splitncnn_0 fmaps_splitncnn_1\n"
             "Input            feats                    0 1 feats\n"
@@ -57,34 +47,46 @@ namespace pips2
             "Pooling          /AveragePool_1           1 1 /AveragePool_output_0_splitncnn_1 /AveragePool_1_output_0 0=1 1=2 11=2 2=2 12=2 3=0 13=0 14=0 15=0 5=1 6=1\n"
             "Split            splitncnn_1              1 2 /AveragePool_1_output_0 /AveragePool_1_output_0_splitncnn_0 /AveragePool_1_output_0_splitncnn_1\n"
             "Pooling          /AveragePool_2           1 1 /AveragePool_1_output_0_splitncnn_1 /AveragePool_2_output_0 0=1 1=2 11=2 2=2 12=2 3=0 13=0 14=0 15=0 5=1 6=1\n";
-        int h = imgHeight / Pips2::stride;
-        int w = imgWidth / Pips2::stride;
-        std::string reshape0Str = "Reshape /Reshape 1 1 fmaps_splitncnn_0 /Reshape_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=" + std::to_string(h * w) + "\n";
+        int h0 = imgHeight / Pips2::stride;
+        int w0 = imgWidth / Pips2::stride;
+        std::string reshape0Str = "Reshape /Reshape 1 1 fmaps_splitncnn_0 /Reshape_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=" + std::to_string(h0 * w0) + "\n";
         paramStr += reshape0Str;
         paramStr +="MatMul           /MatMul                  2 1 feats_splitncnn_3 /Reshape_output_0 /MatMul_output_0\n";
-        std::string div0Str ="BinaryOp  /Div  1 1 /MatMul_output_0 corrs_pyramid_0 0=3  1=1  2="+std::to_string(sqrt(double(Pips2::latent_dim)))+"\n";
+        std::string div0Str ="BinaryOp  /Div  1 1 /MatMul_output_0 corrs_pyramid_reshape_0 0=3  1=1  2="+std::to_string(sqrt(double(Pips2::latent_dim)))+"\n";
         paramStr += div0Str;
-        h = h / 2;
-        w = w / 2;
-        std::string reshape1Str = "Reshape /Reshape_1 1 1 /AveragePool_output_0_splitncnn_0 /Reshape_1_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=" + std::to_string(h * w) + "\n";
+        int h1 = h0 / 2;
+        int w1 = w0 / 2;
+        std::string reshape1Str = "Reshape /Reshape_1 1 1 /AveragePool_output_0_splitncnn_0 /Reshape_1_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=" + std::to_string(h1 * w1) + "\n";
         paramStr += reshape1Str;
         paramStr +="MatMul           /MatMul_1                2 1 feats_splitncnn_2 /Reshape_1_output_0 /MatMul_1_output_0\n";
-        std::string div1Str = "BinaryOp  /Div_1  1 1 /MatMul_1_output_0 corrs_pyramid_1 0=3  1=1  2=" + std::to_string(sqrt(double(Pips2::latent_dim))) + "\n";
+        std::string div1Str = "BinaryOp  /Div_1  1 1 /MatMul_1_output_0 corrs_pyramid_reshape_1 0=3  1=1  2=" + std::to_string(sqrt(double(Pips2::latent_dim))) + "\n";
         paramStr += div1Str;
-        h = h / 2;
-        w = w / 2;
-        std::string reshape2Str = "Reshape /Reshape_2 1 1 /AveragePool_1_output_0_splitncnn_0 /Reshape_2_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=" + std::to_string(h * w) + "\n";
+        int h2 = h1 / 2;
+        int w2 = w1 / 2;
+        std::string reshape2Str = "Reshape /Reshape_2 1 1 /AveragePool_1_output_0_splitncnn_0 /Reshape_2_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=" + std::to_string(h2 * w2) + "\n";
         paramStr += reshape2Str;
         paramStr += "MatMul           /MatMul_2                2 1 feats_splitncnn_1 /Reshape_2_output_0 /MatMul_2_output_0\n";
-        std::string div2Str = "BinaryOp  /Div_2  1 1 /MatMul_2_output_0 corrs_pyramid_2 0=3  1=1  2=" + std::to_string(sqrt(double(Pips2::latent_dim))) + "\n";
+        std::string div2Str = "BinaryOp  /Div_2  1 1 /MatMul_2_output_0 corrs_pyramid_reshape_2 0=3  1=1  2=" + std::to_string(sqrt(double(Pips2::latent_dim))) + "\n";
         paramStr += div2Str;
-        h = h / 2;
-        w = w / 2;
-        std::string reshape3Str = "Reshape /Reshape_3 1 1 /AveragePool_2_output_0 /Reshape_3_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=" + std::to_string(h * w) + "\n";
+        int h3 = h2 / 2;
+        int w3 = w2 / 2;
+        std::string reshape3Str = "Reshape /Reshape_3 1 1 /AveragePool_2_output_0 /Reshape_3_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=" + std::to_string(h3 * w3) + "\n";
         paramStr += reshape3Str;
         paramStr += "MatMul           /MatMul_3                2 1 feats_splitncnn_0 /Reshape_3_output_0 /MatMul_3_output_0\n";
-        std::string div3Str = "BinaryOp  /Div_3  1 1 /MatMul_3_output_0 corrs_pyramid_3  0=3  1=1  2=" + std::to_string(sqrt(double(Pips2::latent_dim))) + "\n";
+        std::string div3Str = "BinaryOp  /Div_3  1 1 /MatMul_3_output_0 corrs_pyramid_reshape_3  0=3  1=1  2=" + std::to_string(sqrt(double(Pips2::latent_dim))) + "\n";
         paramStr += div3Str;
+
+
+        std::string reshape0Str_2 = "Reshape corrs_pyramid_0 1 1 corrs_pyramid_reshape_0 corrs_pyramid_0 2=-1 11=1 1=" + std::to_string(h0) + " 0=" + std::to_string(w0) + "\n";
+        paramStr += reshape0Str_2;
+        std::string reshape1Str_2 = "Reshape corrs_pyramid_1 1 1 corrs_pyramid_reshape_1 corrs_pyramid_1 2=-1 11=1 1=" + std::to_string(h1) + " 0=" + std::to_string(w1) + "\n";
+        paramStr += reshape1Str_2;
+        std::string reshape2Str_2 = "Reshape corrs_pyramid_2 1 1 corrs_pyramid_reshape_2 corrs_pyramid_2 2=-1 11=1 1=" + std::to_string(h2) + " 0=" + std::to_string(w2) + "\n";
+        paramStr += reshape2Str_2;
+        std::string reshape3Str_2 = "Reshape corrs_pyramid_3 1 1 corrs_pyramid_reshape_3 corrs_pyramid_3 2=-1 11=1 1=" + std::to_string(h3) + " 0=" + std::to_string(w3) + "\n";
+        paramStr += reshape3Str_2;
+
+
         return paramStr;
     }
     ncnn::Mat Pips2::bilinear_sample2d(const ncnn::Mat& blob, const std::vector<float>& xs, const std::vector<float>& ys, std::shared_ptr<ncnn::Net> bilinearOpNet)
@@ -97,23 +99,35 @@ namespace pips2
         int max_y = blob.h - 1;
         ncnn::Mat value;
         ncnn::Mat weight;
+        int outC = 0;
+        int outH = 0;
+        int outW = 0;
         if (blob.dims==3)
         {
             featDim = blob.c;
             value = ncnn::Mat(4, featDim, ptsCnt, (size_t)4);
             weight = ncnn::Mat(1, 4, ptsCnt, (size_t)4);
+            outC = 1;
+            outH = ptsCnt;
+            outW = featDim;
         }
         else if (blob.dims == 4)
         {
-
             featDim = blob.d;
             value = ncnn::Mat(4, featDim, ptsCnt * blob.c, (size_t)4);
             weight = ncnn::Mat(1, 4, ptsCnt * blob.c, (size_t)4);
+            outC = blob.c;
+            outH = ptsCnt;
+            outW = featDim;
         }
         else
         {
+            LOG_ERR_OUT << "dims error";
             return ncnn::Mat();
         }
+        int value_cstep = value.cstep;
+        int weight_cstep = weight.cstep;
+        int C = weight.c;
         for (size_t i = 0; i < ptsCnt; i++)
         {
             int x0 = std::floor(xs[i]);
@@ -132,37 +146,166 @@ namespace pips2
             float w_y0_x1 = (xs[i] - x0) * (y1 - ys[i]);
             float w_y1_x0 = (x1 - xs[i]) * (ys[i] - y0);
             float w_y1_x1 = (xs[i] - x0) * (ys[i] - y0);
-
-            for (int c = 0; c < C; c++)
+            int p0 = x0 + blob.w * y0;
+            int p1 = x1 + blob.w * y0;
+            int p2 = x0 + blob.w * y1;
+            int p3 = x1 + blob.w * y1;
+            if (blob.dims == 3)
             {
-                int pp = c + i* v_y0_x0.w;
-                int p0 = x0 + W * y0;
-                int p1 = x1 + W * y0;
-                int p2 = x0 + W * y1;
-                int p3 = x1 + W * y1;
-                ((float*)v_y0_x0.data)[pp] = ((const float*)blob.data)[p0 + c * blob.cstep];
-                ((float*)v_y0_x1.data)[pp] = ((const float*)blob.data)[p1 + c * blob.cstep];
-                ((float*)v_y1_x0.data)[pp] = ((const float*)blob.data)[p2 + c * blob.cstep];
-                ((float*)v_y1_x1.data)[pp] = ((const float*)blob.data)[p3 + c * blob.cstep];
+                int pp = i * weight_cstep;
+                ((float*)weight.data)[pp] = w_y0_x0;
+                ((float*)weight.data)[pp + 1] = w_y0_x1;
+                ((float*)weight.data)[pp + 2] = w_y1_x0;
+                ((float*)weight.data)[pp + 3] = w_y1_x1;
+                {
+                    int pp0 = i * value_cstep;
+                    for (int fea = 0; fea < featDim; fea++)
+                    {
+                        ((float*)value.data)[pp0 + fea * 4] = ((const float*)blob.data)[p0 + fea * blob.cstep];
+                        ((float*)value.data)[pp0 + fea * 4 + 1] = ((const float*)blob.data)[p1 + fea * blob.cstep];
+                        ((float*)value.data)[pp0 + fea * 4 + 2] = ((const float*)blob.data)[p2 + fea * blob.cstep];
+                        ((float*)value.data)[pp0 + fea * 4 + 3] = ((const float*)blob.data)[p3 + fea * blob.cstep];
+                    }
+                }
             }
+            else if (blob.dims == 4)
+            {
+                int whStep = blob.w * blob.h;
+                for (int c = 0; c < blob.c; c++)
+                {
+                    int pp = (i + c * ptsCnt) * weight_cstep;// +i * 4;
+                    ((float*)weight.data)[pp] = w_y0_x0;
+                    ((float*)weight.data)[pp + 1] = w_y0_x1;
+                    ((float*)weight.data)[pp + 2] = w_y1_x0;
+                    ((float*)weight.data)[pp + 3] = w_y1_x1;
+                    int pp0 = (i + c * ptsCnt) * value_cstep;
+                    for (int fea = 0; fea < featDim; fea++)
+                    {
+                        int j = whStep * fea;
+                        ((float*)value.data)[pp0 + fea * 4 + 0] = ((const float*)blob.data)[p0 + j + c * blob.cstep];
+                        ((float*)value.data)[pp0 + fea * 4 + 1] = ((const float*)blob.data)[p1 + j + c * blob.cstep];
+                        ((float*)value.data)[pp0 + fea * 4 + 2] = ((const float*)blob.data)[p2 + j + c * blob.cstep];
+                        ((float*)value.data)[pp0 + fea * 4 + 3] = ((const float*)blob.data)[p3 + j + c * blob.cstep];
+                    }
+                }
+            } 
         }
         ncnn::Extractor ex2 = bilinearOpNet->create_extractor();
-        ex2.input("v_y0_x0", v_y0_x0);
-        ex2.input("v_y0_x1", v_y0_x1);
-        ex2.input("v_y1_x0", v_y1_x0);
-        ex2.input("v_y1_x1", v_y1_x1);
-        ex2.input("w_y0_x0", w_y0_x0);
-        ex2.input("w_y0_x1", w_y0_x1);
-        ex2.input("w_y1_x0", w_y1_x0);
-        ex2.input("w_y1_x1", w_y1_x1);
+        ex2.input("v", value);
+        ex2.input("w", weight);
         auto start1 = std::chrono::steady_clock::now();
         ncnn::Mat bilinear_sample_out;
         ex2.extract("output", bilinear_sample_out);
         auto end1 = std::chrono::steady_clock::now();
         auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
-        //dnn::ncnnHelper::printBlob(bilinear_sample_out);
+        //dnn::ncnnHelper::printBlob(weight);
         std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
-        return bilinear_sample_out;
+        return bilinear_sample_out.reshape(outW, outH, outC);;
+    }
+
+    ncnn::Mat Pips2::bilinear_sample2d(const ncnn::Mat& blob, const std::vector<std::vector<float>>& xs, const std::vector<std::vector<float>>& ys, std::shared_ptr<ncnn::Net> bilinearOpNet, const int&padding_mode)
+    {
+        int ptsCnt = xs[0].size();
+        int featDim = 0;
+        float W_f = blob.w;
+        float H_f = blob.h;
+        int max_x = blob.w - 1;
+        int max_y = blob.h - 1;
+        int max_x_1 = max_x - 1;
+        int max_y_1 = max_y - 1;
+        ncnn::Mat value;
+        ncnn::Mat weight;
+        int outC = 0;
+        int outH = 0;
+        int outW = 0;
+        if (blob.dims == 4)
+        {
+            featDim = blob.d;
+            value = ncnn::Mat(4, featDim, ptsCnt * blob.c, (size_t)4);
+            weight = ncnn::Mat(1, 4, ptsCnt * blob.c, (size_t)4);
+            outC = blob.c;
+            outH = ptsCnt;
+            outW = featDim;
+        }
+        else
+        {
+            LOG_ERR_OUT << "dims error";
+            return ncnn::Mat();
+        }
+        if (blob.c!= xs.size())
+        { 
+            LOG_ERR_OUT << "size error";
+            return ncnn::Mat();
+        }
+        int value_cstep = value.cstep;
+        int weight_cstep = weight.cstep;
+        int C = weight.c;
+
+        for (int c = 0; c < blob.c; c++)
+        {
+            for (size_t i = 0; i < ptsCnt; i++)
+            {
+                int x0 = std::floor(xs[c][i]);
+                int x1 = x0 + 1;
+                int y0 = std::floor(ys[c][i]);
+                int y1 = y0 + 1;
+                bool outRegion = false;
+                if (x0 < 0) { x0 = 0;; outRegion = true; }
+                if (y0 < 0) { y0 = 0;; outRegion = true; }
+                if (x0 > max_x_1) { x0 = max_x_1; outRegion = true; }
+                if (y0 > max_y_1) { y0 = max_y_1; outRegion = true; }
+                if (x1 < 1) { x1 = 1;; outRegion = true; }
+                if (y1 < 1) { y1 = 1;; outRegion = true; }
+                if (x1 > max_x) { x1 = max_x; outRegion = true; }
+                if (y1 > max_y) { y1 = max_y; outRegion = true; }
+
+                float w_y0_x0 = 0;
+                float w_y0_x1 = 0;
+                float w_y1_x0 = 0;
+                float w_y1_x1 = 0;
+                if (outRegion && padding_mode==0)
+                {
+
+                }
+                //else
+                {
+                    w_y0_x0 = (x1 - xs[c][i]) * (y1 - ys[c][i]);
+                    w_y0_x1 = (xs[c][i] - x0) * (y1 - ys[c][i]);
+                    w_y1_x0 = (x1 - xs[c][i]) * (ys[c][i] - y0);
+                    w_y1_x1 = (xs[c][i] - x0) * (ys[c][i] - y0);
+                }
+                int p0 = x0 + blob.w * y0;
+                int p1 = x1 + blob.w * y0;
+                int p2 = x0 + blob.w * y1;
+                int p3 = x1 + blob.w * y1;
+                int whStep = blob.w * blob.h;                
+                int pp = (i + c * ptsCnt) * weight_cstep;// +i * 4;
+                ((float*)weight.data)[pp] = w_y0_x0;
+                ((float*)weight.data)[pp + 1] = w_y0_x1;
+                ((float*)weight.data)[pp + 2] = w_y1_x0;
+                ((float*)weight.data)[pp + 3] = w_y1_x1;
+                int pp0 = (i + c * ptsCnt) * value_cstep;
+                for (int fea = 0; fea < featDim; fea++)
+                {
+                    int j = whStep * fea;
+                    ((float*)value.data)[pp0 + fea * 4 + 0] = ((const float*)blob.data)[p0 + j + c * blob.cstep];
+                    ((float*)value.data)[pp0 + fea * 4 + 1] = ((const float*)blob.data)[p1 + j + c * blob.cstep];
+                    ((float*)value.data)[pp0 + fea * 4 + 2] = ((const float*)blob.data)[p2 + j + c * blob.cstep];
+                    ((float*)value.data)[pp0 + fea * 4 + 3] = ((const float*)blob.data)[p3 + j + c * blob.cstep];
+                }
+            }
+        }
+        ncnn::Extractor ex2 = bilinearOpNet->create_extractor();
+        ex2.input("v", value);
+        ex2.input("w", weight);
+        auto start1 = std::chrono::steady_clock::now();
+        ncnn::Mat bilinear_sample_out;
+        ex2.extract("output", bilinear_sample_out);
+        auto end1 = std::chrono::steady_clock::now();
+        auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+        //dnn::ncnnHelper::printBlob(weight);
+        std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
+        return bilinear_sample_out.reshape(outW, outH, outC);;
     }
     ncnn::Mat Pips2::concatFmaps(const std::vector<ncnn::Mat>&fmap, const std::vector<int>& picks)
     {
@@ -188,6 +331,15 @@ namespace pips2
             memcpy((float*)feats.data + i * cstep * c, feat.data, cstep * c * sizeof(float));
         }
         return feats;
+    }
+    std::vector<std::vector<float>> Pips2::expandInitCoord(std::vector<float>& xs, const int& times)
+    {
+        std::vector<std::vector<float>>xs_(times);
+        for (size_t i = 0; i < times; i++)
+        {
+            xs_[i].insert(xs_[i].end(), xs.begin(), xs.end());
+        } 
+        return xs_;
     }
     bool Pips2::changeParamResizeParam(const std::string& path, const std::pair<int, int>& d)
     {
@@ -249,7 +401,9 @@ namespace pips2
         return true;
     }
     Pips2::Pips2(
-        const std::filesystem::path& ncnnEncoderParamPath, const std::filesystem::path& ncnnEncoderBinPath)
+        const std::filesystem::path& ncnnEncoderParamPath, 
+        const std::filesystem::path& ncnnEncoderBinPath, 
+        const int& radius_)
     {
         imgSize.width = -1;
         if (!std::filesystem::exists(ncnnEncoderParamPath))
@@ -268,9 +422,20 @@ namespace pips2
         bilinearOpNet = std::shared_ptr<ncnn::Net>(new ncnn::Net());
         bilinearOpNet->load_param_mem(paramStr.c_str());
         bilinearOpNet->load_model((const unsigned char*)0);
+        radius = radius_;
 
-
-
+        coord_delta_x.clear();
+        coord_delta_y.clear();
+        coord_delta_x.reserve(4 * radius * radius + 4 * radius + 1);
+        coord_delta_y.reserve(4 * radius * radius + 4 * radius + 1);
+        for (int c = -radius; c <= radius; c++)
+        {
+            for (int r = -radius; r <= radius; r++)
+            {
+                coord_delta_x.emplace_back(c);
+                coord_delta_y.emplace_back(r);
+            }
+        }
     }
     Pips2::~Pips2()
     {}
@@ -284,12 +449,6 @@ namespace pips2
         }
         fmaps.clear();
         fmaps.reserve(imgPath.size());
-
-
-
-
-
-
         for (int i = 0; i < imgPath.size(); i++)
         {
             if (!std::filesystem::exists(imgPath[i]))
@@ -302,6 +461,21 @@ namespace pips2
             {
                 imgSize.width = img.cols;
                 imgSize.height = img.rows;
+                fmapSize.clear();
+                fmapSize.resize(pyramid_level);
+                for (size_t i = 0; i < Pips2::pyramid_level; i++)
+                {
+                    if (i==0)
+                    {
+                        fmapSize[i].width = imgSize.width / Pips2::stride;
+                        fmapSize[i].height = imgSize.height / Pips2::stride;
+                    }
+                    else
+                    {
+                        fmapSize[i].width = fmapSize[i - 1].width / 2;
+                        fmapSize[i].height = fmapSize[i - 1].height / 2;
+                    }
+                }
                 //if (imgSize.width % 8 != 0 || imgSize.height % 8 != 0)
                 //{
                 //    LOG_ERR_OUT << "imgSize.width % 8 != 0 || imgSize.height % 8 != 0";
@@ -340,6 +514,54 @@ namespace pips2
             fmaps.emplace_back(fmap);
         }
         return true;
+    }
+
+    ncnn::Mat Pips2::pyramidSample(const std::vector<ncnn::Mat>& corrs_pyramids, const std::vector<std::vector<float>>& stride_x, const std::vector<std::vector<float>>& stride_y)const
+    {
+        int radiusArea = coord_delta_x.size();
+        int radiusAreaTotal = radiusArea * Pips2::pyramid_level;
+        int imgSeqCnt = stride_x.size(); 
+        int controlPtsCnt = stride_x[0].size();
+        ncnn::Mat corrOut(radiusArea * Pips2::pyramid_level, imgSeqCnt, controlPtsCnt, (size_t)4);
+        
+
+
+
+
+        for (size_t i = 0; i < Pips2::pyramid_level; i++)
+        {
+            std::vector<std::vector<float>>xs_(stride_x.size() * stride_x[0].size());
+            std::vector<std::vector<float>>ys_(stride_y.size() * stride_y[0].size());
+            for (int c = 0; c < stride_x.size() * stride_x[0].size(); c++)
+            {
+                int m = c / stride_x[0].size();
+                int n = c % stride_x[0].size();
+                xs_[c].resize(coord_delta_x.size());
+                ys_[c].resize(coord_delta_y.size());
+                {
+                    float x = stride_x[m][n] / std::pow(2, i);
+                    float y = stride_y[m][n] / std::pow(2, i);
+                    for (size_t j = 0; j < coord_delta_x.size(); j++)
+                    {
+                        xs_[c][j] = coord_delta_x[j] + x;
+                        ys_[c][j] = coord_delta_y[j] + y;
+                    }
+                }
+            }
+            ncnn::Mat corr = bilinear_sample2d(corrs_pyramids[i], xs_, ys_, bilinearOpNet);
+            using dnn::ocvHelper::operator<<;
+            using dnn::ncnnHelper::operator<<;
+            LOG_OUT << corr;
+            for (size_t c = 0; c < corr.c; c++)
+            {
+                int seqIdx = c / 3;
+                int controlPtIdx = c % 3;
+                float* tar = (float*)corrOut.data + controlPtIdx * corrOut.cstep + seqIdx * radiusAreaTotal+ i* radiusArea;
+                float* src = (float*)corr.data + c * corr.cstep;
+                memcpy(tar, src, radiusArea * sizeof(float));
+            }
+        }
+        return corrOut;
     }
     bool Pips2::inputImage(const cv::Mat& img, ncnn::Mat& fmap)
     {
@@ -381,31 +603,41 @@ int test_pips2_ocv()
 }
 int test_bilinearOp()
 {
+    using dnn::ocvHelper::operator<<;
+    using dnn::ncnnHelper::operator<<;
     std::string paramStr = pips2::Pips2::getBilinearOpNet();
     std::shared_ptr<ncnn::Net> bilinearOpNet(new ncnn::Net());
     bilinearOpNet->load_param_mem(paramStr.c_str());
     bilinearOpNet->load_model((const unsigned char*)0);
 
-    std::vector<int>shape={8,128,64,64};
+    std::vector<int>shape = {8, 128,64,64 }; ;// {8, 128, 64, 64};
     int totalcnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
     std::vector<float> indata(totalcnt);
     for (int i = 0; i < indata.size(); i++)
     {
         indata[i] = i%200-100;
     }
-    ncnn::Mat in(shape[3], shape[2], shape[1], shape[0], (void*)&indata[0], 4);
+    ncnn::Mat in;
+    if (shape.size()==3)
+    {
+        in = ncnn::Mat(shape[2], shape[1], shape[0], (void*)&indata[0], 4);
+    }
+    else if(shape.size() == 4)
+    {
+        in = ncnn::Mat(shape[3], shape[2], shape[1], shape[0], (void*)&indata[0], 4);
+    }
     std::vector<float>xs = { 12.5000, 13.3000, 23.3000 };
     std::vector<float>ys = { 1.2000, 45.1000, 15.1000 };
 
-    pips2::Pips2::bilinear_sample2d(in,xs,ys, bilinearOpNet);
-
+    ncnn::Mat bilinearOut = pips2::Pips2::bilinear_sample2d(in, xs, ys, bilinearOpNet);
+    LOG_OUT << bilinearOut;
     return 0;
 }
 int test_pips2()
 {
+    //return test_bilinearOp();
     using dnn::ocvHelper::operator<<;
     using dnn::ncnnHelper::operator<<;
-    return test_bilinearOp();
 
     std::vector<std::string>paths = {
     "D:/repo/colmapThird/data2/a/00000.jpg", 
@@ -421,17 +653,18 @@ int test_pips2()
     std::vector<ncnn::Mat> fmapsVec;
     ins.inputImage(paths, fmapsVec);
     LOG_OUT<< fmapsVec[0];
-    std::vector<float>xs = { 12.5000, 13.3000, 23.3000 };
-    std::vector<float>ys = { 1.2000, 45.1000, 15.1000 };
-    for (auto& d : xs) d /= ins.stride;
-    for (auto& d : ys) d /= ins.stride;
-    ncnn::Mat feat = ins.bilinear_sample2d(fmapsVec[0], xs, ys, ins.bilinearOpNet);
-    LOG_OUT << feat; 
+    std::vector<float>xs0 = { 12.5000, 13.3000, 23.3000 };
+    std::vector<float>ys0 = { 1.2000, 45.1000, 15.1000 };
+    for (auto& d : xs0) d /= ins.stride;
+    for (auto& d : ys0) d /= ins.stride;
+    ncnn::Mat feat0 = ins.bilinear_sample2d(fmapsVec[0], xs0, ys0, ins.bilinearOpNet);
+    LOG_OUT << feat0; 
 
 
     ncnn::Mat fmaps = pips2::Pips2::concatFmaps(fmapsVec, { 0,1,2,3,4,5,6,7 });
-    ncnn::Mat feats = pips2::Pips2::repeatFeat(feat, paths.size());
-    
+    ncnn::Mat feats = pips2::Pips2::repeatFeat(feat0, paths.size());
+    std::vector<std::vector<float>>xs = pips2::Pips2::expandInitCoord(xs0, paths.size());
+    std::vector<std::vector<float>>ys = pips2::Pips2::expandInitCoord(ys0, paths.size());
 
     ncnn::Extractor ex_corrs = ins.corrsNet->create_extractor();
     ex_corrs.input("fmaps", fmaps);
@@ -442,13 +675,14 @@ int test_pips2()
     ex_corrs.extract("corrs_pyramid_1", corrs_pyramid1);
     ex_corrs.extract("corrs_pyramid_2", corrs_pyramid2);
     ex_corrs.extract("corrs_pyramid_3", corrs_pyramid3);
+   
     auto end1 = std::chrono::steady_clock::now();
     auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
     std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
-    LOG_OUT << corrs_pyramid0;
-    LOG_OUT << corrs_pyramid1;
-    LOG_OUT << corrs_pyramid2;
-    LOG_OUT << corrs_pyramid3;
+
+    ncnn::Mat corrs = ins.pyramidSample({ corrs_pyramid0, corrs_pyramid1, corrs_pyramid2, corrs_pyramid3 }, xs, ys);
+
+    LOG_OUT << corrs;
     for (size_t iter = 0; iter < 3; iter++)
     {
         if (iter>=1)

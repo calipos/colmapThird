@@ -377,65 +377,65 @@ def export_CorrBlock():
 
 
 def test_bilinearOp():
-    v_y0_x0 = helper.make_tensor_value_info(
-        'v_y0_x0', onnx.TensorProto.FLOAT, [32, 4])
-    v_y0_x1 = helper.make_tensor_value_info(
-        'v_y0_x1', onnx.TensorProto.FLOAT, [32, 4])
-    v_y1_x0 = helper.make_tensor_value_info(
-        'v_y1_x0', onnx.TensorProto.FLOAT, [32, 4])
-    v_y1_x1 = helper.make_tensor_value_info(
-        'v_y1_x1', onnx.TensorProto.FLOAT, [32, 4])
-    w_y0_x0 = helper.make_tensor_value_info(
-        'w_y0_x0', onnx.TensorProto.FLOAT, [4, 1])
-    w_y0_x1 = helper.make_tensor_value_info(
-        'w_y0_x1', onnx.TensorProto.FLOAT, [4, 1])
-    w_y1_x0 = helper.make_tensor_value_info(
-        'w_y1_x0', onnx.TensorProto.FLOAT, [4, 1])
-    w_y1_x1 = helper.make_tensor_value_info(
-        'w_y1_x1', onnx.TensorProto.FLOAT, [4, 1])
-    output = helper.make_tensor_value_info(
-        'output', onnx.TensorProto.FLOAT, [32, 1]) 
-    m1 = onnx.helper.make_node(
-        op_type='MatMul',
-        inputs=['v_y0_x0', 'w_y0_x0'],
-        outputs=['m1'],
-        name='m1')
-    m2 = onnx.helper.make_node(
-        op_type='MatMul',
-        inputs=['v_y0_x1', 'w_y0_x1'],
-        outputs=['m2'],
-        name='m2')
-    m3 = onnx.helper.make_node(
-        op_type='MatMul',
-        inputs=['v_y1_x0', 'w_y1_x0'],
-        outputs=['m3'],
-        name='m3')
-    m4 = onnx.helper.make_node(
-        op_type='MatMul',
-        inputs=['v_y1_x1', 'w_y1_x1'],
-        outputs=['m4'],
-        name='m4')
-    a1 = onnx.helper.make_node(
-        op_type='Add',
-        inputs=['m1', 'm2'],
-        outputs=['a1'],
-        name='a1')
-    a2 = onnx.helper.make_node(
-        op_type='Add',
-        inputs=['m3', 'm4'],
-        outputs=['a2'],
-        name='a2')
-    a3 = onnx.helper.make_node(
-        op_type='Add',
-        inputs=['a1', 'a2'],
-        outputs=['output'],
-        name='output')
-    graph = onnx.helper.make_graph(
-        [m1,m2,m3,m4,a1,a2,a3],
-        'TwoLayerFC',
-        [v_y0_x0, v_y0_x1, v_y1_x0, v_y1_x1,w_y0_x0, w_y0_x1, w_y1_x0, w_y1_x1],
-        [output]
-    )
+    # v_y0_x0 = helper.make_tensor_value_info(
+    #     'v_y0_x0', onnx.TensorProto.FLOAT, [32, 4])
+    # v_y0_x1 = helper.make_tensor_value_info(
+    #     'v_y0_x1', onnx.TensorProto.FLOAT, [32, 4])
+    # v_y1_x0 = helper.make_tensor_value_info(
+    #     'v_y1_x0', onnx.TensorProto.FLOAT, [32, 4])
+    # v_y1_x1 = helper.make_tensor_value_info(
+    #     'v_y1_x1', onnx.TensorProto.FLOAT, [32, 4])
+    # w_y0_x0 = helper.make_tensor_value_info(
+    #     'w_y0_x0', onnx.TensorProto.FLOAT, [4, 1])
+    # w_y0_x1 = helper.make_tensor_value_info(
+    #     'w_y0_x1', onnx.TensorProto.FLOAT, [4, 1])
+    # w_y1_x0 = helper.make_tensor_value_info(
+    #     'w_y1_x0', onnx.TensorProto.FLOAT, [4, 1])
+    # w_y1_x1 = helper.make_tensor_value_info(
+    #     'w_y1_x1', onnx.TensorProto.FLOAT, [4, 1])
+    # output = helper.make_tensor_value_info(
+    #     'output', onnx.TensorProto.FLOAT, [32, 1]) 
+    # m1 = onnx.helper.make_node(
+    #     op_type='MatMul',
+    #     inputs=['v_y0_x0', 'w_y0_x0'],
+    #     outputs=['m1'],
+    #     name='m1')
+    # m2 = onnx.helper.make_node(
+    #     op_type='MatMul',
+    #     inputs=['v_y0_x1', 'w_y0_x1'],
+    #     outputs=['m2'],
+    #     name='m2')
+    # m3 = onnx.helper.make_node(
+    #     op_type='MatMul',
+    #     inputs=['v_y1_x0', 'w_y1_x0'],
+    #     outputs=['m3'],
+    #     name='m3')
+    # m4 = onnx.helper.make_node(
+    #     op_type='MatMul',
+    #     inputs=['v_y1_x1', 'w_y1_x1'],
+    #     outputs=['m4'],
+    #     name='m4')
+    # a1 = onnx.helper.make_node(
+    #     op_type='Add',
+    #     inputs=['m1', 'm2'],
+    #     outputs=['a1'],
+    #     name='a1')
+    # a2 = onnx.helper.make_node(
+    #     op_type='Add',
+    #     inputs=['m3', 'm4'],
+    #     outputs=['a2'],
+    #     name='a2')
+    # a3 = onnx.helper.make_node(
+    #     op_type='Add',
+    #     inputs=['a1', 'a2'],
+    #     outputs=['output'],
+    #     name='output')
+    # graph = onnx.helper.make_graph(
+    #     [m1,m2,m3,m4,a1,a2,a3],
+    #     'TwoLayerFC',
+    #     [v_y0_x0, v_y0_x1, v_y1_x0, v_y1_x1,w_y0_x0, w_y0_x1, w_y1_x0, w_y1_x1],
+    #     [output]
+    # )
     # model = helper.make_model(graph, producer_name='onnx-example')
     # model = onnx.shape_inference.infer_shapes(model)
     # onnx.checker.check_model(model)
@@ -443,17 +443,20 @@ def test_bilinearOp():
     # model.opset_import[0].version = 21
     # onnx.save(model, 'test.onnx')
 
-    shape=[128,64,64]
-    inputData = np.array([x % 200-100 for x in range(shape[0]
-                         * shape[1]*shape[2])]).astype(np.float32).reshape(shape)
+    shape=[8,128,64,64]
+    inputData = np.array(
+        [x % 200-100 for x in range(np.cumprod(shape)[-1])]).astype(np.float32).reshape(shape)
     inputData = torch.Tensor(inputData)
+    if 3 == len(inputData.shape):
+        inputData = inputData.unsqueeze(0)
     xy0 = torch.Tensor([[[12.5, 1.2], [13.3, 45.1], [23.3, 15.1]]]).type(torch.float32)
     coords = xy0.unsqueeze(1).repeat(1, 8, 1, 1)
     feat1 = utils.samp.bilinear_sample2d(
-        inputData.unsqueeze(0), coords[:, 0, :, 0], coords[:, 0, :, 1]).permute(0, 2, 1)
+        inputData, coords[:, 0, :, 0], coords[:, 0, :, 1]).permute(0, 2, 1)
 
 
-    print(feat1)
+    print(feat1) 
+    print(feat1.shape)
 
 if __name__ == '__main__':
     print('opencv 的onnx 似乎要快一点,但是动态的shape总是调不好,ncnn直接操作param更方便')
