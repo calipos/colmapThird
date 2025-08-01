@@ -2,7 +2,7 @@ import time
 import numpy as np
 import saverloader
 from nets.pips2 import Pips
-from nets.pips2 import Pips_BasicEncoder, Pips_CorrBlock2
+from nets.pips2 import Pips_BasicEncoder, Pips_CorrBlock2, Pips_DeltaBlock2
 import utils.improc
 from utils.basic import print_, print_stats
 import torch
@@ -375,6 +375,37 @@ def export_CorrBlock():
     fix_baseEncoder_shape()
     return
 
+def export_DeltaBlock():
+    init_dir = './models'
+    stride = 8
+    hidden_dim = 256
+    latent_dim = latent_dim = 128
+    corr_levels = 4
+    corr_radius = 3
+    model = Pips_DeltaBlock2(8).cpu()
+    if init_dir:
+        _ = saverloader.load(init_dir, model)
+    model.eval()
+    dummy_deltaIn = torch.randn(3, 718, 8)
+    input_names = ["deltaIn"]        # 定义onnx 输入节点名称
+    output_names = ["delta"]      # 定义onnx 输出节点名称
+    onnx_path = "models/pips2_deltaBlock_opencv.onnx"
+    torch.onnx.export(
+        model,
+        (dummy_deltaIn),
+        onnx_path,
+        input_names=input_names,
+        output_names=output_names,
+        export_params=True,
+        opset_version=11,  # 确保兼容性
+        dynamic_axes={'deltaIn':  {
+            0: "controlPtCnt",  2: 'seq'}}
+    )
+
+
+    return
+
+ 
 
 def test_bilinearOp():
     # v_y0_x0 = helper.make_tensor_value_info(
@@ -462,6 +493,7 @@ if __name__ == '__main__':
     print('opencv 的onnx 似乎要快一点,但是动态的shape总是调不好,ncnn直接操作param更方便')
     print('先运行export_baseEncoder()生成models/pips2_base_opencv.onnx,再运行ncnn的onnx_pips2')
     # test_bilinearOp()
-    main()
+    # main()
     # export_baseEncoder()
     # export_CorrBlock()
+    export_DeltaBlock()

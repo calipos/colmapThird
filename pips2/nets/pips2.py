@@ -715,3 +715,31 @@ class Pips_CorrBlock2(nn.Module):
             fmaps, num_levels=self.corr_levels, radius=self.corr_radius)
         fcorr_fn.corr(feats)
         return fcorr_fn.corrs_pyramid
+
+
+class Pips_DeltaBlock2(nn.Module):
+    def __init__(self, stride=8):
+        super(Pips_DeltaBlock2, self).__init__()
+
+        self.stride = stride
+
+        self.hidden_dim = hdim = 256
+        self.latent_dim = latent_dim = 128
+        self.corr_levels = 4
+        self.corr_radius = 3
+
+        self.delta_block = DeltaBlock(
+            hidden_dim=self.hidden_dim, corr_levels=self.corr_levels, corr_radius=self.corr_radius)
+
+    def forward(self,  deltaIn):
+        out = self.delta_block.first_block_conv(deltaIn)
+        out = self.delta_block.first_block_relu(out)
+        for i_block in range(self.delta_block.n_block):
+            net = self.delta_block.basicblock_list[i_block]
+            out = net(out)
+        out = self.delta_block.final_relu(out)
+        out = out.permute(0, 2, 1)
+
+        delta = self.delta_block.dense(out)
+        return delta
+        return fcorr_fn.corrs_pyramid
