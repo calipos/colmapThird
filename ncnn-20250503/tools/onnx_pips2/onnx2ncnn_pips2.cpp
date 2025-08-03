@@ -3676,7 +3676,7 @@ int convert_main(const char* onnxPath, const char* ncnnParamPath, const char* nc
             {
                 for (int j = 0; j < node.input_size(); j++)
                 {
-                    std::cout << node.input(j).c_str() << std::endl;
+                    std::cout << "concat in " << node.input(j).c_str() << std::endl;
                     node_reference[node.input(j)] -= 1;
                 }
             }
@@ -6806,9 +6806,48 @@ int test_corrs()
     ex_corrs.extract("corrs_pyramid_3", corrs_pyramid3);
     return 0;
 }
+int test_deltaNet()
+{ 
+    ncnn::Net deltaNet;
+    deltaNet.load_param("../../../../models/pips2_deltaBlock_ncnn.param");
+    deltaNet.load_model("../../../../models/pips2_deltaBlock_ncnn.bin");
+
+    std::vector<int> shape = {3, 718, 8};
+    ; // {8, 128, 64, 64};
+    int totalcnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
+    std::vector<float> indata(totalcnt);
+    for (int i = 0; i < indata.size(); i++)
+    {
+        indata[i] = i % 200 - 100;
+    }
+    ncnn::Mat deltaIn = ncnn::Mat(shape[2], shape[1], shape[0], (void*)&indata[0], 4);
+
+    std::vector<float> padding64data(shape[0] * shape[2] * 64);
+    std::vector<float> padding128data(shape[0] * shape[2] * 128);
+    std::vector<float> padding256data(shape[0] * shape[2] * 256); 
+    ncnn::Mat padding64 = ncnn::Mat(shape[2], 64, shape[0], (void*)&padding64data[0], 4);
+    ncnn::Mat padding128 = ncnn::Mat(shape[2], 128, shape[0], (void*)&padding128data[0], 4);
+    ncnn::Mat padding256 = ncnn::Mat(shape[2], 256, shape[0], (void*)&padding256data[0], 4);
+
+    ncnn::Extractor ex2 = deltaNet.create_extractor();
+    ex2.input("deltaIn", deltaIn);
+    ex2.input("padding64", padding64);
+    ex2.input("padding128", padding128);
+    ex2.input("padding256", padding256);
+    auto start1 = std::chrono::steady_clock::now();
+    ncnn::Mat delta_out;
+    ex2.extract("/first_block_conv/conv/Conv_output_0", delta_out);
+    auto end1 = std::chrono::steady_clock::now();
+    auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+    printNcnnBlob(delta_out);
+    //dnn::ncnnHelper::printBlob(weight);
+    std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
+
+    return 0;
+}
 int main()
 {
-    return test_corrs();
+    return test_deltaNet();
     if (0)
     {
         const char* onnxpb = "../../../../models/pips2_base_opencv.onnx";
@@ -6821,6 +6860,13 @@ int main()
         const char* onnxpb = "../../../../models/pips2_corrBlock_opencv.onnx";
         const char* ncnn_prototxt = "../../../../models/pips2_corrBlock_ncnn.param";
         const char* ncnn_modelbin = "../../../../models/pips2_corrBlock_ncnn.bin";
+        convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
+    }
+    if (1)
+    {
+        const char* onnxpb = "../../../../models/pips2_deltaBlock_opencv.onnx";
+        const char* ncnn_prototxt = "../../../../models/pips2_deltaBlock_ncnn.param";
+        const char* ncnn_modelbin = "../../../../models/pips2_deltaBlock_ncnn.bin";
         convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
     }
     //test_beginning_forward("../../../../models/ncnnEncoderBeginning.param", "../../../../models/ncnnEncoderBeginning.bin");

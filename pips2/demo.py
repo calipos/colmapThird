@@ -2,7 +2,7 @@ import time
 import numpy as np
 import saverloader
 from nets.pips2 import Pips
-from nets.pips2 import Pips_BasicEncoder, Pips_CorrBlock2, Pips_DeltaBlock2
+from nets.pips2 import Pips_BasicEncoder, Pips_CorrBlock2, Pips_DeltaBlock2_concatFroPadding,Pips_DeltaBlock
 import utils.improc
 from utils.basic import print_, print_stats
 import torch
@@ -376,30 +376,47 @@ def export_CorrBlock():
     return
 
 def export_DeltaBlock():
+
+    shape=[3, 718, 8]
+    dummy_deltaIn = np.array(
+        [x % 200-100 for x in range(np.cumprod(shape)[-1])]).astype(np.float32).reshape(shape)
+    dummy_deltaIn = torch.Tensor(dummy_deltaIn)
     init_dir = './models'
-    stride = 8
-    hidden_dim = 256
-    latent_dim = latent_dim = 128
-    corr_levels = 4
-    corr_radius = 3
-    model = Pips_DeltaBlock2(8).cpu()
+
+
+    model = Pips_DeltaBlock(8).cpu()
     if init_dir:
         _ = saverloader.load(init_dir, model)
     model.eval()
-    dummy_deltaIn = torch.randn(3, 718, 8)
-    input_names = ["deltaIn"]        # 定义onnx 输入节点名称
+    out = model(dummy_deltaIn)
+    print(out)
+    return
+ 
+    model = Pips_DeltaBlock2_concatFroPadding(8).cpu()
+    if init_dir:
+        _ = saverloader.load(init_dir, model)
+    model.eval()
+
+
+    dummy_padding64 = torch.zeros(3, 64, 8)
+    dummy_padding128 = torch.zeros(3, 128, 8)
+    dummy_padding256 = torch.zeros(3, 256, 8)
+    input_names = ["deltaIn","padding64","padding128","padding256"]        # 定义onnx 输入节点名称
     output_names = ["delta"]      # 定义onnx 输出节点名称
     onnx_path = "models/pips2_deltaBlock_opencv.onnx"
     torch.onnx.export(
         model,
-        (dummy_deltaIn),
+        (dummy_deltaIn,dummy_padding64,dummy_padding128,dummy_padding256),
         onnx_path,
         input_names=input_names,
         output_names=output_names,
         export_params=True,
         opset_version=11,  # 确保兼容性
-        dynamic_axes={'deltaIn':  {
-            0: "controlPtCnt",  2: 'seq'}}
+        dynamic_axes={'deltaIn':  {0: "controlPtCnt",   2: 'seq'},
+                      'padding64':  {0: "controlPtCnt",   2: 'seq'},
+                      'padding128':  {0: "controlPtCnt",   2: 'seq'},
+                      'padding256':  {0: "controlPtCnt",   2: 'seq'}
+                      }
     )
 
 

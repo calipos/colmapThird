@@ -716,15 +716,217 @@ class Pips_CorrBlock2(nn.Module):
         fcorr_fn.corr(feats)
         return fcorr_fn.corrs_pyramid
 
+class Conv1dPad2(nn.Module):
+    """
+    nn.Conv1d with auto-computed padding ("same" padding)
+    """
+    def __init__(self, in_channels, out_channels, kernel_size, stride, groups=1):
+        super(Conv1dPad2, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.groups = groups
+        self.conv = torch.nn.Conv1d(
+            in_channels=self.in_channels, 
+            out_channels=self.out_channels, 
+            kernel_size=self.kernel_size, 
+            stride=self.stride, 
+            groups=self.groups,
+            padding=1
+            )
 
-class Pips_DeltaBlock2(nn.Module):
+    def forward(self, x):
+        net = x
+        # in_dim = net.shape[-1]
+        # out_dim = (in_dim + self.stride - 1) // self.stride
+        # p = max(0, (out_dim - 1) * self.stride + self.kernel_size - in_dim)
+        # pad_left = 1
+        # pad_right = 1
+        # net = F.pad(net, (pad_left, pad_right), "constant", 0)
+        net = self.conv(net)
+        return net
+       
+class ResidualBlock1d2(nn.Module):
+    def __init__(self, blockId,in_channels, out_channels, kernel_size, stride, groups, use_norm,  is_first_block=False):
+        super(ResidualBlock1d2, self).__init__()
+        self.blockId = blockId
+        self.in_channels = in_channels
+        self.kernel_size = kernel_size
+        self.out_channels = out_channels
+        self.stride = stride
+        self.groups = groups
+        self.stride = 1
+        self.is_first_block = is_first_block
+        self.use_norm = use_norm
+
+        self.norm1 = nn.InstanceNorm1d(in_channels)
+        self.relu1 = nn.ReLU()
+        self.do1 = nn.Dropout(p=0.5)
+        self.conv1 = Conv1dPad2(
+            in_channels=in_channels, 
+            out_channels=out_channels, 
+            kernel_size=kernel_size, 
+            stride=self.stride,
+            groups=self.groups)
+
+        self.norm2 = nn.InstanceNorm1d(out_channels)
+        self.relu2 = nn.ReLU()
+        self.do2 = nn.Dropout(p=0.5)
+        self.conv2 = Conv1dPad2(
+            in_channels=out_channels, 
+            out_channels=out_channels, 
+            kernel_size=kernel_size, 
+            stride=1,
+            groups=self.groups)
+
+    def forward(self, x,padding64,padding128,padding256):
+        
+        identity = x
+        
+        out = x
+        if not self.is_first_block:
+            if self.use_norm:
+                out = self.norm1(out)
+            out = self.relu1(out)
+        out = self.conv1(out)
+        
+        if self.use_norm:
+            out = self.norm2(out)
+        out = self.relu2(out)
+        out = self.conv2(out)
+            
+        if self.out_channels != self.in_channels:
+            ch1 = self.in_channels//2
+            # identity = identity.transpose(-1,-2)
+            # identity = F.pad(identity, (ch1, ch1), "constant", 0)
+            # identity = identity.transpose(-1,-2)
+
+            # identity = F.pad(identity, (0,0,ch1, ch1), "constant", 0)
+
+        print(self.blockId)
+        if self.blockId==2:
+            identity = torch.concat([padding64,identity,padding64],axis=1)
+        if self.blockId==4:
+            identity = torch.concat([padding128,identity,padding128],axis=1)
+        if self.blockId==6:
+            identity = torch.concat([padding256,identity,padding256],axis=1)
+        # out[:,s:e,:]+= identity
+        out += identity
+        return out
+
+class DeltaBlock2(nn.Module):
+    def __init__(self, latent_dim=128, hidden_dim=128, corr_levels=4, corr_radius=3):
+        super(DeltaBlock2, self).__init__()
+        
+        kitchen_dim = (corr_levels * (2*corr_radius + 1)**2)*3 + latent_dim + 2
+
+        self.latent_dim = latent_dim
+        self.hidden_dim = hidden_dim
+        
+        in_channels = kitchen_dim
+        base_filters = 128
+        self.n_block = 8
+        self.kernel_size = 3
+        self.groups = 1
+        self.use_norm = True
+
+        self.increasefilter_gap = 2 
+
+        self.first_block_conv = Conv1dPad2(in_channels=in_channels, out_channels=base_filters, kernel_size=self.kernel_size, stride=1)
+        self.first_block_norm = nn.InstanceNorm1d(base_filters)
+        self.first_block_relu = nn.ReLU()
+        out_channels = base_filters
+                
+        self.basicblock_list = nn.ModuleList()
+        for i_block in range(self.n_block):
+
+            if i_block == 0:
+                is_first_block = True
+            else:
+                is_first_block = False
+
+            if is_first_block:
+                in_channels = base_filters
+                out_channels = in_channels
+            else:
+                in_channels = int(base_filters*2**((i_block-1)//self.increasefilter_gap))
+                if (i_block % self.increasefilter_gap == 0) and (i_block != 0):
+                    out_channels = in_channels * 2
+                else:
+                    out_channels = in_channels
+            
+            tmp_block = ResidualBlock1d2(
+                i_block,
+                in_channels=in_channels, 
+                out_channels=out_channels, 
+                kernel_size=self.kernel_size, 
+                stride=1, 
+                groups=self.groups, 
+                use_norm=self.use_norm, 
+                is_first_block=is_first_block)
+            self.basicblock_list.append(tmp_block)
+
+        self.final_norm = nn.InstanceNorm1d(out_channels)
+        self.final_relu = nn.ReLU(inplace=True)
+        self.dense = nn.Linear(out_channels, 2)
+        
+            
+    # def forward(self, fcorr, flow):
+    #     B, S, D = flow.shape
+    #     assert(D==2)
+    #     flow_sincos = utils.misc.posemb_sincos_2d_xy(flow, self.latent_dim, cat_coords=True)
+    #     x = torch.cat([fcorr, flow_sincos], dim=2) # B,S,-1
+    #     # conv1d wants channels in the middle
+    #     out = x.permute(0,2,1)
+    #     out = self.first_block_conv(out)
+    #     out = self.first_block_relu(out)
+    #     for i_block in range(self.n_block):
+    #         net = self.basicblock_list[i_block]
+    #         out = net(out)
+    #     out = self.final_relu(out)
+    #     out = out.permute(0,2,1)
+    #     delta = self.dense(out)
+    #     return delta
+
+class Pips_DeltaBlock2_concatFroPadding(nn.Module):
     def __init__(self, stride=8):
-        super(Pips_DeltaBlock2, self).__init__()
+        super(Pips_DeltaBlock2_concatFroPadding, self).__init__()
 
         self.stride = stride
 
-        self.hidden_dim = hdim = 256
-        self.latent_dim = latent_dim = 128
+        self.hidden_dim  = 256
+        self.latent_dim  = 128
+        self.corr_levels = 4
+        self.corr_radius = 3
+
+        self.delta_block = DeltaBlock2(
+            hidden_dim=self.hidden_dim, corr_levels=self.corr_levels, corr_radius=self.corr_radius)
+
+    def forward(self,  deltaIn,padding64,padding128,padding256):
+        out = self.delta_block.first_block_conv(deltaIn)
+        out = self.delta_block.first_block_relu(out)
+        for i_block in range(self.delta_block.n_block):
+            net = self.delta_block.basicblock_list[i_block]
+            out = net(out,padding64,padding128,padding256)
+            # if i_block==2:
+            #     return out
+        out = self.delta_block.final_relu(out)
+        out = out.permute(0, 2, 1)
+
+        delta = self.delta_block.dense(out)
+        print(delta)
+        return delta
+        return fcorr_fn.corrs_pyramid
+
+class Pips_DeltaBlock(nn.Module):
+    def __init__(self, stride=8):
+        super(Pips_DeltaBlock, self).__init__()
+
+        self.stride = stride
+
+        self.hidden_dim  = 256
+        self.latent_dim  = 128
         self.corr_levels = 4
         self.corr_radius = 3
 

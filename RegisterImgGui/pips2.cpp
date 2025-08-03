@@ -704,8 +704,47 @@ int test_bilinearOp()
     LOG_OUT << bilinearOut;
     return 0;
 }
+int test_deltaNet()
+{
+    using dnn::ocvHelper::operator<<;
+    using dnn::ncnnHelper::operator<<; 
+    ncnn::Net deltaNet;
+    deltaNet.load_param("../models/pips2_deltaBlock_ncnn.param");
+    deltaNet.load_model("../models/pips2_deltaBlock_ncnn.bin");
+
+    std::vector<int>shape = { 3, 718, 8 }; ;// {8, 128, 64, 64};
+    int totalcnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
+    std::vector<float> indata(totalcnt);
+    for (int i = 0; i < indata.size(); i++)
+    {
+        indata[i] = i % 200 - 100;
+    }
+    ncnn::Mat deltaIn = ncnn::Mat(shape[2], shape[1], shape[0], (void*)&indata[0], 4);
+
+    std::vector<float> padding256data(shape[0] * shape[2] * 256);
+    ncnn::Mat padding64 = ncnn::Mat(shape[2], 64, shape[0], (void*)&padding256data[0], 4);
+    ncnn::Mat padding128 = ncnn::Mat(shape[2], 128, shape[0], (void*)&padding256data[0], 4);
+    ncnn::Mat padding256 = ncnn::Mat(shape[2], 256, shape[0], (void*)&padding256data[0], 4);
+
+    ncnn::Extractor ex2 = deltaNet.create_extractor();
+    ex2.input("deltaIn", deltaIn);
+    ex2.input("padding64", padding64);
+    ex2.input("padding128", padding128);
+    ex2.input("padding256", padding256);
+    auto start1 = std::chrono::steady_clock::now();
+    ncnn::Mat delta_out;
+    ex2.extract("delta", delta_out);
+    auto end1 = std::chrono::steady_clock::now();
+    auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+    dnn::ncnnHelper::printBlob(delta_out);
+    //dnn::ncnnHelper::printBlob(weight);
+    std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
+
+    return 0;
+}
 int test_pips2()
 {
+    return test_deltaNet();
     //return test_bilinearOp();
     using dnn::ocvHelper::operator<<;
     using dnn::ncnnHelper::operator<<;
