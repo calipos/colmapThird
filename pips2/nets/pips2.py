@@ -10,7 +10,7 @@ import utils.misc
 from torch import nn, einsum
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange, Reduce
-
+from torch.nn.parameter import Parameter
 class Conv1dPad(nn.Module):
     """
     nn.Conv1d with auto-computed padding ("same" padding)
@@ -735,17 +735,37 @@ class Conv1dPad2(nn.Module):
             groups=self.groups,
             padding=1
             )
+        self.conv2d = torch.nn.Conv2d(
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
+            kernel_size=(1,self.kernel_size),
+            stride=(1,self.stride),
+            groups=self.groups,
+            padding=(0, 1))
+
+        
 
     def forward(self, x):
         net = x
+
+
+        self.conv2d.bias = Parameter(self.conv.bias)
+        targetShape = self.conv2d.weight.shape
+        self.conv2d.weight = Parameter(self.conv.weight.reshape(targetShape))
+
+
         # in_dim = net.shape[-1]
         # out_dim = (in_dim + self.stride - 1) // self.stride
         # p = max(0, (out_dim - 1) * self.stride + self.kernel_size - in_dim)
         # pad_left = 1
         # pad_right = 1
         # net = F.pad(net, (pad_left, pad_right), "constant", 0)
-        net = self.conv(net)
-        return net
+
+
+        y = self.conv2d(x)
+        return y
+        # net = self.conv(net)
+        # return net
        
 class ResidualBlock1d2(nn.Module):
     def __init__(self, blockId,in_channels, out_channels, kernel_size, stride, groups, use_norm,  is_first_block=False):
@@ -762,7 +782,6 @@ class ResidualBlock1d2(nn.Module):
 
         self.norm1 = nn.InstanceNorm1d(in_channels)
         self.relu1 = nn.ReLU()
-        self.do1 = nn.Dropout(p=0.5)
         self.conv1 = Conv1dPad2(
             in_channels=in_channels, 
             out_channels=out_channels, 
@@ -772,7 +791,6 @@ class ResidualBlock1d2(nn.Module):
 
         self.norm2 = nn.InstanceNorm1d(out_channels)
         self.relu2 = nn.ReLU()
-        self.do2 = nn.Dropout(p=0.5)
         self.conv2 = Conv1dPad2(
             in_channels=out_channels, 
             out_channels=out_channels, 
@@ -780,7 +798,7 @@ class ResidualBlock1d2(nn.Module):
             stride=1,
             groups=self.groups)
 
-    def forward(self, x,padding64,padding128,padding256):
+    def forward(self, x,padding64,padding128,padding256,padding64b,padding128b,padding256b):
         
         identity = x
         
@@ -806,11 +824,11 @@ class ResidualBlock1d2(nn.Module):
 
         print(self.blockId)
         if self.blockId==2:
-            identity = torch.concat([padding64,identity,padding64],axis=1)
+            identity = torch.concat([padding64,identity,padding64b],axis=0)
         if self.blockId==4:
-            identity = torch.concat([padding128,identity,padding128],axis=1)
+            identity = torch.concat([padding128,identity,padding128b],axis=0)
         if self.blockId==6:
-            identity = torch.concat([padding256,identity,padding256],axis=1)
+            identity = torch.concat([padding256,identity,padding256b],axis=0)
         # out[:,s:e,:]+= identity
         out += identity
         return out
@@ -903,16 +921,16 @@ class Pips_DeltaBlock2_concatFroPadding(nn.Module):
         self.delta_block = DeltaBlock2(
             hidden_dim=self.hidden_dim, corr_levels=self.corr_levels, corr_radius=self.corr_radius)
 
-    def forward(self,  deltaIn,padding64,padding128,padding256):
+    def forward(self,  deltaIn,padding64,padding128,padding256,padding64b,padding128b,padding256b):
         out = self.delta_block.first_block_conv(deltaIn)
         out = self.delta_block.first_block_relu(out)
         for i_block in range(self.delta_block.n_block):
             net = self.delta_block.basicblock_list[i_block]
-            out = net(out,padding64,padding128,padding256)
+            out = net(out,padding64,padding128,padding256,padding64b,padding128b,padding256b)
             # if i_block==2:
             #     return out
         out = self.delta_block.final_relu(out)
-        out = out.permute(0, 2, 1)
+        out = out.permute(1,2,0)
 
         delta = self.delta_block.dense(out)
         print(delta)

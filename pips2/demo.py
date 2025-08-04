@@ -329,6 +329,29 @@ def export_baseEncoder():
     return
 
 
+def deleteSqueezeLayer( paramPath):
+    model = onnx.load(paramPath)
+    graph = gs.import_onnx(model)
+    for remove_node in graph.nodes:
+        if remove_node.op == 'Squeeze':
+            output_node = remove_node.o(0)
+            output_node.inputs[0] = remove_node.inputs[0]
+            remove_node.outputs.clear()
+            graph.cleanup()
+        elif remove_node.op == 'Unsqueeze':
+            output_node = remove_node.o(0)
+            for i in range(len(output_node.inputs)):
+                if output_node.inputs[i].name == remove_node.outputs[0].name:
+                    output_node.inputs[i] = remove_node.inputs[0]
+            remove_node.outputs.clear()
+            graph.cleanup()
+    graph.cleanup()
+    graph.toposort()
+    new_mode = gs.export_onnx(graph)
+    new_mode.ir_version = ir_version
+    onnx.save(new_mode, paramPath)
+
+
 def export_CorrBlock():
     batch = 1
     init_dir = './models'
@@ -377,10 +400,10 @@ def export_CorrBlock():
 
 def export_DeltaBlock():
 
-    shape=[3, 718, 8]
+    shape=[ 718,3, 8]
     dummy_deltaIn = np.array(
         [x % 200-100 for x in range(np.cumprod(shape)[-1])]).astype(np.float32).reshape(shape)
-    dummy_deltaIn = torch.Tensor(dummy_deltaIn)
+    dummy_deltaIn = torch.Tensor(dummy_deltaIn.transpose(1, 0, 2))
     init_dir = './models'
 
 
@@ -390,23 +413,26 @@ def export_DeltaBlock():
     model.eval()
     out = model(dummy_deltaIn)
     print(out)
-    return
+    # return
  
     model = Pips_DeltaBlock2_concatFroPadding(8).cpu()
     if init_dir:
         _ = saverloader.load(init_dir, model)
     model.eval()
 
-
-    dummy_padding64 = torch.zeros(3, 64, 8)
-    dummy_padding128 = torch.zeros(3, 128, 8)
-    dummy_padding256 = torch.zeros(3, 256, 8)
-    input_names = ["deltaIn","padding64","padding128","padding256"]        # 定义onnx 输入节点名称
+    dummy_deltaIn = dummy_deltaIn.permute(1,0,2)
+    dummy_padding64 = torch.zeros( 64, 3,8)
+    dummy_padding128 = torch.zeros( 128,3, 8)
+    dummy_padding256 = torch.zeros( 256, 3,8)
+    dummy_padding64b = torch.zeros( 64, 3,8)
+    dummy_padding128b = torch.zeros( 128,3, 8)
+    dummy_padding256b = torch.zeros( 256, 3,8)
+    input_names = ["deltaIn","padding64","padding128","padding256","padding64b","padding128b","padding256b"]        # 定义onnx 输入节点名称
     output_names = ["delta"]      # 定义onnx 输出节点名称
     onnx_path = "models/pips2_deltaBlock_opencv.onnx"
     torch.onnx.export(
         model,
-        (dummy_deltaIn,dummy_padding64,dummy_padding128,dummy_padding256),
+        (dummy_deltaIn,dummy_padding64,dummy_padding128,dummy_padding256,dummy_padding64b,dummy_padding128b,dummy_padding256b),
         onnx_path,
         input_names=input_names,
         output_names=output_names,
@@ -415,10 +441,13 @@ def export_DeltaBlock():
         dynamic_axes={'deltaIn':  {0: "controlPtCnt",   2: 'seq'},
                       'padding64':  {0: "controlPtCnt",   2: 'seq'},
                       'padding128':  {0: "controlPtCnt",   2: 'seq'},
-                      'padding256':  {0: "controlPtCnt",   2: 'seq'}
+                      'padding256':  {0: "controlPtCnt",   2: 'seq'},
+                      'padding64b':  {0: "controlPtCnt",   2: 'seq'},
+                      'padding128b':  {0: "controlPtCnt",   2: 'seq'},
+                      'padding256b':  {0: "controlPtCnt",   2: 'seq'}
                       }
     )
-
+    deleteSqueezeLayer("models/pips2_deltaBlock_opencv.onnx")
 
     return
 

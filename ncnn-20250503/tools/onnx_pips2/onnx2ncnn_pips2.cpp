@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <chrono>
 #include <numeric>
+#include <sstream>
 #include <unordered_map>
 #include <float.h>
 #include <filesystem>
@@ -3542,6 +3543,7 @@ int convert_main(const char* onnxPath, const char* ncnnParamPath, const char* nc
         }
         else if (op == "InstanceNormalization")
         {
+            std::cout << "InstanceNormalization has 3 in: " << node.input(0) << "; " << node.input(1) << "; " << node.input(2) << std::endl;
             node_reference[node.input(1)] -= 1;
             node_reference[node.input(2)] -= 1;
         }
@@ -3677,7 +3679,23 @@ int convert_main(const char* onnxPath, const char* ncnnParamPath, const char* nc
                 for (int j = 0; j < node.input_size(); j++)
                 {
                     std::cout << "concat in " << node.input(j).c_str() << std::endl;
-                    node_reference[node.input(j)] -= 1;
+                    if (node.input(j).find("padding64")==0)//for convert pip2s deltaNet
+                    {
+                    }
+                    else if (node.input(j).find("padding128") == 0)//for convert pip2s deltaNet
+                    {
+                    }
+                    else if (node.input(j).find("padding256") == 0)//for convert pip2s deltaNet
+                    {
+                    }
+                    else if (node.input(j).find("/basicblock_list.") == 0 && node.input(j).find("Add_output_0") > 0)//for convert pip2s deltaNet
+                    {
+                    }
+                    else
+                    {
+                        node_reference[node.input(j)] -= 1;
+                    }
+                        
                 }
             }
             if (node.output_size() == 1)
@@ -6806,13 +6824,96 @@ int test_corrs()
     ex_corrs.extract("corrs_pyramid_3", corrs_pyramid3);
     return 0;
 }
+std::string convertDeltaNet(const std::string&paramPath,const int& controlPtsCnt, const int& sequenceLength)
+{
+    std::string paramString = "";
+    std::fstream fin(paramPath,std::ios::in);
+    std::string aline;
+    std::list<std::string>paramLines;
+    int additionalCnt = 0;
+    while (std::getline(fin,aline))
+    {
+        std::vector<std::string> segs = splitString(aline, " ", true);    
+        if (segs[0].compare("InstanceNorm")==0)
+        {
+            additionalCnt += 2;
+            std::string&layerName = segs[1];
+            std::string&inPutName = segs[4];
+            std::string&outPutName = segs[5];
+            std::string reshape1Str = "Reshape " + (layerName + "_reshape1") + " 1 1 " + inPutName + " " + (inPutName + "_reshape") + " 2=-1 1=1 0=" + std::to_string(sequenceLength);
+            paramLines.emplace_back(reshape1Str);
+            inPutName = inPutName + "_reshape";
+            std::string outPutNameOld = outPutName;
+            outPutName = outPutName + "_reshape";
+            std::string InstanceNormLine = "";
+            for (int i = 0; i < segs.size(); i++)
+            {
+                InstanceNormLine += segs[i];
+                InstanceNormLine += " ";
+            }
+            paramLines.emplace_back(InstanceNormLine);
+            std::string reshape2Str = "Reshape " + (layerName + "_reshape2") + " 1 1 " + outPutName + " " + outPutNameOld + " 2=-1 1=" + std::to_string(controlPtsCnt) + " 0=" + std::to_string(sequenceLength);
+            paramLines.emplace_back(reshape2Str);
+        }
+        else
+        {
+            paramLines.emplace_back(aline);
+        }
+    }
+    int lineId = 0;
+    for (const auto& d : paramLines)
+    {
+        if (lineId==1)
+        {
+            std::stringstream ss;
+            ss << d;
+            int a, b;
+            ss>>a>>b;
+            paramString += (std::to_string(a + additionalCnt) + " " + std::to_string(b + additionalCnt));
+            paramString += '\n';
+        }
+        else
+        {
+            paramString += d;
+            paramString += '\n';
+        }
+        lineId++;
+    }
+    std::cout << paramString << std::endl;
+    return paramString;
+}
 int test_deltaNet()
 { 
     ncnn::Net deltaNet;
-    deltaNet.load_param("../../../../models/pips2_deltaBlock_ncnn.param");
+    deltaNet.load_param_mem(convertDeltaNet("../../../../models/pips2_deltaBlock_ncnn.param",3,8).c_str());
+    //deltaNet.load_param("../../../../test.param");
     deltaNet.load_model("../../../../models/pips2_deltaBlock_ncnn.bin");
+ 
 
-    std::vector<int> shape = {3, 718, 8};
+    std::vector<int>inputIdx = deltaNet.input_indexes();
+    std::vector<ncnn::Blob> Blobs = deltaNet.blobs();
+    std::vector<ncnn::Layer*> Layers = deltaNet.layers();
+    //for (size_t i = 0; i < Blobs.size(); i++)
+    //{
+    //    std::cout << i << "--" << Blobs[i].name << "  from layer " << Blobs[i].producer << std::endl;
+    //}
+    //for (const auto& layer : Layers)
+    //{
+    //    for (size_t i = 0; i < layer->bottoms.size(); i++)
+    //    {
+    //        int bottom_blob_index = layer->bottoms[i];
+    //        std::cout << bottom_blob_index <<"  ";
+    //    }
+    //    std::cout <<   "  -->  ";
+    //    for (size_t i = 0; i < layer->tops.size(); i++)
+    //    {
+    //        int bottom_blob_index = layer->tops[i];
+    //        std::cout << bottom_blob_index << "  ";
+    //    }
+    //    std::cout << std::endl;
+    //}
+
+    std::vector<int> shape = { 718,3, 8};
     ; // {8, 128, 64, 64};
     int totalcnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
     std::vector<float> indata(totalcnt);
@@ -6822,24 +6923,28 @@ int test_deltaNet()
     }
     ncnn::Mat deltaIn = ncnn::Mat(shape[2], shape[1], shape[0], (void*)&indata[0], 4);
 
-    std::vector<float> padding64data(shape[0] * shape[2] * 64);
-    std::vector<float> padding128data(shape[0] * shape[2] * 128);
-    std::vector<float> padding256data(shape[0] * shape[2] * 256); 
-    ncnn::Mat padding64 = ncnn::Mat(shape[2], 64, shape[0], (void*)&padding64data[0], 4);
-    ncnn::Mat padding128 = ncnn::Mat(shape[2], 128, shape[0], (void*)&padding128data[0], 4);
-    ncnn::Mat padding256 = ncnn::Mat(shape[2], 256, shape[0], (void*)&padding256data[0], 4);
-
+    std::vector<float> padding64data(shape[1] * shape[2] * 64);
+    std::vector<float> padding128data(shape[1] * shape[2] * 128);
+    std::vector<float> padding256data(shape[1] * shape[2] * 256); 
+    ncnn::Mat padding64 = ncnn::Mat(shape[2], shape[1], 64, (void*)&padding64data[0], 4);
+    ncnn::Mat padding128 = ncnn::Mat(shape[2], shape[1], 128, (void*)&padding128data[0], 4);
+    ncnn::Mat padding256 = ncnn::Mat(shape[2], shape[1], 256, (void*)&padding256data[0], 4);
+    printNcnnBlob(deltaIn);
     ncnn::Extractor ex2 = deltaNet.create_extractor();
     ex2.input("deltaIn", deltaIn);
     ex2.input("padding64", padding64);
     ex2.input("padding128", padding128);
     ex2.input("padding256", padding256);
+    ex2.input("padding64b", padding64);
+    ex2.input("padding128b", padding128);
+    ex2.input("padding256b", padding256);
     auto start1 = std::chrono::steady_clock::now();
-    ncnn::Mat delta_out;
-    ex2.extract("/first_block_conv/conv/Conv_output_0", delta_out);
+    ncnn::Mat delta_out, delta_out2;
+    //ex2.extract("/basicblock_list.2/conv2/conv2d/Conv_output_0", delta_out);
+    ex2.extract("/final_relu/Relu_output_0", delta_out2);
     auto end1 = std::chrono::steady_clock::now();
     auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
-    printNcnnBlob(delta_out);
+    printNcnnBlob(delta_out2);
     //dnn::ncnnHelper::printBlob(weight);
     std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
 
@@ -6847,6 +6952,7 @@ int test_deltaNet()
 }
 int main()
 {
+    //return test_corrs();
     return test_deltaNet();
     if (0)
     {

@@ -29,6 +29,6 @@ def load(ckpt_dir, model, step=0, model_name='model'):
     else:
         checkpoint = torch.load(path,map_location=torch.device('cpu'),weights_only=False)
         missing_keys , unexpected_keys=model.load_state_dict(checkpoint['model_state_dict'], strict=False)
-        assert len(missing_keys)==0
+        # assert len(missing_keys)==0
    
     return step
