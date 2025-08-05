@@ -185,6 +185,39 @@ namespace dnn
             }
             return os;
         }
+        bool dataHasNanInf(const ncnn::Mat& out)
+        {
+            ncnn::Mat shape = out.shape();
+            int cstep = out.cstep;
+            int dstep = out.cstep;
+            const float* data = (float*)out.data;
+            const int elemSize = out.elemsize;
+            if (shape.d > 1) dstep /= shape.d;
+            for (int c = 0; c < shape.c; c++)
+            {
+                for (int d = 0; d < shape.d; d++)
+                {
+                    data = (float*)out.data + d * dstep + c * cstep;
+                    for (int h = 0; h < shape.h; ++h)
+                    {
+                        const float* data2 = data + h * shape.w;
+                        for (int w = 0; w < shape.w; ++w)
+                        {
+                            if (std::isnan(data2[w]))
+                            {
+                                LOG_ERR_OUT << "nan at c=" << c << ";   d=" << d << ";   h=" << h << ";   w=" << w;
+                                return true;
+                            }
+                            if (std::isinf(data2[w]))
+                            {
+                                LOG_ERR_OUT << "infinity at c=" << c << ";   d=" << d << ";   h=" << h << ";   w=" << w;
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         void writeBlob(const std::string& path, const ncnn::Mat& out)
         {
             std::fstream fout(path, std::ios::out | std::ios::binary);

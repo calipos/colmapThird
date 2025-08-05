@@ -930,7 +930,7 @@ class Pips_DeltaBlock2_concatFroPadding(nn.Module):
             # if i_block==2:
             #     return out
         out = self.delta_block.final_relu(out)
-        out = out.permute(1,2,0)
+        out = out.reshape(1024, -1).transpose(1, 0)
 
         delta = self.delta_block.dense(out)
         print(delta)

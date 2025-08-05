@@ -17,6 +17,7 @@ namespace dnn
         std::vector<int>getDenominators(const cv::dnn::MatShape& shape);
         std::vector<int>getPos(const int& idx, const std::vector<int>& denominators);
         std::ostream& printBlob(const ncnn::Mat& out, std::ostream& os=std::cout);
+        bool dataHasNanInf(const ncnn::Mat& out);
         void writeBlob(const std::string& path, const ncnn::Mat& out);
         bool serializationBlob(const ncnn::Mat& out, cv::dnn::MatShape& shape, std::vector<float>& dat);
         std::ostream& operator<<(std::ostream& os, const ncnn::Mat& out);

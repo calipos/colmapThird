@@ -93,7 +93,7 @@ namespace pips2
     std::string Pips2::getDeltaInNer(const int& sequenceLength)
     {
         std::string paramStr = "7767517\n"
-            "20 30\n"
+            "21 31\n"
             "Input corr1 0 1 corr1\n"///
             "Input corr2 0 1 corr2\n"//
             "Input corr4 0 1 corr4\n"//
@@ -113,9 +113,68 @@ namespace pips2
             "UnaryOp cos_omegay 1 1 omegay_1 cos_omegay 0=10\n"
             "Concat flow_sincos 6 1 sin_omegax cos_omegax sin_omegay cos_omegay xDiff_1 yDiff_1 flow_sincos 0=1\n"
             "Reshape flow_sincos_reshape 1 1 flow_sincos flow_sincos_reshape 2=-1 1=" + std::to_string(sequenceLength) + " 0=130\n"//
-            "Concat deltaIn 4 1 corr1 corr2 corr4 flow_sincos_reshape deltaIn 0=2\n";//
+            "Concat deltaIn_permute 4 1 corr1 corr2 corr4 flow_sincos_reshape deltaIn_permute 0=2\n"
+            "Permute deltaIn 1 1 deltaIn_permute deltaIn 0=4\n";
             
         return paramStr;
+    }
+    std::string Pips2::convertDeltaNet(const std::string& paramPath, const int& controlPtsCnt, const int& sequenceLength)
+    {
+        std::string paramString = "";
+        std::fstream fin(paramPath, std::ios::in);
+        std::string aline;
+        std::list<std::string>paramLines;
+        int additionalCnt = 0;
+        while (std::getline(fin, aline))
+        {
+            std::vector<std::string> segs = splitString(aline, " ", true);
+            if (segs[0].compare("InstanceNorm") == 0)
+            {
+                additionalCnt += 2;
+                std::string& layerName = segs[1];
+                std::string& inPutName = segs[4];
+                std::string& outPutName = segs[5];
+                std::string reshape1Str = "Reshape " + (layerName + "_reshape1") + " 1 1 " + inPutName + " " + (inPutName + "_reshape") + " 2=-1 1=1 0=" + std::to_string(sequenceLength);
+                paramLines.emplace_back(reshape1Str);
+                inPutName = inPutName + "_reshape";
+                std::string outPutNameOld = outPutName;
+                outPutName = outPutName + "_reshape";
+                std::string InstanceNormLine = "";
+                for (int i = 0; i < segs.size(); i++)
+                {
+                    InstanceNormLine += segs[i];
+                    InstanceNormLine += " ";
+                }
+                paramLines.emplace_back(InstanceNormLine);
+                std::string reshape2Str = "Reshape " + (layerName + "_reshape2") + " 1 1 " + outPutName + " " + outPutNameOld + " 2=-1 1=" + std::to_string(controlPtsCnt) + " 0=" + std::to_string(sequenceLength);
+                paramLines.emplace_back(reshape2Str);
+            }
+            else
+            {
+                paramLines.emplace_back(aline);
+            }
+        }
+        int lineId = 0;
+        for (const auto& d : paramLines)
+        {
+            if (lineId == 1)
+            {
+                std::stringstream ss;
+                ss << d;
+                int a, b;
+                ss >> a >> b;
+                paramString += (std::to_string(a + additionalCnt) + " " + std::to_string(b + additionalCnt));
+                paramString += '\n';
+            }
+            else
+            {
+                paramString += d;
+                paramString += '\n';
+            }
+            lineId++;
+        }
+        //std::cout << paramString << std::endl;
+        return paramString;
     }
     ncnn::Mat Pips2::bilinear_sample2d(const ncnn::Mat& blob, const std::vector<float>& xs, const std::vector<float>& ys, std::shared_ptr<ncnn::Net> bilinearOpNet)
     {
@@ -257,6 +316,20 @@ namespace pips2
         }
         else
         {
+            //std::vector<float>xsFlat;
+            //std::vector<float>ysFlat;
+            //xsFlat.reserve(xs.size() * xs[0].size());
+            //ysFlat.reserve(ys.size() * ys[0].size());
+            //for (int i = 0; i < xs.size(); i++)
+            //{
+            //    for (int j = 0; j < xs[i].size(); j++)
+            //    {
+            //        xsFlat.emplace_back(xs[i][j]);
+            //        ysFlat.emplace_back(ys[i][j]);
+            //    }
+            //}
+            //ncnn::Mat sampledFlat = bilinear_sample2d(blob, xsFlat, ysFlat, bilinearOpNet);
+            //return sampledFlat;
             LOG_ERR_OUT << "dims error";
             return ncnn::Mat();
         }
@@ -331,6 +404,29 @@ namespace pips2
         for (int i = 0; i < picks.size(); i++)
         {
             memcpy((float*)fmaps.data + i * cstep * 128, fmap[picks[i]].data, cstep * Pips2::latent_dim * sizeof(float));
+        }
+        return fmaps;
+    }
+    ncnn::Mat Pips2::concatFmapsWithBatch(const std::vector<ncnn::Mat>& fmap, const std::vector<int>& picks)
+    {
+        if (fmap[0].dims!=3)
+        {
+            LOG_ERR_OUT << "dims must be 3";
+            return ncnn::Mat();
+        }
+        int w = fmap[0].w;
+        int h = fmap[0].h;
+        int cstep = fmap[0].cstep;
+        ncnn::Mat fmaps(w, h, fmap[0].c, (int)fmap.size(),(size_t)4);
+        for (int i = 0; i < picks.size(); i++)
+        {
+            float* target_ = (float*)fmaps.data + i * fmaps.cstep;
+            int innerCnt = fmap[i].h * fmap[i].w;
+            for (int c = 0; c < fmap[i].c; c++)
+            {
+                float* target = target_ + c * innerCnt;
+                memcpy(target, (float*)fmap[picks[i]].data+c* fmap[i].cstep, innerCnt * sizeof(float));
+            }
         }
         return fmaps;
     }
@@ -416,8 +512,10 @@ namespace pips2
         return true;
     }
     Pips2::Pips2(
-        const std::filesystem::path& ncnnEncoderParamPath, 
-        const std::filesystem::path& ncnnEncoderBinPath, 
+        const std::filesystem::path& ncnnEncoderParamPath,
+        const std::filesystem::path& ncnnEncoderBinPath,
+        const std::filesystem::path& ncnnDeltaBlockParamPath,
+        const std::filesystem::path& ncnnDeltaBlockBinPath,
         const int& radius_)
     {
         imgSize.width = -1;
@@ -431,8 +529,21 @@ namespace pips2
             LOG_ERR_OUT << "not found : " << ncnnEncoderBinPath;
             return;
         }
+        if (!std::filesystem::exists(ncnnDeltaBlockParamPath))
+        {
+            LOG_ERR_OUT << "not found : " << ncnnDeltaBlockParamPath;
+            return;
+        }
+        if (!std::filesystem::exists(ncnnDeltaBlockBinPath))
+        {
+            LOG_ERR_OUT << "not found : " << ncnnDeltaBlockBinPath;
+            return;
+        }
         ncnnEncoderParamPath_ = ncnnEncoderParamPath;
         ncnnEncoderBinPath_ = ncnnEncoderBinPath;
+        ncnnDeltaBlockParamPath_ = ncnnDeltaBlockParamPath;
+        ncnnDeltaBlockBinPath_ = ncnnDeltaBlockBinPath;
+
         std::string paramStr = pips2::Pips2::getBilinearOpNet();
         bilinearOpNet = std::shared_ptr<ncnn::Net>(new ncnn::Net());
         bilinearOpNet->load_param_mem(paramStr.c_str());
@@ -470,7 +581,33 @@ namespace pips2
     }
     Pips2::~Pips2()
     {}
+    bool Pips2::initDeltaBlockNet(const int& controlPtsCnt, const int& sequenceCnt)
+    {
+        try
+        {
+            deltaNet = std::shared_ptr<ncnn::Net>(new ncnn::Net());
+            std::string deltaNetParamStr = convertDeltaNet(ncnnDeltaBlockParamPath_.string(), controlPtsCnt, sequenceCnt);
+            deltaNet->load_param_mem(deltaNetParamStr.c_str());
+            deltaNet->load_model(ncnnDeltaBlockBinPath_.string().c_str());
+            padding64data = std::vector<float>(controlPtsCnt * sequenceCnt * 64);
+            padding128data = std::vector<float>(controlPtsCnt * sequenceCnt * 128);
+            padding256data = std::vector<float>(controlPtsCnt * sequenceCnt * 256);
+            padding64 = ncnn::Mat(sequenceCnt, controlPtsCnt, 64, (void*)&padding256data[0], 4);
+            padding128 = ncnn::Mat(sequenceCnt, controlPtsCnt, 128, (void*)&padding256data[0], 4);
+            padding256 = ncnn::Mat(sequenceCnt, controlPtsCnt, 256, (void*)&padding256data[0], 4);
+            padding64b = ncnn::Mat(sequenceCnt, controlPtsCnt, 64, (void*)&padding256data[0], 4);
+            padding128b = ncnn::Mat(sequenceCnt, controlPtsCnt, 128, (void*)&padding256data[0], 4);
+            padding256b = ncnn::Mat(sequenceCnt, controlPtsCnt, 256, (void*)&padding256data[0], 4);
 
+
+        }
+        catch (const std::exception&)
+        {
+            LOG_ERR_OUT << "init DeltaBlockNet error!";
+            return false;
+        }
+        return true;
+    }
     bool Pips2::inputImage(const std::vector<std::string>& imgPath,std::vector<ncnn::Mat>&fmaps)
     {
         if (imgPath.size()==0)
@@ -484,6 +621,9 @@ namespace pips2
         positionDiffEncoderNet = std::shared_ptr<ncnn::Net>(new ncnn::Net());
         positionDiffEncoderNet->load_param_mem(pips2::Pips2::getDeltaInNer(imgPath.size()).c_str());
         positionDiffEncoderNet->load_model((const unsigned char*)0);
+
+
+
         for (int i = 0; i < imgPath.size(); i++)
         {
             if (!std::filesystem::exists(imgPath[i]))
@@ -496,19 +636,19 @@ namespace pips2
             {
                 imgSize.width = img.cols;
                 imgSize.height = img.rows;
-                fmapSize.clear();
-                fmapSize.resize(pyramid_level);
+                fmapPyramidSize.clear();
+                fmapPyramidSize.resize(pyramid_level);
                 for (size_t i = 0; i < Pips2::pyramid_level; i++)
                 {
                     if (i==0)
                     {
-                        fmapSize[i].width = imgSize.width / Pips2::stride;
-                        fmapSize[i].height = imgSize.height / Pips2::stride;
+                        fmapPyramidSize[i].width = imgSize.width / Pips2::stride;
+                        fmapPyramidSize[i].height = imgSize.height / Pips2::stride;
                     }
                     else
                     {
-                        fmapSize[i].width = fmapSize[i - 1].width / 2;
-                        fmapSize[i].height = fmapSize[i - 1].height / 2;
+                        fmapPyramidSize[i].width = fmapPyramidSize[i - 1].width / 2;
+                        fmapPyramidSize[i].height = fmapPyramidSize[i - 1].height / 2;
                     }
                 }
                 //if (imgSize.width % 8 != 0 || imgSize.height % 8 != 0)
@@ -594,7 +734,7 @@ namespace pips2
         }
         return corrOut;
     }
-    bool Pips2::fillPositionDiffCosSin(const ncnn::Mat& corr1, const ncnn::Mat& corr2, const ncnn::Mat& corr4, const std::vector<std::vector<float>>& stride_x, const std::vector<std::vector<float>>& stride_y)
+    ncnn::Mat Pips2::fillPositionDiffCosSin(const ncnn::Mat& corr1, const ncnn::Mat& corr2, const ncnn::Mat& corr4, const std::vector<std::vector<float>>& stride_x, const std::vector<std::vector<float>>& stride_y)
     {
         int positionCnt = stride_x.size() * stride_x[0].size();
         int controlPtsCnt = stride_x[0].size();
@@ -629,10 +769,10 @@ namespace pips2
         ex2.extract("deltaIn", deltaIn);
         auto end1 = std::chrono::steady_clock::now();
         auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
-        //dnn::ncnnHelper::printBlob(value);
-        dnn::ncnnHelper::printBlob(deltaIn);
+        //dnn::ncnnHelper::printBlob(deltaIn);
+        //dnn::ncnnHelper::printBlob(deltaIn);
         std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl; 
-        return true;
+        return deltaIn;
     }
     bool Pips2::inputImage(const cv::Mat& img, ncnn::Mat& fmap)
     {
@@ -653,8 +793,6 @@ namespace pips2
 
 int test_pips2_ocv()
 {
-
-
     cv::Mat inputBlob;
     dnn::ocvHelper::generDnnBlob(inputBlob, { 8, 3, 1024 , 1024 });
     inputBlob.setTo(1);
@@ -704,47 +842,9 @@ int test_bilinearOp()
     LOG_OUT << bilinearOut;
     return 0;
 }
-int test_deltaNet()
-{
-    using dnn::ocvHelper::operator<<;
-    using dnn::ncnnHelper::operator<<; 
-    ncnn::Net deltaNet;
-    deltaNet.load_param("../models/pips2_deltaBlock_ncnn.param");
-    deltaNet.load_model("../models/pips2_deltaBlock_ncnn.bin");
-
-    std::vector<int>shape = { 3, 718, 8 }; ;// {8, 128, 64, 64};
-    int totalcnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
-    std::vector<float> indata(totalcnt);
-    for (int i = 0; i < indata.size(); i++)
-    {
-        indata[i] = i % 200 - 100;
-    }
-    ncnn::Mat deltaIn = ncnn::Mat(shape[2], shape[1], shape[0], (void*)&indata[0], 4);
-
-    std::vector<float> padding256data(shape[0] * shape[2] * 256);
-    ncnn::Mat padding64 = ncnn::Mat(shape[2], 64, shape[0], (void*)&padding256data[0], 4);
-    ncnn::Mat padding128 = ncnn::Mat(shape[2], 128, shape[0], (void*)&padding256data[0], 4);
-    ncnn::Mat padding256 = ncnn::Mat(shape[2], 256, shape[0], (void*)&padding256data[0], 4);
-
-    ncnn::Extractor ex2 = deltaNet.create_extractor();
-    ex2.input("deltaIn", deltaIn);
-    ex2.input("padding64", padding64);
-    ex2.input("padding128", padding128);
-    ex2.input("padding256", padding256);
-    auto start1 = std::chrono::steady_clock::now();
-    ncnn::Mat delta_out;
-    ex2.extract("delta", delta_out);
-    auto end1 = std::chrono::steady_clock::now();
-    auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
-    dnn::ncnnHelper::printBlob(delta_out);
-    //dnn::ncnnHelper::printBlob(weight);
-    std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
-
-    return 0;
-}
 int test_pips2()
 {
-    return test_deltaNet();
+    //return test_deltaNet();
     //return test_bilinearOp();
     using dnn::ocvHelper::operator<<;
     using dnn::ncnnHelper::operator<<;
@@ -759,7 +859,7 @@ int test_pips2()
     "D:/repo/colmapThird/data2/a/00006.jpg", 
     "D:/repo/colmapThird/data2/a/00007.jpg", };
 
-    pips2::Pips2 ins("../models/pips2_base_ncnn.param", "../models/pips2_base_ncnn.bin");
+    pips2::Pips2 ins("../models/pips2_base_ncnn.param", "../models/pips2_base_ncnn.bin", "../models/pips2_deltaBlock_ncnn.param", "../models/pips2_deltaBlock_ncnn.bin");
     std::vector<ncnn::Mat> fmapsVec;
     ins.inputImage(paths, fmapsVec);
     LOG_OUT<< fmapsVec[0];
@@ -770,8 +870,9 @@ int test_pips2()
     ncnn::Mat feat0 = ins.bilinear_sample2d(fmapsVec[0], xs0, ys0, ins.bilinearOpNet);
     LOG_OUT << feat0; 
 
-
-    ncnn::Mat fmaps = pips2::Pips2::concatFmaps(fmapsVec, { 0,1,2,3,4,5,6,7 });
+    std::vector<int>initFrameIdx = { 0,1,2,3,4,5,6,7 };
+    ncnn::Mat fmaps = pips2::Pips2::concatFmaps(fmapsVec, initFrameIdx);
+    ins.initDeltaBlockNet(xs0.size(), fmapsVec.size());
     ncnn::Mat feats = pips2::Pips2::repeatFeat(feat0, paths.size());
     std::vector<std::vector<float>>xs = pips2::Pips2::expandInitCoord(xs0, paths.size());
     std::vector<std::vector<float>>ys = pips2::Pips2::expandInitCoord(ys0, paths.size());
@@ -784,37 +885,120 @@ int test_pips2()
     ex_corrs1.extract("corrs_pyramid_1", corrs1_pyramid1);
     ex_corrs1.extract("corrs_pyramid_2", corrs1_pyramid2);
     ex_corrs1.extract("corrs_pyramid_3", corrs1_pyramid3);
-
-    ncnn::Extractor ex_corrs2 = ins.corrsNet->create_extractor();
-    ex_corrs2.input("fmaps", fmaps);
-    ex_corrs2.input("feats", feats);
     ncnn::Mat corrs2_pyramid0, corrs2_pyramid1, corrs2_pyramid2, corrs2_pyramid3;
-    ex_corrs2.extract("corrs_pyramid_0", corrs2_pyramid0);
-    ex_corrs2.extract("corrs_pyramid_1", corrs2_pyramid1);
-    ex_corrs2.extract("corrs_pyramid_2", corrs2_pyramid2);
-    ex_corrs2.extract("corrs_pyramid_3", corrs2_pyramid3);
-
-    ncnn::Extractor ex_corrs4 = ins.corrsNet->create_extractor();
-    ex_corrs4.input("fmaps", fmaps);
-    ex_corrs4.input("feats", feats);
     ncnn::Mat corrs4_pyramid0, corrs4_pyramid1, corrs4_pyramid2, corrs4_pyramid3;
-    ex_corrs4.extract("corrs_pyramid_0", corrs4_pyramid0);
-    ex_corrs4.extract("corrs_pyramid_1", corrs4_pyramid1);
-    ex_corrs4.extract("corrs_pyramid_2", corrs4_pyramid2);
-    ex_corrs4.extract("corrs_pyramid_3", corrs4_pyramid3);
+    corrs2_pyramid0.clone_from(corrs1_pyramid0);
+    corrs4_pyramid0.clone_from(corrs1_pyramid0);
+    corrs2_pyramid1.clone_from(corrs1_pyramid1);
+    corrs4_pyramid1.clone_from(corrs1_pyramid1);
+    corrs2_pyramid2.clone_from(corrs1_pyramid2);
+    corrs4_pyramid2.clone_from(corrs1_pyramid2);
+    corrs2_pyramid3.clone_from(corrs1_pyramid3);
+    corrs4_pyramid3.clone_from(corrs1_pyramid3);
+
    
 
-    ncnn::Mat corrs1 = ins.pyramidSample({ corrs1_pyramid0, corrs1_pyramid1, corrs1_pyramid2, corrs1_pyramid3 }, xs, ys);
-    ncnn::Mat corrs2 = ins.pyramidSample({ corrs2_pyramid0, corrs2_pyramid1, corrs2_pyramid2, corrs2_pyramid3 }, xs, ys);
-    ncnn::Mat corrs4 = ins.pyramidSample({ corrs4_pyramid0, corrs4_pyramid1, corrs4_pyramid2, corrs4_pyramid3 }, xs, ys);
-    ins.fillPositionDiffCosSin(corrs1, corrs2, corrs4, xs, ys);
-    LOG_OUT << corrs1;
     for (size_t iter = 0; iter < 3; iter++)
     {
         if (iter>=1)
         {
+            int inds2 = 2;
+            int inds4 = 4;
+            std::vector<int>frameIdx2(fmapsVec.size()), frameIdx4(fmapsVec.size());
+            std::vector<std::vector<float>>xs2(xs.size(), std::vector<float>(xs[0].size(), 0));
+            std::vector<std::vector<float>>ys2(ys.size(), std::vector<float>(ys[0].size(), 0));
+            std::vector<std::vector<float>>xs4(xs.size(), std::vector<float>(xs[0].size(), 0));
+            std::vector<std::vector<float>>ys4(ys.size(), std::vector<float>(ys[0].size(), 0));
+            for (size_t f = 0; f < fmapsVec.size(); f++)
+            {
+                frameIdx2[f] = initFrameIdx[f] - inds2;
+                frameIdx4[f] = initFrameIdx[f] - inds4;
+                if (frameIdx2[f] < 0)frameIdx2[f] = 0;
+                if (frameIdx4[f] < 0)frameIdx4[f] = 0;
+                memcpy(&xs2[f][0], &xs[frameIdx2[f]][0], sizeof(float) * xs[0].size());
+                memcpy(&ys2[f][0], &ys[frameIdx2[f]][0], sizeof(float) * ys[0].size());
+                memcpy(&xs4[f][0], &xs[frameIdx4[f]][0], sizeof(float) * xs[0].size());
+                memcpy(&ys4[f][0], &ys[frameIdx4[f]][0], sizeof(float) * ys[0].size());
+            }
+            ncnn::Mat fmaps2 = pips2::Pips2::concatFmapsWithBatch(fmapsVec, frameIdx2);
+            ncnn::Mat fmaps4 = pips2::Pips2::concatFmapsWithBatch(fmapsVec, frameIdx4);
 
-        } 
+
+            ncnn::Mat feats2 = ins.bilinear_sample2d(fmaps2, xs2, ys2, ins.bilinearOpNet);
+            ncnn::Mat feats4 = ins.bilinear_sample2d(fmaps2, xs2, ys2, ins.bilinearOpNet);
+
+
+            ncnn::Extractor ex_corrs2 = ins.corrsNet->create_extractor();
+            ex_corrs2.input("fmaps", fmaps2);
+            ex_corrs2.input("feats", feats2);
+            ex_corrs2.extract("corrs_pyramid_0", corrs2_pyramid0);
+            ex_corrs2.extract("corrs_pyramid_1", corrs2_pyramid1);
+            ex_corrs2.extract("corrs_pyramid_2", corrs2_pyramid2);
+            ex_corrs2.extract("corrs_pyramid_3", corrs2_pyramid3);
+            ncnn::Extractor ex_corrs4 = ins.corrsNet->create_extractor();
+            ex_corrs4.input("fmaps", fmaps4);
+            ex_corrs4.input("feats", feats4);
+            ex_corrs4.extract("corrs_pyramid_0", corrs4_pyramid0);
+            ex_corrs4.extract("corrs_pyramid_1", corrs4_pyramid1);
+            ex_corrs4.extract("corrs_pyramid_2", corrs4_pyramid2);
+            ex_corrs4.extract("corrs_pyramid_3", corrs4_pyramid3);
+        }
+        ncnn::Mat corrs1 = ins.pyramidSample({ corrs1_pyramid0, corrs1_pyramid1, corrs1_pyramid2, corrs1_pyramid3 }, xs, ys);
+        ncnn::Mat corrs2 = ins.pyramidSample({ corrs2_pyramid0, corrs2_pyramid1, corrs2_pyramid2, corrs2_pyramid3 }, xs, ys);
+        ncnn::Mat corrs4 = ins.pyramidSample({ corrs4_pyramid0, corrs4_pyramid1, corrs4_pyramid2, corrs4_pyramid3 }, xs, ys);
+        
+        if (dnn::ncnnHelper::dataHasNanInf(corrs1))
+        {
+            LOG_ERR_OUT << "nan in corrs1";
+            return -1;
+        }
+        if (dnn::ncnnHelper::dataHasNanInf(corrs2))
+        {
+            LOG_ERR_OUT << "nan in corrs2";
+            return -1;
+        }
+        if (dnn::ncnnHelper::dataHasNanInf(corrs4))
+        {
+            LOG_ERR_OUT << "nan in corrs4";
+            return -1;
+        }
+
+
+        ncnn::Mat deltaNetInput = ins.fillPositionDiffCosSin(corrs1, corrs2, corrs4, xs, ys);
+
+
+
+        //dnn::ncnnHelper::printBlob(deltaNetInput);
+
+        ncnn::Extractor ex3 = ins.deltaNet->create_extractor();
+        ex3.input("deltaIn", deltaNetInput);
+        ex3.input("padding64", ins.padding64);
+        ex3.input("padding128", ins.padding128);
+        ex3.input("padding256", ins.padding256);
+        ex3.input("padding64b", ins.padding64);
+        ex3.input("padding128b", ins.padding128);
+        ex3.input("padding256b", ins.padding256);
+        ncnn::Mat delta_out;
+        ex3.extract("delta", delta_out);
+        //dnn::ncnnHelper::printBlob(delta_out);
+        
+        if (iter==1)
+        {
+            LOG_OUT;
+        }
+
+        int blobDataI = 0;
+        for (int p = 0; p < xs[0].size(); p++)
+        {
+            for (int q = 0; q < xs.size(); q++)
+            {
+                xs[q][p] += ((float*)delta_out.data)[blobDataI++];
+                ys[q][p] += ((float*)delta_out.data)[blobDataI++];
+            }
+        }
+        xs[0] = xs0;
+        ys[0] = ys0;
+        LOG_OUT;
     }
 
     return 0;

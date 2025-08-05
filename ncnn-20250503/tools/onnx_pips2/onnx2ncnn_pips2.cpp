@@ -6885,9 +6885,9 @@ std::string convertDeltaNet(const std::string&paramPath,const int& controlPtsCnt
 int test_deltaNet()
 { 
     ncnn::Net deltaNet;
-    deltaNet.load_param_mem(convertDeltaNet("../../../../models/pips2_deltaBlock_ncnn.param",3,8).c_str());
+    deltaNet.load_param_mem(convertDeltaNet("pips2_deltaBlock_ncnn.param",3,8).c_str());
     //deltaNet.load_param("../../../../test.param");
-    deltaNet.load_model("../../../../models/pips2_deltaBlock_ncnn.bin");
+    deltaNet.load_model("pips2_deltaBlock_ncnn.bin");
  
 
     std::vector<int>inputIdx = deltaNet.input_indexes();
@@ -6922,7 +6922,7 @@ int test_deltaNet()
         indata[i] = i % 200 - 100;
     }
     ncnn::Mat deltaIn = ncnn::Mat(shape[2], shape[1], shape[0], (void*)&indata[0], 4);
-
+    printNcnnBlob(deltaIn);
     std::vector<float> padding64data(shape[1] * shape[2] * 64);
     std::vector<float> padding128data(shape[1] * shape[2] * 128);
     std::vector<float> padding256data(shape[1] * shape[2] * 256); 
@@ -6941,7 +6941,7 @@ int test_deltaNet()
     auto start1 = std::chrono::steady_clock::now();
     ncnn::Mat delta_out, delta_out2;
     //ex2.extract("/basicblock_list.2/conv2/conv2d/Conv_output_0", delta_out);
-    ex2.extract("/final_relu/Relu_output_0", delta_out2);
+    ex2.extract("delta", delta_out2);
     auto end1 = std::chrono::steady_clock::now();
     auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
     printNcnnBlob(delta_out2);
@@ -6954,25 +6954,40 @@ int main()
 {
     //return test_corrs();
     return test_deltaNet();
-    if (0)
+    if (1)
     {
-        const char* onnxpb = "../../../../models/pips2_base_opencv.onnx";
-        const char* ncnn_prototxt = "../../../../models/pips2_base_ncnn.param";
-        const char* ncnn_modelbin = "../../../../models/pips2_base_ncnn.bin";
-        convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
-    }
-    if (0)
-    {
-        const char* onnxpb = "../../../../models/pips2_corrBlock_opencv.onnx";
-        const char* ncnn_prototxt = "../../../../models/pips2_corrBlock_ncnn.param";
-        const char* ncnn_modelbin = "../../../../models/pips2_corrBlock_ncnn.bin";
+        if (!std::filesystem::exists("pips2_base_opencv.onnx"))
+        {
+            std::cout << "not found : pips2_base_opencv.onnx;  run python first!!";
+            return -1;
+        }
+        const char* onnxpb = "pips2_base_opencv.onnx";
+        const char* ncnn_prototxt = "pips2_base_ncnn.param";
+        const char* ncnn_modelbin = "pips2_base_ncnn.bin";
         convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
     }
     if (1)
     {
-        const char* onnxpb = "../../../../models/pips2_deltaBlock_opencv.onnx";
-        const char* ncnn_prototxt = "../../../../models/pips2_deltaBlock_ncnn.param";
-        const char* ncnn_modelbin = "../../../../models/pips2_deltaBlock_ncnn.bin";
+        if (!std::filesystem::exists("pips2_corrBlock_opencv.onnx"))
+        {
+            std::cout << "not found : pips2_corrBlock_opencv.onnx;  run python first!!";
+            return -1;
+        }
+        const char* onnxpb = "pips2_corrBlock_opencv.onnx";
+        const char* ncnn_prototxt = "pips2_corrBlock_ncnn.param";
+        const char* ncnn_modelbin = "pips2_corrBlock_ncnn.bin";
+        convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
+    }
+    if (1)
+    {
+        if (!std::filesystem::exists("pips2_deltaBlock_opencv.onnx"))
+        {
+            std::cout << "not found : pips2_deltaBlock_opencv.onnx;  run python first!!";
+            return -1;
+        }
+        const char* onnxpb = "pips2_deltaBlock_opencv.onnx";
+        const char* ncnn_prototxt = "pips2_deltaBlock_ncnn.param";
+        const char* ncnn_modelbin = "pips2_deltaBlock_ncnn.bin";
         convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
     }
     //test_beginning_forward("../../../../models/ncnnEncoderBeginning.param", "../../../../models/ncnnEncoderBeginning.bin");
