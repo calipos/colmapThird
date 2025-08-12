@@ -15,6 +15,19 @@
 #include "net.h"
 #include "mat.h"
 #include "colString.h"
+
+#ifdef JUDGE_NAN
+#undef JUDGE_NAN
+#endif 
+#define JUDGE_NAN(x)  0  //if (dnn::ncnnHelper::dataHasNanInf(x)){  LOG_ERR_OUT << "nan in "<<#x; exit(-1); }
+#ifdef SHOW_NCNN_BLOB
+#undef SHOW_NCNN_BLOB
+#endif 
+#define SHOW_NCNN_BLOB(x)   \
+{LOG_OUT << " --------------------  " << #x << " --------------------------";\
+using dnn::ocvHelper::operator<<;\
+using dnn::ncnnHelper::operator<<; LOG_OUT << x; }
+
 namespace pips2
 {
     const int Pips2::stride = 8;
@@ -38,8 +51,11 @@ namespace pips2
     {
         std::string paramStr =
             "7767517\n"
-            "25 35\n"
-            "Input            fmaps                    0 1 fmaps\n"
+            "26 36\n"
+            "Input            fmapsWithBatch                    0 1 fmapsWithBatch\n";
+        std::string reshapeWithBatchStr = "Reshape fmaps 1 1 fmapsWithBatch fmaps 2=" + std::to_string(sequenceLength*Pips2::latent_dim) +" 1=0 0=0\n";
+        paramStr += reshapeWithBatchStr;
+        paramStr +=
             "Split            splitncnn_input0         1 2 fmaps fmaps_splitncnn_0 fmaps_splitncnn_1\n"
             "Input            feats                    0 1 feats\n"
             "Split            splitncnn_input1         1 4 feats feats_splitncnn_0 feats_splitncnn_1 feats_splitncnn_2 feats_splitncnn_3\n"
@@ -50,34 +66,32 @@ namespace pips2
             "Pooling          /AveragePool_2           1 1 /AveragePool_1_output_0_splitncnn_1 /AveragePool_2_output_0 0=1 1=2 11=2 2=2 12=2 3=0 13=0 14=0 15=0 5=1 6=1\n";
         int h0 = imgHeight / Pips2::stride;
         int w0 = imgWidth / Pips2::stride;
-        std::string reshape0Str = "Reshape /Reshape 1 1 fmaps_splitncnn_0 /Reshape_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=" + std::to_string(h0 * w0) + "\n";
+        std::string reshape0Str = "Reshape /Reshape 1 1 fmaps_splitncnn_0 /Reshape_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=-1\n";
         paramStr += reshape0Str;
-        paramStr +="MatMul           /MatMul                  2 1 feats_splitncnn_3 /Reshape_output_0 /MatMul_output_0\n";
+        paramStr +="MatMul           /MatMul                  2 1 feats_splitncnn_0 /Reshape_output_0 /MatMul_output_0\n";
         std::string div0Str ="BinaryOp  /Div  1 1 /MatMul_output_0 corrs_pyramid_reshape_0 0=3  1=1  2="+std::to_string(sqrt(double(Pips2::latent_dim)))+"\n";
         paramStr += div0Str;
         int h1 = h0 / 2;
         int w1 = w0 / 2;
-        std::string reshape1Str = "Reshape /Reshape_1 1 1 /AveragePool_output_0_splitncnn_0 /Reshape_1_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=" + std::to_string(h1 * w1) + "\n";
+        std::string reshape1Str = "Reshape /Reshape_1 1 1 /AveragePool_output_0_splitncnn_0 /Reshape_1_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=-1\n";
         paramStr += reshape1Str;
-        paramStr +="MatMul           /MatMul_1                2 1 feats_splitncnn_2 /Reshape_1_output_0 /MatMul_1_output_0\n";
+        paramStr +="MatMul           /MatMul_1                2 1 feats_splitncnn_1 /Reshape_1_output_0 /MatMul_1_output_0\n";
         std::string div1Str = "BinaryOp  /Div_1  1 1 /MatMul_1_output_0 corrs_pyramid_reshape_1 0=3  1=1  2=" + std::to_string(sqrt(double(Pips2::latent_dim))) + "\n";
         paramStr += div1Str;
         int h2 = h1 / 2;
         int w2 = w1 / 2;
-        std::string reshape2Str = "Reshape /Reshape_2 1 1 /AveragePool_1_output_0_splitncnn_0 /Reshape_2_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=" + std::to_string(h2 * w2) + "\n";
+        std::string reshape2Str = "Reshape /Reshape_2 1 1 /AveragePool_1_output_0_splitncnn_0 /Reshape_2_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=-1\n";
         paramStr += reshape2Str;
-        paramStr += "MatMul           /MatMul_2                2 1 feats_splitncnn_1 /Reshape_2_output_0 /MatMul_2_output_0\n";
+        paramStr += "MatMul           /MatMul_2                2 1 feats_splitncnn_2 /Reshape_2_output_0 /MatMul_2_output_0\n";
         std::string div2Str = "BinaryOp  /Div_2  1 1 /MatMul_2_output_0 corrs_pyramid_reshape_2 0=3  1=1  2=" + std::to_string(sqrt(double(Pips2::latent_dim))) + "\n";
         paramStr += div2Str;
         int h3 = h2 / 2;
         int w3 = w2 / 2;
-        std::string reshape3Str = "Reshape /Reshape_3 1 1 /AveragePool_2_output_0 /Reshape_3_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=" + std::to_string(h3 * w3) + "\n";
+        std::string reshape3Str = "Reshape /Reshape_3 1 1 /AveragePool_2_output_0 /Reshape_3_output_0 2=" + std::to_string(sequenceLength) + " 1=" + std::to_string(Pips2::latent_dim) + " 0=-1\n";
         paramStr += reshape3Str;
-        paramStr += "MatMul           /MatMul_3                2 1 feats_splitncnn_0 /Reshape_3_output_0 /MatMul_3_output_0\n";
+        paramStr += "MatMul           /MatMul_3                2 1 feats_splitncnn_3 /Reshape_3_output_0 /MatMul_3_output_0\n";
         std::string div3Str = "BinaryOp  /Div_3  1 1 /MatMul_3_output_0 corrs_pyramid_reshape_3  0=3  1=1  2=" + std::to_string(sqrt(double(Pips2::latent_dim))) + "\n";
         paramStr += div3Str;
-
-
         std::string reshape0Str_2 = "Reshape corrs_pyramid_0 1 1 corrs_pyramid_reshape_0 corrs_pyramid_0 2=-1 11=1 1=" + std::to_string(h0) + " 0=" + std::to_string(w0) + "\n";
         paramStr += reshape0Str_2;
         std::string reshape1Str_2 = "Reshape corrs_pyramid_1 1 1 corrs_pyramid_reshape_1 corrs_pyramid_1 2=-1 11=1 1=" + std::to_string(h1) + " 0=" + std::to_string(w1) + "\n";
@@ -86,8 +100,8 @@ namespace pips2
         paramStr += reshape2Str_2;
         std::string reshape3Str_2 = "Reshape corrs_pyramid_3 1 1 corrs_pyramid_reshape_3 corrs_pyramid_3 2=-1 11=1 1=" + std::to_string(h3) + " 0=" + std::to_string(w3) + "\n";
         paramStr += reshape3Str_2;
-
-
+        LOG_OUT << "getCorrsNet\n"<< paramStr;
+        LOG_OUT;
         return paramStr;
     }
     std::string Pips2::getDeltaInNer(const int& sequenceLength)
@@ -280,13 +294,13 @@ namespace pips2
         ncnn::Extractor ex2 = bilinearOpNet->create_extractor();
         ex2.input("v", value);
         ex2.input("w", weight);
-        auto start1 = std::chrono::steady_clock::now();
+        //auto start1 = std::chrono::steady_clock::now();
         ncnn::Mat bilinear_sample_out;
         ex2.extract("output", bilinear_sample_out);
-        auto end1 = std::chrono::steady_clock::now();
-        auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+        //auto end1 = std::chrono::steady_clock::now();
+        //auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
         //dnn::ncnnHelper::printBlob(weight);
-        std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
+        //std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
         return bilinear_sample_out.reshape(outW, outH, outC);;
     }
 
@@ -385,14 +399,14 @@ namespace pips2
         ncnn::Extractor ex2 = bilinearOpNet->create_extractor();
         ex2.input("v", value);
         ex2.input("w", weight);
-        auto start1 = std::chrono::steady_clock::now();
+        //auto start1 = std::chrono::steady_clock::now();
         ncnn::Mat bilinear_sample_out;
         ex2.extract("output", bilinear_sample_out);
-        auto end1 = std::chrono::steady_clock::now();
-        auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+        //auto end1 = std::chrono::steady_clock::now();
+        //auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
         //dnn::ncnnHelper::printBlob(value);
         //dnn::ncnnHelper::printBlob(weight);
-        std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
+        //std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
         return bilinear_sample_out.reshape(outW, outH, outC);;
     }
     ncnn::Mat Pips2::concatFmaps(const std::vector<ncnn::Mat>&fmap, const std::vector<int>& picks)
@@ -720,6 +734,7 @@ namespace pips2
                 }
             }
             ncnn::Mat corr = bilinear_sample2d(corrs_pyramids[i], xs_, ys_, bilinearOpNet);
+            //SHOW_NCNN_BLOB(corr);
             //using dnn::ocvHelper::operator<<;
             //using dnn::ncnnHelper::operator<<;
             //LOG_OUT << corr;
@@ -732,6 +747,7 @@ namespace pips2
                 memcpy(tar, src, radiusArea * sizeof(float));
             }
         }
+        //SHOW_NCNN_BLOB(corrOut);
         return corrOut;
     }
     ncnn::Mat Pips2::fillPositionDiffCosSin(const ncnn::Mat& corr1, const ncnn::Mat& corr2, const ncnn::Mat& corr4, const std::vector<std::vector<float>>& stride_x, const std::vector<std::vector<float>>& stride_y)
@@ -862,29 +878,35 @@ int test_pips2()
     pips2::Pips2 ins("../models/pips2_base_ncnn.param", "../models/pips2_base_ncnn.bin", "../models/pips2_deltaBlock_ncnn.param", "../models/pips2_deltaBlock_ncnn.bin");
     std::vector<ncnn::Mat> fmapsVec;
     ins.inputImage(paths, fmapsVec);
-    LOG_OUT<< fmapsVec[0];
     std::vector<float>xs0 = { 12.5000, 13.3000, 23.3000 };
     std::vector<float>ys0 = { 1.2000, 45.1000, 15.1000 };
     for (auto& d : xs0) d /= ins.stride;
     for (auto& d : ys0) d /= ins.stride;
     ncnn::Mat feat0 = ins.bilinear_sample2d(fmapsVec[0], xs0, ys0, ins.bilinearOpNet);
-    LOG_OUT << feat0; 
 
     std::vector<int>initFrameIdx = { 0,1,2,3,4,5,6,7 };
-    ncnn::Mat fmaps = pips2::Pips2::concatFmaps(fmapsVec, initFrameIdx);
+    ncnn::Mat fmaps = pips2::Pips2::concatFmapsWithBatch(fmapsVec, initFrameIdx);
     ins.initDeltaBlockNet(xs0.size(), fmapsVec.size());
     ncnn::Mat feats = pips2::Pips2::repeatFeat(feat0, paths.size());
     std::vector<std::vector<float>>xs = pips2::Pips2::expandInitCoord(xs0, paths.size());
     std::vector<std::vector<float>>ys = pips2::Pips2::expandInitCoord(ys0, paths.size());
 
     ncnn::Extractor ex_corrs1 = ins.corrsNet->create_extractor();
-    ex_corrs1.input("fmaps", fmaps);
+    ex_corrs1.input("fmapsWithBatch", fmaps);
     ex_corrs1.input("feats", feats);
+
+    JUDGE_NAN(fmaps);
+    JUDGE_NAN(feats);
     ncnn::Mat corrs1_pyramid0, corrs1_pyramid1, corrs1_pyramid2, corrs1_pyramid3;
     ex_corrs1.extract("corrs_pyramid_0", corrs1_pyramid0);
     ex_corrs1.extract("corrs_pyramid_1", corrs1_pyramid1);
     ex_corrs1.extract("corrs_pyramid_2", corrs1_pyramid2);
     ex_corrs1.extract("corrs_pyramid_3", corrs1_pyramid3);
+    JUDGE_NAN(corrs1_pyramid0);
+    JUDGE_NAN(corrs1_pyramid1);
+    JUDGE_NAN(corrs1_pyramid2);
+    JUDGE_NAN(corrs1_pyramid3);
+    LOG_OUT << corrs1_pyramid0;
     ncnn::Mat corrs2_pyramid0, corrs2_pyramid1, corrs2_pyramid2, corrs2_pyramid3;
     ncnn::Mat corrs4_pyramid0, corrs4_pyramid1, corrs4_pyramid2, corrs4_pyramid3;
     corrs2_pyramid0.clone_from(corrs1_pyramid0);
@@ -896,10 +918,11 @@ int test_pips2()
     corrs2_pyramid3.clone_from(corrs1_pyramid3);
     corrs4_pyramid3.clone_from(corrs1_pyramid3);
 
-   
 
-    for (size_t iter = 0; iter < 3; iter++)
+
+    for (size_t iter = 0; iter < 2; iter++)
     {
+        LOG_OUT << "iter = " << iter;
         if (iter>=1)
         {
             int inds2 = 2;
@@ -928,40 +951,57 @@ int test_pips2()
             ncnn::Mat feats4 = ins.bilinear_sample2d(fmaps2, xs2, ys2, ins.bilinearOpNet);
 
 
+
+
+            //ncnn::Mat corrs2_pyramid0_a, corrs2_pyramid1_a, corrs2_pyramid2_a, corrs2_pyramid3_a;
+            //ncnn::Mat corrs4_pyramid0_a, corrs4_pyramid1_a, corrs4_pyramid2_a, corrs4_pyramid3_a;
+            corrs2_pyramid0.release();
+            corrs2_pyramid1.release();
+            corrs2_pyramid2.release();
+            corrs2_pyramid3.release();
+            corrs4_pyramid0.release();
+            corrs4_pyramid1.release();
+            corrs4_pyramid2.release();
+            corrs4_pyramid3.release();
+
             ncnn::Extractor ex_corrs2 = ins.corrsNet->create_extractor();
-            ex_corrs2.input("fmaps", fmaps2);
+            ex_corrs2.input("fmapsWithBatch", fmaps);
             ex_corrs2.input("feats", feats2);
+
+            SHOW_NCNN_BLOB(fmaps);
+            SHOW_NCNN_BLOB(feats2);
+
             ex_corrs2.extract("corrs_pyramid_0", corrs2_pyramid0);
             ex_corrs2.extract("corrs_pyramid_1", corrs2_pyramid1);
             ex_corrs2.extract("corrs_pyramid_2", corrs2_pyramid2);
             ex_corrs2.extract("corrs_pyramid_3", corrs2_pyramid3);
+
+            SHOW_NCNN_BLOB(corrs2_pyramid0);
+            SHOW_NCNN_BLOB(corrs2_pyramid1);
+            SHOW_NCNN_BLOB(corrs2_pyramid2);
+            SHOW_NCNN_BLOB(corrs2_pyramid3);
             ncnn::Extractor ex_corrs4 = ins.corrsNet->create_extractor();
-            ex_corrs4.input("fmaps", fmaps4);
+            ex_corrs4.input("fmapsWithBatch", fmaps);
             ex_corrs4.input("feats", feats4);
             ex_corrs4.extract("corrs_pyramid_0", corrs4_pyramid0);
             ex_corrs4.extract("corrs_pyramid_1", corrs4_pyramid1);
             ex_corrs4.extract("corrs_pyramid_2", corrs4_pyramid2);
             ex_corrs4.extract("corrs_pyramid_3", corrs4_pyramid3);
+
+
         }
+
         ncnn::Mat corrs1 = ins.pyramidSample({ corrs1_pyramid0, corrs1_pyramid1, corrs1_pyramid2, corrs1_pyramid3 }, xs, ys);
+
+
+        //SHOW_NCNN_BLOB(corrs4_pyramid0);
+        //SHOW_NCNN_BLOB(corrs4_pyramid1);
+        //SHOW_NCNN_BLOB(corrs4_pyramid2);
+        //SHOW_NCNN_BLOB(corrs4_pyramid3);
         ncnn::Mat corrs2 = ins.pyramidSample({ corrs2_pyramid0, corrs2_pyramid1, corrs2_pyramid2, corrs2_pyramid3 }, xs, ys);
+        SHOW_NCNN_BLOB(corrs2);
         ncnn::Mat corrs4 = ins.pyramidSample({ corrs4_pyramid0, corrs4_pyramid1, corrs4_pyramid2, corrs4_pyramid3 }, xs, ys);
-        
-        if (dnn::ncnnHelper::dataHasNanInf(corrs1))
-        {
-            LOG_ERR_OUT << "nan in corrs1";
-            return -1;
-        }
-        if (dnn::ncnnHelper::dataHasNanInf(corrs2))
-        {
-            LOG_ERR_OUT << "nan in corrs2";
-            return -1;
-        }
-        if (dnn::ncnnHelper::dataHasNanInf(corrs4))
-        {
-            LOG_ERR_OUT << "nan in corrs4";
-            return -1;
-        }
+        SHOW_NCNN_BLOB(corrs4);
 
 
         ncnn::Mat deltaNetInput = ins.fillPositionDiffCosSin(corrs1, corrs2, corrs4, xs, ys);
@@ -980,12 +1020,8 @@ int test_pips2()
         ex3.input("padding256b", ins.padding256);
         ncnn::Mat delta_out;
         ex3.extract("delta", delta_out);
-        //dnn::ncnnHelper::printBlob(delta_out);
-        
-        if (iter==1)
-        {
-            LOG_OUT;
-        }
+        dnn::ncnnHelper::printBlob(delta_out);
+        JUDGE_NAN(delta_out);
 
         int blobDataI = 0;
         for (int p = 0; p < xs[0].size(); p++)
@@ -998,7 +1034,6 @@ int test_pips2()
         }
         xs[0] = xs0;
         ys[0] = ys0;
-        LOG_OUT;
     }
 
     return 0;
