@@ -759,8 +759,8 @@ namespace pips2
         ncnn::Mat diffy(1, positionCnt, (size_t)4);
         for (int i = 0; i < positionCnt; i++)
         {
-            int controlPtIdx = i % controlPtsCnt;
-            int seqenceIdx = i / controlPtsCnt;
+            int controlPtIdx = i / seqenceCnt;
+            int seqenceIdx = i % seqenceCnt;
             int seqenceNextIdx = seqenceIdx+1;
             if (seqenceNextIdx == seqenceCnt)
             {
@@ -946,11 +946,13 @@ int test_pips2()
             ncnn::Mat fmaps2 = pips2::Pips2::concatFmapsWithBatch(fmapsVec, frameIdx2);
             ncnn::Mat fmaps4 = pips2::Pips2::concatFmapsWithBatch(fmapsVec, frameIdx4);
 
+            //SHOW_NCNN_BLOB(fmaps4);
 
             ncnn::Mat feats2 = ins.bilinear_sample2d(fmaps2, xs2, ys2, ins.bilinearOpNet);
-            ncnn::Mat feats4 = ins.bilinear_sample2d(fmaps2, xs2, ys2, ins.bilinearOpNet);
+            ncnn::Mat feats4 = ins.bilinear_sample2d(fmaps4, xs4, ys4, ins.bilinearOpNet);
 
 
+            //SHOW_NCNN_BLOB(feats4);
 
 
             //ncnn::Mat corrs2_pyramid0_a, corrs2_pyramid1_a, corrs2_pyramid2_a, corrs2_pyramid3_a;
@@ -968,18 +970,17 @@ int test_pips2()
             ex_corrs2.input("fmapsWithBatch", fmaps);
             ex_corrs2.input("feats", feats2);
 
-            SHOW_NCNN_BLOB(fmaps);
-            SHOW_NCNN_BLOB(feats2);
+            //SHOW_NCNN_BLOB(fmaps);
+            //SHOW_NCNN_BLOB(feats2);
 
             ex_corrs2.extract("corrs_pyramid_0", corrs2_pyramid0);
             ex_corrs2.extract("corrs_pyramid_1", corrs2_pyramid1);
             ex_corrs2.extract("corrs_pyramid_2", corrs2_pyramid2);
             ex_corrs2.extract("corrs_pyramid_3", corrs2_pyramid3);
 
-            SHOW_NCNN_BLOB(corrs2_pyramid0);
-            SHOW_NCNN_BLOB(corrs2_pyramid1);
-            SHOW_NCNN_BLOB(corrs2_pyramid2);
-            SHOW_NCNN_BLOB(corrs2_pyramid3);
+            //SHOW_NCNN_BLOB(corrs2_pyramid0);
+            //SHOW_NCNN_BLOB(corrs2_pyramid1);
+            //SHOW_NCNN_BLOB(corrs2_pyramid2);
             ncnn::Extractor ex_corrs4 = ins.corrsNet->create_extractor();
             ex_corrs4.input("fmapsWithBatch", fmaps);
             ex_corrs4.input("feats", feats4);
@@ -992,12 +993,7 @@ int test_pips2()
         }
 
         ncnn::Mat corrs1 = ins.pyramidSample({ corrs1_pyramid0, corrs1_pyramid1, corrs1_pyramid2, corrs1_pyramid3 }, xs, ys);
-
-
-        //SHOW_NCNN_BLOB(corrs4_pyramid0);
-        //SHOW_NCNN_BLOB(corrs4_pyramid1);
-        //SHOW_NCNN_BLOB(corrs4_pyramid2);
-        //SHOW_NCNN_BLOB(corrs4_pyramid3);
+        SHOW_NCNN_BLOB(corrs1);
         ncnn::Mat corrs2 = ins.pyramidSample({ corrs2_pyramid0, corrs2_pyramid1, corrs2_pyramid2, corrs2_pyramid3 }, xs, ys);
         SHOW_NCNN_BLOB(corrs2);
         ncnn::Mat corrs4 = ins.pyramidSample({ corrs4_pyramid0, corrs4_pyramid1, corrs4_pyramid2, corrs4_pyramid3 }, xs, ys);
@@ -1008,7 +1004,6 @@ int test_pips2()
 
 
 
-        //dnn::ncnnHelper::printBlob(deltaNetInput);
 
         ncnn::Extractor ex3 = ins.deltaNet->create_extractor();
         ex3.input("deltaIn", deltaNetInput);
