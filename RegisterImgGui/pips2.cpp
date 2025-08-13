@@ -5,6 +5,8 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <filesystem>
+#include <string>
 #include <unordered_set>
 #include <chrono>
 #include <vector>
@@ -985,23 +987,38 @@ int test_bilinearOp()
     LOG_OUT << bilinearOut;
     return 0;
 }
+
+
+std::vector<std::string> listImgPaths(const char* imgDirPath_)
+{
+    std::vector<std::string>ret;
+    for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ imgDirPath_ })
+    {
+        const auto& thisFilename = dir_entry.path();
+        if (thisFilename.has_extension())
+        {
+            const auto& ext = thisFilename.extension().string();
+            if (ext.compare(".bmp") == 0 || ext.compare(".jpg") == 0 || ext.compare(".jpeg") == 0)
+            {
+                cv::Mat img = cv::imread(thisFilename.string());
+                if (!img.empty())
+                {
+                    ret.emplace_back(thisFilename.string());
+                }
+            }
+        }
+    }
+    std::sort(ret.begin(), ret.end());
+    return ret;
+}
+
 int test_pips2()
 {
-    //return test_deltaNet();
-    //return test_bilinearOp();
     using dnn::ocvHelper::operator<<;
     using dnn::ncnnHelper::operator<<;
 
-    std::vector<std::string>paths = {
-    "D:/repo/colmapThird/data2/a/00000.jpg", 
-    "D:/repo/colmapThird/data2/a/00001.jpg", 
-    "D:/repo/colmapThird/data2/a/00002.jpg", 
-    "D:/repo/colmapThird/data2/a/00003.jpg", 
-    "D:/repo/colmapThird/data2/a/00004.jpg", 
-    "D:/repo/colmapThird/data2/a/00005.jpg", 
-    "D:/repo/colmapThird/data2/a/00006.jpg", 
-    "D:/repo/colmapThird/data2/a/00007.jpg", };
-
+    std::vector<std::string>paths = listImgPaths("D:/repo/colmapThird/data2/a");
+    paths.resize(8);
     pips2::Pips2 ins("../models/pips2_base_ncnn.param", "../models/pips2_base_ncnn.bin", "../models/pips2_deltaBlock_ncnn.param", "../models/pips2_deltaBlock_ncnn.bin");
     
     if (ins.inputImage(paths))

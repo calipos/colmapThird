@@ -12,6 +12,7 @@
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 #include "registerFrame.h"
 #include "segmentFrame.h"
+#include "imgui_annotation.h"
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif 
@@ -21,6 +22,7 @@ static void glfw_error_callback(int error, const char* description)
 }
 bool show_imgRegister_window = false;
 bool show_segment_window = false;
+bool show_annotation_window = false;
 bool show_main_window = true;
 
 extern int test_sam2();
@@ -32,7 +34,7 @@ extern int test_pips2();
 int main(int, char**)
 {
     return test_pips2();
-    return test_sam2();
+    //return test_sam2();
     //return test_incremental();
 
     glfwSetErrorCallback(glfw_error_callback);
@@ -80,6 +82,10 @@ int main(int, char**)
         {
             show_segment_window = !show_segment_window;
         }
+        if (ImGui::Button("annotation") && !show_annotation_window)
+        {
+            show_annotation_window = !show_annotation_window;
+        }
         ImGui::End();
         if (show_imgRegister_window)
         {
@@ -88,6 +94,10 @@ int main(int, char**)
         if (show_segment_window)
         {
             segmentFrame(&show_segment_window);
+        }
+        if (show_annotation_window)
+        {
+            annotationFrame(&show_annotation_window);
         }
         
         ImGui::Render();
