@@ -219,6 +219,145 @@ namespace dnn
             }
             return false;
         }
+        //void writeBlob(const std::string& path, const ncnn::Mat& out)
+        //{
+        //    std::fstream fout(path, std::ios::out | std::ios::binary);
+        //    cv::dnn::MatShape shape = getBlobShape(out);
+        //    int dims = shape.size();
+        //    fout.write((char*)&dims, sizeof(int));
+        //    fout.write((char*)&shape[0], dims * sizeof(int));
+        //    std::vector<int>denominators = getDenominators(shape);
+        //    int cstep = out.cstep;
+        //    int dstep = 0;
+        //    if (shape.size() == 4)
+        //    {
+        //        dstep = shape[2] * shape[3];
+        //    }
+        //    int total = 1;
+        //    for (int c = 0; c < shape.size(); c++)
+        //    {
+        //        total *= shape[c];
+        //    }
+        //    for (int i = 0; i < total; i++)
+        //    {
+        //        std::vector<int>pos = getPos(i, denominators);
+        //        {
+        //            int c = 0;
+        //            int d = 0;
+        //            int h = 0;
+        //            int w = 0;
+        //            if (pos.size() == 4)
+        //            {
+        //                c = pos[0];
+        //                d = pos[1];
+        //                h = pos[2];
+        //                w = pos[3];
+        //            }
+        //            if (pos.size() == 3)
+        //            {
+        //                c = pos[0];
+        //                h = pos[1];
+        //                w = pos[2];
+        //            }
+        //            if (pos.size() == 2)
+        //            {
+        //                h = pos[0];
+        //                w = pos[1];
+        //            }
+        //            if (pos.size() == 1)
+        //            {
+        //                w = pos[0];
+        //            }
+        //            float* data = (float*)out.data + d * dstep + c * cstep;
+        //            const float* data2 = data + h * out.w + w;
+        //            fout.write((char*)data2, sizeof(float));
+        //        }
+        //    }
+        //    fout.close();
+        //    return;
+        //}
+        //bool readBlob(const std::string& path, ncnn::Mat& out)
+        //{
+        //    std::fstream fin(path, std::ios::in | std::ios::binary);
+        //    int dims = 0;
+        //    fin.read((char*)&dims, sizeof(int));
+        //    if (dims<1|| dims>4)
+        //    {
+        //        LOG_ERR_OUT << "dims error : " << dims;
+        //        return false;
+        //    }
+        //    cv::dnn::MatShape shape(dims);
+        //    for (int i = 0; i < dims; i++)
+        //    {
+        //        fin.read((char*)&shape[i], sizeof(int));
+        //    }
+        //    switch (dims)
+        //    {
+        //    case 1:
+        //        out = ncnn::Mat(shape[0], (size_t)4);
+        //        break;
+        //    case 2:
+        //        out = ncnn::Mat(shape[1], shape[0], (size_t)4);
+        //        break;
+        //    case 3:
+        //        out = ncnn::Mat(shape[2], shape[1], shape[0], (size_t)4);
+        //        break;
+        //    case 4:
+        //        out = ncnn::Mat(shape[3], shape[2], shape[1], shape[0], (size_t)4);
+        //        break;
+        //    default:
+        //        break;
+        //    }
+        //    std::vector<int>denominators = getDenominators(shape);
+        //    int cstep = out.cstep;
+        //    int dstep = 0;
+        //    if (shape.size() == 4)
+        //    {
+        //        dstep = shape[2] * shape[3];
+        //    }
+        //    int total = 1;
+        //    for (int c = 0; c < shape.size(); c++)
+        //    {
+        //        total *= shape[c];
+        //    }
+        //    for (int i = 0; i < total; i++)
+        //    {
+        //        std::vector<int>pos = getPos(i, denominators);
+        //        {
+        //            int c = 0;
+        //            int d = 0;
+        //            int h = 0;
+        //            int w = 0;
+        //            if (pos.size() == 4)
+        //            {
+        //                c = pos[0];
+        //                d = pos[1];
+        //                h = pos[2];
+        //                w = pos[3];
+        //            }
+        //            if (pos.size() == 3)
+        //            {
+        //                c = pos[0];
+        //                h = pos[1];
+        //                w = pos[2];
+        //            }
+        //            if (pos.size() == 2)
+        //            {
+        //                h = pos[0];
+        //                w = pos[1];
+        //            }
+        //            if (pos.size() == 1)
+        //            {
+        //                w = pos[0];
+        //            }
+        //            float* data = (float*)out.data + d * dstep + c * cstep;
+        //            float* data2 = data + h * out.w + w;
+        //            fin.read((char*)data2, sizeof(float));
+        //        }
+        //    }
+        //    fin.close();
+        //    return true;
+        //}
         void writeBlob(const std::string& path, const ncnn::Mat& out)
         {
             std::fstream fout(path, std::ios::out | std::ios::binary);
@@ -226,57 +365,49 @@ namespace dnn
             int dims = shape.size();
             fout.write((char*)&dims, sizeof(int));
             fout.write((char*)&shape[0], dims * sizeof(int));
-            std::vector<int>denominators = getDenominators(shape);
-            int cstep = out.cstep;
-            int dstep = 0;
-            if (shape.size() == 4)
-            {
-                dstep = shape[2] * shape[3];
-            }
-            int total = 1;
-            for (int c = 0; c < shape.size(); c++)
-            {
-                total *= shape[c];
-            }
-            for (int i = 0; i < total; i++)
-            {
-                std::vector<int>pos = getPos(i, denominators);
-                {
-                    int c = 0;
-                    int d = 0;
-                    int h = 0;
-                    int w = 0;
-                    if (pos.size() == 4)
-                    {
-                        c = pos[0];
-                        d = pos[1];
-                        h = pos[2];
-                        w = pos[3];
-                    }
-                    if (pos.size() == 3)
-                    {
-                        c = pos[0];
-                        h = pos[1];
-                        w = pos[2];
-                    }
-                    if (pos.size() == 2)
-                    {
-                        h = pos[0];
-                        w = pos[1];
-                    }
-                    if (pos.size() == 1)
-                    {
-                        w = pos[0];
-                    }
-                    float* data = (float*)out.data + d * dstep + c * cstep;
-                    const float* data2 = data + h * out.w + w;
-                    fout.write((char*)data2, sizeof(float));
-                }
-            }
+            int total = out.c* out.cstep;
+            fout.write((char*)out.data, total*sizeof(float));
             fout.close();
             return;
         }
-        bool serializationBlob(const ncnn::Mat& out, cv::dnn::MatShape& shape, std::vector<float>& dat)
+        bool readBlob(const std::string& path, ncnn::Mat& out)
+        {
+            std::fstream fin(path, std::ios::in | std::ios::binary);
+            int dims = 0;
+            fin.read((char*)&dims, sizeof(int));
+            if (dims < 1 || dims>4)
+            {
+                LOG_ERR_OUT << "dims error : " << dims;
+                return false;
+            }
+            cv::dnn::MatShape shape(dims);
+            for (int i = 0; i < dims; i++)
+            {
+                fin.read((char*)&shape[i], sizeof(int));
+            }
+            switch (dims)
+            {
+            case 1:
+                out = ncnn::Mat(shape[0], (size_t)4);
+                break;
+            case 2:
+                out = ncnn::Mat(shape[1], shape[0], (size_t)4);
+                break;
+            case 3:
+                out = ncnn::Mat(shape[2], shape[1], shape[0], (size_t)4);
+                break;
+            case 4:
+                out = ncnn::Mat(shape[3], shape[2], shape[1], shape[0], (size_t)4);
+                break;
+            default:
+                break;
+            }
+            int total = out.c * out.cstep;
+            fin.read((char*)out.data, total * sizeof(float));
+            fin.close();
+            return true;
+        }
+        bool serializationBlob(const ncnn::Mat& out,cv::dnn::MatShape& shape, std::vector<float>& dat)
         {
             shape = getBlobShape(out);
             int dims = shape.size();

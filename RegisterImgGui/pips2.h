@@ -18,7 +18,8 @@ namespace pips2
 		~Pips2();
 		bool inputImage(const std::vector<std::string>& imgPath);
 		bool inputImage(const cv::Mat& img,ncnn::Mat& fmap);
-		bool track(const std::vector<cv::Point2f>& controlPts, std::vector<std::vector<cv::Point2f>>& traj,const int&iterCnt=4);
+		bool track(const std::vector<cv::Point2f>& controlPts, std::vector<std::vector<cv::Point2f>>& traj, const int& iterCnt = 4);
+		bool trackLimit(const std::vector<cv::Point2f>& controlPts, std::vector<std::vector<cv::Point2f>>& traj, const int& sequenceLimit = 24, const int& iterCnt = 4);
 		bool initDeltaBlockNet(const int& controlPtsCnt, const int& sequenceCnt);
 		//bool serializationFeat(const std::filesystem::path& path);
 		//bool deserializationFeat(const std::filesystem::path& path);
