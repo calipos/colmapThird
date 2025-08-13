@@ -16,6 +16,70 @@ static std::filesystem::path modelDirPath;
 static browser::Browser* imgDirPicker = nullptr;
 static browser::Browser* modelDirPicker = nullptr;
 static ProgressThread progress;
+namespace label
+{
+	class ImageLabel
+	{
+	private:
+		int currentImgHeight;
+		int currentImgWidth;
+		static ImageLabel* instance;
+		static ImVec2 draw_pos;
+		static ImVec2 canvas;//(w,h)
+		static ImVec2 zoom_start;
+		static ImVec2 zoom_end;
+		static GLuint image_texture;
+		ImageLabel() {};
+		ImageLabel(const ImageLabel&) = delete;
+		ImageLabel& operator=(const ImageLabel&) = delete;
+	public:
+		bool hasImageContext{ false };
+		static ImageLabel* getImageLabel(const ImVec2& draw_pos_, const int& canvasHeight_, const int& canvasWidth_)
+		{
+			if (ImageLabel::instance == nullptr)
+			{
+				ImageLabel::instance = new ImageLabel();
+			}
+			else
+			{
+				return ImageLabel::instance;
+			}
+			draw_pos = draw_pos_;
+			canvas = ImVec2(canvasWidth_, canvasHeight_);
+			zoom_start = ImVec2(0, 0);
+			zoom_end = ImVec2(1, 1);
+			return instance;
+		}
+		bool feedImg(const cv::Mat& img = cv::Mat())
+		{
+			if (img.empty())
+			{
+				hasImageContext = false;
+			}
+			else
+			{
+				hasImageContext = true;
+				LoadTextureFromMat(img, &image_texture, &currentImgWidth, &currentImgHeight);
+			}
+			return true;
+		}
+		bool draw()
+		{
+			if (hasImageContext)
+			{
+				ImGui::SetCursorPos(draw_pos);
+				ImGui::Image((ImTextureID)(intptr_t)image_texture, ImageLabel::canvas, ImageLabel::zoom_start, ImageLabel::zoom_end, ImVec4(1, 1, 1, 1), ImVec4(.5, .5, .5, .5));
+			}
+			return true;
+		}
+	};
+	ImageLabel* ImageLabel::instance = nullptr;
+	ImVec2 ImageLabel::draw_pos = ImVec2();
+	ImVec2 ImageLabel::canvas = ImVec2();
+	ImVec2 ImageLabel::zoom_start = ImVec2();
+	ImVec2 ImageLabel::zoom_end = ImVec2();
+	GLuint ImageLabel::image_texture = 0;
+}
 class AnnotationManger
 {
 public:
@@ -83,26 +147,10 @@ public:
 			return;
 		}
 		progress.denominator.store(imgName.size());
-		progress.numerator.store(0);
+		progress.numerator.store(-1);
 		progress.procRunning.fetch_add(1);
-		//sam2Ins = new sam2::Sam2(encoderParamPath, encoderBinPath, dencoderOnnxPath);
-		for (size_t i = 0; i < imgName.size(); i++)
-		{
-			const auto& parentDir = std::filesystem::canonical(imgPaths[i].parent_path());
-			std::string shortName = imgPaths[i].filename().stem().string();
-			const auto& segData = parentDir / (shortName + ".segDat");
-			bool reload = false;
-			if (std::filesystem::exists(segData))
-			{
-				//reload = pips2Ins->deserializationFeat(segData);
-			}
-			if (!reload)
-			{
-				//pips2Ins->inputImage(imgPaths[i]);
-				//pips2Ins->serializationFeat(segData);
-			}
-			progress.numerator.fetch_add(1);
-		}
+		pips2Ins = new pips2::Pips2(encoderParamPath, encoderBinPath, deltaParamPath, deltaBinPath);
+		pips2Ins->inputImage(imgPaths); 
 		progress.procRunning.store(0);
 	}
 	~AnnotationManger()
@@ -148,6 +196,7 @@ bool annotationFrame(bool* show_regist_window)
 		{
 			if (progress.proc->joinable())
 			{
+				progress.msg = "";
 				progress.proc->join();
 				progress.procRunning.store(false);
 			}
@@ -204,6 +253,7 @@ bool annotationFrame(bool* show_regist_window)
 
 		if (annotationManger == nullptr && imgDirPath.string().length() > 0 && modelDirPath.string().length() > 0)
 		{
+			progress.numerator.store(-1);
 			progress.procRunning.fetch_add(1);
 			progress.proc = new std::thread(
 				[&]() {
@@ -219,7 +269,16 @@ bool annotationFrame(bool* show_regist_window)
 			imgDirPath = "";
 			modelDirPath = "";
 		}
-		
+		{
+			auto currentPos = ImGui::GetCursorPos();
+			label::ImageLabel* labelControlPtr = label::ImageLabel::getImageLabel(currentPos,720,960);
+			if (!labelControlPtr->hasImageContext)
+			{
+				cv::Mat asd = cv::imread("D:/repo/colmapThird/a.bmp");
+				labelControlPtr->feedImg(asd);
+			}
+			labelControlPtr->draw();
+		}
 		break;
 	}
 	if (progress.msg.length() > 0)

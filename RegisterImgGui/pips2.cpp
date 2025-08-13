@@ -624,7 +624,7 @@ namespace pips2
         }
         return true;
     }
-    bool Pips2::inputImage(const std::vector<std::string>& imgPath)
+    bool Pips2::inputImage(const std::vector<std::filesystem::path>& imgPath)
     {
         if (imgPath.size()==0)
         {
@@ -645,7 +645,7 @@ namespace pips2
                 LOG_ERR_OUT << "imgPath.size()==0";
                 return false;
             }
-            cv::Mat img = cv::imread(imgPath[i]);
+            cv::Mat img = cv::imread(imgPath[i].string());
             if (imgSize.width<0)
             {
                 imgSize.width = img.cols;
@@ -1174,9 +1174,9 @@ int test_bilinearOp()
 }
 
 
-std::vector<std::string> listImgPaths(const char* imgDirPath_)
+std::vector<std::filesystem::path> listImgPaths(const char* imgDirPath_)
 {
-    std::vector<std::string>ret;
+    std::vector<std::filesystem::path>ret;
     for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ imgDirPath_ })
     {
         const auto& thisFilename = dir_entry.path();
@@ -1188,7 +1188,7 @@ std::vector<std::string> listImgPaths(const char* imgDirPath_)
                 cv::Mat img = cv::imread(thisFilename.string());
                 if (!img.empty())
                 {
-                    ret.emplace_back(thisFilename.string());
+                    ret.emplace_back(thisFilename);
                 }
             }
         }
@@ -1202,7 +1202,7 @@ int test_pips2()
     using dnn::ocvHelper::operator<<;
     using dnn::ncnnHelper::operator<<;
     cv::Mat colorMap;    
-    std::vector<std::string>paths = listImgPaths("D:/repo/colmapThird/data2/a");
+    std::vector<std::filesystem::path>paths = listImgPaths("D:/repo/colmapThird/data2/a");
     pips2::Pips2 ins("../models/pips2_base_ncnn.param", "../models/pips2_base_ncnn.bin", "../models/pips2_deltaBlock_ncnn.param", "../models/pips2_deltaBlock_ncnn.bin");
     if (ins.inputImage(paths))
     {
@@ -1234,7 +1234,7 @@ int test_pips2()
         {
             for (int i = 0; i < paths.size(); i++)
             {
-                cv::Mat img = cv::imread(paths[i]);
+                cv::Mat img = cv::imread(paths[i].string());
                 for (int j = 0; j < trajs[i].size(); j++)
                 {
                     cv::Scalar controlColor = cv::Scalar(255, 255, 255);

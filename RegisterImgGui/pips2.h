@@ -2,6 +2,7 @@
 #define _PIPS2_H_
 #include <filesystem>
 #include <vector>
+#include <string>
 #include "opencv2/opencv.hpp"
 #include "mat.h"
 #include "net.h"
@@ -16,7 +17,7 @@ namespace pips2
 			const std::filesystem::path& ncnnDeltaBlockParamPath,
 			const std::filesystem::path& ncnnDeltaBlockBinPath, const int&radius_=3);
 		~Pips2();
-		bool inputImage(const std::vector<std::string>& imgPath);
+		bool inputImage(const std::vector<std::filesystem::path>& imgPath);
 		bool inputImage(const cv::Mat& img,ncnn::Mat& fmap);
 		bool track(const std::vector<cv::Point2f>& controlPts, std::vector<std::vector<cv::Point2f>>& traj, const int& iterCnt = 4);
 		bool trackLimit(const std::vector<cv::Point2f>& controlPts, std::vector<std::vector<cv::Point2f>>& traj, const int& sequenceLimit = 24, const int& iterCnt = 4);

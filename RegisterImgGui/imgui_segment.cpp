@@ -115,6 +115,8 @@ static SegmentMgr* segmentMgr = nullptr;
 GLuint SegmentMgr::image_texture = 0;
 int SegmentMgr::viewWindowHeight = 720;
 int SegmentMgr::viewWindowWidth = 960;
+
+
 bool segmentFrame(bool* show_regist_window)
 {
 	ImGui::SetNextWindowSize(ImVec2(1280, 960));//ImVec2(x, y)
