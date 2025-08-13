@@ -622,21 +622,19 @@ namespace pips2
         }
         return true;
     }
-    bool Pips2::inputImage(const std::vector<std::string>& imgPath,std::vector<ncnn::Mat>&fmaps)
+    bool Pips2::inputImage(const std::vector<std::string>& imgPath)
     {
         if (imgPath.size()==0)
         {
             LOG_ERR_OUT << "imgPath.size()==0";
             return false;
         }
-        fmaps.clear();
-        fmaps.reserve(imgPath.size());
+        fmapsVec.clear();
+        fmapsVec.reserve(imgPath.size());
 
         positionDiffEncoderNet = std::shared_ptr<ncnn::Net>(new ncnn::Net());
         positionDiffEncoderNet->load_param_mem(pips2::Pips2::getDeltaInNer(imgPath.size()).c_str());
         positionDiffEncoderNet->load_model((const unsigned char*)0);
-
-
 
         for (int i = 0; i < imgPath.size(); i++)
         {
@@ -700,11 +698,140 @@ namespace pips2
                 LOG_ERR_OUT << "encoder fail.";
                 return false;
             }
-            fmaps.emplace_back(fmap);
+            fmapsVec.emplace_back(fmap);
         }
         return true;
     }
+    bool Pips2::track(const std::vector<cv::Point2f>& controlPts, std::vector<std::vector<cv::Point2f>>&traj, const int& iterCnt)
+    {
+        if (this->fmapsVec.size()==0|| this->fmapsVec.size() <6)
+        {
+            LOG_ERR_OUT << "this->fmapsVec.size()==0 | this->fmapsVec.size() <6 : "<< this->fmapsVec.size();
+            return false;
+        }
+        std::vector<float>xs0(controlPts.size());
+        std::vector<float>ys0(controlPts.size());
+        for (int i = 0; i < controlPts.size(); i++)
+        {
+            xs0[i] = controlPts[i].x / this->stride;
+            ys0[i] = controlPts[i].y / this->stride;
+        }
+        ncnn::Mat feat0 = this->bilinear_sample2d(fmapsVec[0], xs0, ys0, this->bilinearOpNet);
 
+        std::vector<int>initFrameIdx = { 0,1,2,3,4,5,6,7 };
+        ncnn::Mat fmaps = pips2::Pips2::concatFmapsWithBatch(fmapsVec, initFrameIdx);
+        this->initDeltaBlockNet(xs0.size(), fmapsVec.size());
+        ncnn::Mat feats = pips2::Pips2::repeatFeat(feat0, fmapsVec.size());
+        std::vector<std::vector<float>>xs = pips2::Pips2::expandInitCoord(xs0, fmapsVec.size());
+        std::vector<std::vector<float>>ys = pips2::Pips2::expandInitCoord(ys0, fmapsVec.size());
+
+        ncnn::Extractor ex_corrs1 = this->corrsNet->create_extractor();
+        ex_corrs1.input("fmapsWithBatch", fmaps);
+        ex_corrs1.input("feats", feats);
+        ncnn::Mat corrs1_pyramid0, corrs1_pyramid1, corrs1_pyramid2, corrs1_pyramid3;
+        ex_corrs1.extract("corrs_pyramid_0", corrs1_pyramid0);
+        ex_corrs1.extract("corrs_pyramid_1", corrs1_pyramid1);
+        ex_corrs1.extract("corrs_pyramid_2", corrs1_pyramid2);
+        ex_corrs1.extract("corrs_pyramid_3", corrs1_pyramid3);
+        ncnn::Mat corrs2_pyramid0, corrs2_pyramid1, corrs2_pyramid2, corrs2_pyramid3;
+        ncnn::Mat corrs4_pyramid0, corrs4_pyramid1, corrs4_pyramid2, corrs4_pyramid3;
+        corrs2_pyramid0.clone_from(corrs1_pyramid0);
+        corrs4_pyramid0.clone_from(corrs1_pyramid0);
+        corrs2_pyramid1.clone_from(corrs1_pyramid1);
+        corrs4_pyramid1.clone_from(corrs1_pyramid1);
+        corrs2_pyramid2.clone_from(corrs1_pyramid2);
+        corrs4_pyramid2.clone_from(corrs1_pyramid2);
+        corrs2_pyramid3.clone_from(corrs1_pyramid3);
+        corrs4_pyramid3.clone_from(corrs1_pyramid3);
+        for (size_t iter = 0; iter < iterCnt; iter++)
+        {
+            LOG_OUT << "iter = " << iter;
+            if (iter >= 1)
+            {
+                int inds2 = 2;
+                int inds4 = 4;
+                std::vector<int>frameIdx2(fmapsVec.size()), frameIdx4(fmapsVec.size());
+                std::vector<std::vector<float>>xs2(xs.size(), std::vector<float>(xs[0].size(), 0));
+                std::vector<std::vector<float>>ys2(ys.size(), std::vector<float>(ys[0].size(), 0));
+                std::vector<std::vector<float>>xs4(xs.size(), std::vector<float>(xs[0].size(), 0));
+                std::vector<std::vector<float>>ys4(ys.size(), std::vector<float>(ys[0].size(), 0));
+                for (size_t f = 0; f < fmapsVec.size(); f++)
+                {
+                    frameIdx2[f] = initFrameIdx[f] - inds2;
+                    frameIdx4[f] = initFrameIdx[f] - inds4;
+                    if (frameIdx2[f] < 0)frameIdx2[f] = 0;
+                    if (frameIdx4[f] < 0)frameIdx4[f] = 0;
+                    memcpy(&xs2[f][0], &xs[frameIdx2[f]][0], sizeof(float) * xs[0].size());
+                    memcpy(&ys2[f][0], &ys[frameIdx2[f]][0], sizeof(float) * ys[0].size());
+                    memcpy(&xs4[f][0], &xs[frameIdx4[f]][0], sizeof(float) * xs[0].size());
+                    memcpy(&ys4[f][0], &ys[frameIdx4[f]][0], sizeof(float) * ys[0].size());
+                }
+                ncnn::Mat fmaps2 = pips2::Pips2::concatFmapsWithBatch(fmapsVec, frameIdx2);
+                ncnn::Mat fmaps4 = pips2::Pips2::concatFmapsWithBatch(fmapsVec, frameIdx4);
+                ncnn::Mat feats2 = this->bilinear_sample2d(fmaps2, xs2, ys2, this->bilinearOpNet);
+                ncnn::Mat feats4 = this->bilinear_sample2d(fmaps4, xs4, ys4, this->bilinearOpNet);
+                corrs2_pyramid0.release();
+                corrs2_pyramid1.release();
+                corrs2_pyramid2.release();
+                corrs2_pyramid3.release();
+                corrs4_pyramid0.release();
+                corrs4_pyramid1.release();
+                corrs4_pyramid2.release();
+                corrs4_pyramid3.release();
+                ncnn::Extractor ex_corrs2 = this->corrsNet->create_extractor();
+                ex_corrs2.input("fmapsWithBatch", fmaps);
+                ex_corrs2.input("feats", feats2);
+                ex_corrs2.extract("corrs_pyramid_0", corrs2_pyramid0);
+                ex_corrs2.extract("corrs_pyramid_1", corrs2_pyramid1);
+                ex_corrs2.extract("corrs_pyramid_2", corrs2_pyramid2);
+                ex_corrs2.extract("corrs_pyramid_3", corrs2_pyramid3);
+                ncnn::Extractor ex_corrs4 = this->corrsNet->create_extractor();
+                ex_corrs4.input("fmapsWithBatch", fmaps);
+                ex_corrs4.input("feats", feats4);
+                ex_corrs4.extract("corrs_pyramid_0", corrs4_pyramid0);
+                ex_corrs4.extract("corrs_pyramid_1", corrs4_pyramid1);
+                ex_corrs4.extract("corrs_pyramid_2", corrs4_pyramid2);
+                ex_corrs4.extract("corrs_pyramid_3", corrs4_pyramid3);
+            }
+            ncnn::Mat corrs1 = this->pyramidSample({ corrs1_pyramid0, corrs1_pyramid1, corrs1_pyramid2, corrs1_pyramid3 }, xs, ys);
+            ncnn::Mat corrs2 = this->pyramidSample({ corrs2_pyramid0, corrs2_pyramid1, corrs2_pyramid2, corrs2_pyramid3 }, xs, ys);
+            ncnn::Mat corrs4 = this->pyramidSample({ corrs4_pyramid0, corrs4_pyramid1, corrs4_pyramid2, corrs4_pyramid3 }, xs, ys);
+            ncnn::Mat deltaNetInput = this->fillPositionDiffCosSin(corrs1, corrs2, corrs4, xs, ys);
+            ncnn::Extractor ex3 = this->deltaNet->create_extractor();
+            ex3.input("deltaIn", deltaNetInput);
+            ex3.input("padding64", this->padding64);
+            ex3.input("padding128", this->padding128);
+            ex3.input("padding256", this->padding256);
+            ex3.input("padding64b", this->padding64);
+            ex3.input("padding128b", this->padding128);
+            ex3.input("padding256b", this->padding256);
+            ncnn::Mat delta_out;
+            ex3.extract("delta", delta_out);
+            SHOW_NCNN_BLOB(delta_out);
+
+            int blobDataI = 0;
+            for (int p = 0; p < xs[0].size(); p++)
+            {
+                for (int q = 0; q < xs.size(); q++)
+                {
+                    xs[q][p] += ((float*)delta_out.data)[blobDataI++];
+                    ys[q][p] += ((float*)delta_out.data)[blobDataI++];
+                }
+            }
+            xs[0] = xs0;
+            ys[0] = ys0;
+        }
+        traj= std::vector<std::vector<cv::Point2f>>(xs.size(), std::vector<cv::Point2f>(xs[0].size()));
+        for (int i = 0; i < xs.size(); i++)
+        {
+            for (int j = 0; j < xs[i].size(); j++)
+            {
+                traj[i][j].x = xs[i][j]*this->stride;
+                traj[i][j].y = ys[i][j] * this->stride;
+            }
+        }
+        return true;
+    }
     ncnn::Mat Pips2::pyramidSample(const std::vector<ncnn::Mat>& corrs_pyramids, const std::vector<std::vector<float>>& stride_x, const std::vector<std::vector<float>>& stride_y)const
     {
         int radiusArea = coord_delta_x.size();
@@ -876,160 +1003,25 @@ int test_pips2()
     "D:/repo/colmapThird/data2/a/00007.jpg", };
 
     pips2::Pips2 ins("../models/pips2_base_ncnn.param", "../models/pips2_base_ncnn.bin", "../models/pips2_deltaBlock_ncnn.param", "../models/pips2_deltaBlock_ncnn.bin");
-    std::vector<ncnn::Mat> fmapsVec;
-    ins.inputImage(paths, fmapsVec);
-    std::vector<float>xs0 = { 12.5000, 13.3000, 23.3000 };
-    std::vector<float>ys0 = { 1.2000, 45.1000, 15.1000 };
-    for (auto& d : xs0) d /= ins.stride;
-    for (auto& d : ys0) d /= ins.stride;
-    ncnn::Mat feat0 = ins.bilinear_sample2d(fmapsVec[0], xs0, ys0, ins.bilinearOpNet);
-
-    std::vector<int>initFrameIdx = { 0,1,2,3,4,5,6,7 };
-    ncnn::Mat fmaps = pips2::Pips2::concatFmapsWithBatch(fmapsVec, initFrameIdx);
-    ins.initDeltaBlockNet(xs0.size(), fmapsVec.size());
-    ncnn::Mat feats = pips2::Pips2::repeatFeat(feat0, paths.size());
-    std::vector<std::vector<float>>xs = pips2::Pips2::expandInitCoord(xs0, paths.size());
-    std::vector<std::vector<float>>ys = pips2::Pips2::expandInitCoord(ys0, paths.size());
-
-    ncnn::Extractor ex_corrs1 = ins.corrsNet->create_extractor();
-    ex_corrs1.input("fmapsWithBatch", fmaps);
-    ex_corrs1.input("feats", feats);
-
-    JUDGE_NAN(fmaps);
-    JUDGE_NAN(feats);
-    ncnn::Mat corrs1_pyramid0, corrs1_pyramid1, corrs1_pyramid2, corrs1_pyramid3;
-    ex_corrs1.extract("corrs_pyramid_0", corrs1_pyramid0);
-    ex_corrs1.extract("corrs_pyramid_1", corrs1_pyramid1);
-    ex_corrs1.extract("corrs_pyramid_2", corrs1_pyramid2);
-    ex_corrs1.extract("corrs_pyramid_3", corrs1_pyramid3);
-    JUDGE_NAN(corrs1_pyramid0);
-    JUDGE_NAN(corrs1_pyramid1);
-    JUDGE_NAN(corrs1_pyramid2);
-    JUDGE_NAN(corrs1_pyramid3);
-    LOG_OUT << corrs1_pyramid0;
-    ncnn::Mat corrs2_pyramid0, corrs2_pyramid1, corrs2_pyramid2, corrs2_pyramid3;
-    ncnn::Mat corrs4_pyramid0, corrs4_pyramid1, corrs4_pyramid2, corrs4_pyramid3;
-    corrs2_pyramid0.clone_from(corrs1_pyramid0);
-    corrs4_pyramid0.clone_from(corrs1_pyramid0);
-    corrs2_pyramid1.clone_from(corrs1_pyramid1);
-    corrs4_pyramid1.clone_from(corrs1_pyramid1);
-    corrs2_pyramid2.clone_from(corrs1_pyramid2);
-    corrs4_pyramid2.clone_from(corrs1_pyramid2);
-    corrs2_pyramid3.clone_from(corrs1_pyramid3);
-    corrs4_pyramid3.clone_from(corrs1_pyramid3);
-
-
-
-    for (size_t iter = 0; iter < 2; iter++)
+    
+    if (ins.inputImage(paths))
     {
-        LOG_OUT << "iter = " << iter;
-        if (iter>=1)
+        std::vector<cv::Point2f>controlPts = { {12.5000,1.2000},{13.3000,45.1000},{23.3000,15.1000} };
+        std::vector<std::vector<cv::Point2f>>trajs;
+        bool trackRet = ins.track(controlPts, trajs);
+        if (trackRet)
         {
-            int inds2 = 2;
-            int inds4 = 4;
-            std::vector<int>frameIdx2(fmapsVec.size()), frameIdx4(fmapsVec.size());
-            std::vector<std::vector<float>>xs2(xs.size(), std::vector<float>(xs[0].size(), 0));
-            std::vector<std::vector<float>>ys2(ys.size(), std::vector<float>(ys[0].size(), 0));
-            std::vector<std::vector<float>>xs4(xs.size(), std::vector<float>(xs[0].size(), 0));
-            std::vector<std::vector<float>>ys4(ys.size(), std::vector<float>(ys[0].size(), 0));
-            for (size_t f = 0; f < fmapsVec.size(); f++)
+            for (int i = 0; i < paths.size(); i++)
             {
-                frameIdx2[f] = initFrameIdx[f] - inds2;
-                frameIdx4[f] = initFrameIdx[f] - inds4;
-                if (frameIdx2[f] < 0)frameIdx2[f] = 0;
-                if (frameIdx4[f] < 0)frameIdx4[f] = 0;
-                memcpy(&xs2[f][0], &xs[frameIdx2[f]][0], sizeof(float) * xs[0].size());
-                memcpy(&ys2[f][0], &ys[frameIdx2[f]][0], sizeof(float) * ys[0].size());
-                memcpy(&xs4[f][0], &xs[frameIdx4[f]][0], sizeof(float) * xs[0].size());
-                memcpy(&ys4[f][0], &ys[frameIdx4[f]][0], sizeof(float) * ys[0].size());
-            }
-            ncnn::Mat fmaps2 = pips2::Pips2::concatFmapsWithBatch(fmapsVec, frameIdx2);
-            ncnn::Mat fmaps4 = pips2::Pips2::concatFmapsWithBatch(fmapsVec, frameIdx4);
-
-            //SHOW_NCNN_BLOB(fmaps4);
-
-            ncnn::Mat feats2 = ins.bilinear_sample2d(fmaps2, xs2, ys2, ins.bilinearOpNet);
-            ncnn::Mat feats4 = ins.bilinear_sample2d(fmaps4, xs4, ys4, ins.bilinearOpNet);
-
-
-            //SHOW_NCNN_BLOB(feats4);
-
-
-            //ncnn::Mat corrs2_pyramid0_a, corrs2_pyramid1_a, corrs2_pyramid2_a, corrs2_pyramid3_a;
-            //ncnn::Mat corrs4_pyramid0_a, corrs4_pyramid1_a, corrs4_pyramid2_a, corrs4_pyramid3_a;
-            corrs2_pyramid0.release();
-            corrs2_pyramid1.release();
-            corrs2_pyramid2.release();
-            corrs2_pyramid3.release();
-            corrs4_pyramid0.release();
-            corrs4_pyramid1.release();
-            corrs4_pyramid2.release();
-            corrs4_pyramid3.release();
-
-            ncnn::Extractor ex_corrs2 = ins.corrsNet->create_extractor();
-            ex_corrs2.input("fmapsWithBatch", fmaps);
-            ex_corrs2.input("feats", feats2);
-
-            //SHOW_NCNN_BLOB(fmaps);
-            //SHOW_NCNN_BLOB(feats2);
-
-            ex_corrs2.extract("corrs_pyramid_0", corrs2_pyramid0);
-            ex_corrs2.extract("corrs_pyramid_1", corrs2_pyramid1);
-            ex_corrs2.extract("corrs_pyramid_2", corrs2_pyramid2);
-            ex_corrs2.extract("corrs_pyramid_3", corrs2_pyramid3);
-
-            //SHOW_NCNN_BLOB(corrs2_pyramid0);
-            //SHOW_NCNN_BLOB(corrs2_pyramid1);
-            //SHOW_NCNN_BLOB(corrs2_pyramid2);
-            ncnn::Extractor ex_corrs4 = ins.corrsNet->create_extractor();
-            ex_corrs4.input("fmapsWithBatch", fmaps);
-            ex_corrs4.input("feats", feats4);
-            ex_corrs4.extract("corrs_pyramid_0", corrs4_pyramid0);
-            ex_corrs4.extract("corrs_pyramid_1", corrs4_pyramid1);
-            ex_corrs4.extract("corrs_pyramid_2", corrs4_pyramid2);
-            ex_corrs4.extract("corrs_pyramid_3", corrs4_pyramid3);
-
-
-        }
-
-        ncnn::Mat corrs1 = ins.pyramidSample({ corrs1_pyramid0, corrs1_pyramid1, corrs1_pyramid2, corrs1_pyramid3 }, xs, ys);
-        SHOW_NCNN_BLOB(corrs1);
-        ncnn::Mat corrs2 = ins.pyramidSample({ corrs2_pyramid0, corrs2_pyramid1, corrs2_pyramid2, corrs2_pyramid3 }, xs, ys);
-        SHOW_NCNN_BLOB(corrs2);
-        ncnn::Mat corrs4 = ins.pyramidSample({ corrs4_pyramid0, corrs4_pyramid1, corrs4_pyramid2, corrs4_pyramid3 }, xs, ys);
-        SHOW_NCNN_BLOB(corrs4);
-
-
-        ncnn::Mat deltaNetInput = ins.fillPositionDiffCosSin(corrs1, corrs2, corrs4, xs, ys);
-
-
-
-
-        ncnn::Extractor ex3 = ins.deltaNet->create_extractor();
-        ex3.input("deltaIn", deltaNetInput);
-        ex3.input("padding64", ins.padding64);
-        ex3.input("padding128", ins.padding128);
-        ex3.input("padding256", ins.padding256);
-        ex3.input("padding64b", ins.padding64);
-        ex3.input("padding128b", ins.padding128);
-        ex3.input("padding256b", ins.padding256);
-        ncnn::Mat delta_out;
-        ex3.extract("delta", delta_out);
-        dnn::ncnnHelper::printBlob(delta_out);
-        JUDGE_NAN(delta_out);
-
-        int blobDataI = 0;
-        for (int p = 0; p < xs[0].size(); p++)
-        {
-            for (int q = 0; q < xs.size(); q++)
-            {
-                xs[q][p] += ((float*)delta_out.data)[blobDataI++];
-                ys[q][p] += ((float*)delta_out.data)[blobDataI++];
+                cv::Mat img = cv::imread(paths[i]);
+                for (int j = 0; j < trajs[i].size(); j++)
+                {
+                    cv::circle(img, trajs[i][j], 3, cv::Scalar(255, 255, 255), -1);
+                }
+                cv::imshow("",img);
+                cv::waitKey();
             }
         }
-        xs[0] = xs0;
-        ys[0] = ys0;
-    }
-
+    } 
     return 0;
 }

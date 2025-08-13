@@ -16,8 +16,9 @@ namespace pips2
 			const std::filesystem::path& ncnnDeltaBlockParamPath,
 			const std::filesystem::path& ncnnDeltaBlockBinPath, const int&radius_=3);
 		~Pips2();
-		bool inputImage(const std::vector<std::string>& imgPath, std::vector<ncnn::Mat>& fmaps);
+		bool inputImage(const std::vector<std::string>& imgPath);
 		bool inputImage(const cv::Mat& img,ncnn::Mat& fmap);
+		bool track(const std::vector<cv::Point2f>& controlPts, std::vector<std::vector<cv::Point2f>>& traj,const int&iterCnt=4);
 		bool initDeltaBlockNet(const int& controlPtsCnt, const int& sequenceCnt);
 		//bool serializationFeat(const std::filesystem::path& path);
 		//bool deserializationFeat(const std::filesystem::path& path);
@@ -38,6 +39,7 @@ namespace pips2
 		static std::vector<std::vector<float>> expandInitCoord(std::vector<float>& xs, const int& times);
 		ncnn::Mat  fillPositionDiffCosSin(const ncnn::Mat& corr1, const ncnn::Mat& corr2, const ncnn::Mat& corr4, const std::vector<std::vector<float>>& stride_x, const std::vector<std::vector<float>>& stride_y);
 		ncnn::Mat pyramidSample(const std::vector<ncnn::Mat>& corrs_pyramids, const std::vector<std::vector<float>>& stride_x, const std::vector<std::vector<float>>& stride_y)const;
+		std::vector<ncnn::Mat> fmapsVec;
 		std::vector<float>padding64data;
 		std::vector<float>padding128data;
 		std::vector<float>padding256data;
