@@ -24,17 +24,19 @@ namespace label
 		int currentImgHeight;
 		int currentImgWidth;
 		static ImageLabel* instance;
-		static ImVec2 draw_pos;
-		static ImVec2 canvas;//(w,h)
 		static ImVec2 zoom_start;
 		static ImVec2 zoom_end;
 		static GLuint image_texture;
+		static int canvasMaxSide;
 		ImageLabel() {};
 		ImageLabel(const ImageLabel&) = delete;
 		ImageLabel& operator=(const ImageLabel&) = delete;
 	public:
+		static ImVec2 draw_pos;
+		static ImVec2 canvas;//(w,h)
+		static float resizeFactor;
 		bool hasImageContext{ false };
-		static ImageLabel* getImageLabel(const ImVec2& draw_pos_, const int& canvasHeight_, const int& canvasWidth_)
+		static ImageLabel* getImageLabel(const ImVec2& draw_pos_, const int& canvasMaxSide_)
 		{
 			if (ImageLabel::instance == nullptr)
 			{
@@ -44,8 +46,9 @@ namespace label
 			{
 				return ImageLabel::instance;
 			}
+			canvasMaxSide = canvasMaxSide_;
 			draw_pos = draw_pos_;
-			canvas = ImVec2(canvasWidth_, canvasHeight_);
+			canvas = ImVec2(0, 0);
 			zoom_start = ImVec2(0, 0);
 			zoom_end = ImVec2(1, 1);
 			return instance;
@@ -58,8 +61,23 @@ namespace label
 			}
 			else
 			{
+				resizeFactor = 1;
 				hasImageContext = true;
 				LoadTextureFromMat(img, &image_texture, &currentImgWidth, &currentImgHeight);
+				float a = 1.f * currentImgWidth / ImageLabel::canvasMaxSide;
+				float b = 1.f * currentImgHeight / ImageLabel::canvasMaxSide;
+				if (a < 1.f && b < 1.f)
+				{
+					ImageLabel::canvas = ImVec2(currentImgWidth, currentImgHeight);
+				}
+				else if(a>b)
+				{
+					ImageLabel::canvas = ImVec2(currentImgWidth / a, currentImgHeight / a);
+				}
+				else
+				{
+					ImageLabel::canvas = ImVec2(currentImgWidth / b, currentImgHeight / b);
+				}
 			}
 			return true;
 		}
@@ -72,13 +90,40 @@ namespace label
 			}
 			return true;
 		}
+		bool control(const ImVec2&mousePosInImage,const float wheel, const bool&mouseLeftDown)
+		{
+			if (abs(wheel)>0.01)
+			{
+				resizeFactor -= 0.05 * wheel;
+				if (resizeFactor > 4)
+				{
+					resizeFactor = 4;
+				}
+				if (resizeFactor < 0.25)
+				{
+					resizeFactor = 0.25;
+				}
+				ImageLabel::zoom_start.x += resizeFactor;
+				ImageLabel::zoom_start.y += resizeFactor;
+				ImageLabel::zoom_end.x -= resizeFactor;
+				ImageLabel::zoom_end.y -= resizeFactor;
+				if (ImageLabel::zoom_start.x < 0)ImageLabel::zoom_start.x = 0;
+				if (ImageLabel::zoom_start.y < 0)ImageLabel::zoom_start.y = 0;
+				if (ImageLabel::zoom_end.x > 1)ImageLabel::zoom_end.x = 1;
+				if (ImageLabel::zoom_end.y > 1)ImageLabel::zoom_end.y = 1;
+				
+			}
+			return true;
+		}
 	};
 	ImageLabel* ImageLabel::instance = nullptr;
 	ImVec2 ImageLabel::draw_pos = ImVec2();
 	ImVec2 ImageLabel::canvas = ImVec2();
 	ImVec2 ImageLabel::zoom_start = ImVec2();
 	ImVec2 ImageLabel::zoom_end = ImVec2();
-	GLuint ImageLabel::image_texture = 0;
+	GLuint ImageLabel::image_texture = 0; 
+	int ImageLabel::canvasMaxSide = 0;
+	float ImageLabel::resizeFactor = 0;
 }
 class AnnotationManger
 {
@@ -271,13 +316,24 @@ bool annotationFrame(bool* show_regist_window)
 		}
 		{
 			auto currentPos = ImGui::GetCursorPos();
-			label::ImageLabel* labelControlPtr = label::ImageLabel::getImageLabel(currentPos,720,960);
+			label::ImageLabel* labelControlPtr = label::ImageLabel::getImageLabel(currentPos,720);
 			if (!labelControlPtr->hasImageContext)
 			{
-				cv::Mat asd = cv::imread("D:/repo/colmapThird/a.bmp");
+				cv::Mat asd = cv::imread("../a.bmp");
 				labelControlPtr->feedImg(asd);
 			}
 			labelControlPtr->draw();
+			if (labelControlPtr->hasImageContext)
+			{
+				ImVec2 mousePosInImage;
+				mousePosInImage.x = (ImGui::GetIO().MousePos.x - ImGui::GetWindowPos().x - labelControlPtr->draw_pos.x);
+				mousePosInImage.y = (ImGui::GetIO().MousePos.y - ImGui::GetWindowPos().y - labelControlPtr->draw_pos.y);
+				float wheel = ImGui::GetIO().MouseWheel;
+				//ImGui::Text("Mouse pos: (%g, %g)", mousePosInImage.x, mousePosInImage.y);
+				//ImGui::Text("Mouse wheel: %.1f", ImGui::GetIO().MouseWheel);
+				bool mouseLeftDown = ImGui::GetIO().MouseReleased[0];
+				labelControlPtr->control(mousePosInImage, wheel, mouseLeftDown);
+			}
 		}
 		break;
 	}
