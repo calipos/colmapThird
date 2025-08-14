@@ -63,6 +63,8 @@ RegisterImgGui/imgui.ini
 *.out
 *.app
 
+imgui.ini
+*.pipsEncode
 sqlite-dll-win-x64-3460100/sqlite3.exp
 !sqlite3.dll
 !libgmp-10.dll
