@@ -18,6 +18,12 @@ static browser::Browser* modelDirPicker = nullptr;
 static ProgressThread progress;
 namespace label
 {
+	struct ControlLogic
+	{
+		std::vector<std::string>picShortName;
+		std::vector<std::pair<cv::Point2f, std::string>>controlPtsAndTag;
+		ImVec2 tempPt{-1,-1};
+	};
 	class ImageLabel
 	{
 	private:
@@ -32,10 +38,20 @@ namespace label
 		ImageLabel(const ImageLabel&) = delete;
 		ImageLabel& operator=(const ImageLabel&) = delete;
 	public:
+		ControlLogic ptsData;
 		static ImVec2 draw_pos;
 		static ImVec2 canvas;//(w,h)
+		static ImVec2 canvasInv;//(1/w,1/h)
 		static float resizeFactor;
 		bool hasImageContext{ false };
+		static ImVec2 imgPt2GuiPt(const ImVec2& imgPt, const int& imgHeight, const int& imgWidth, const ImVec2& canvas_size, const ImVec2& zoom_start, const ImVec2& zoom_end, const ImVec2& canvas_location)
+		{
+			float x_inRatio = (imgPt.x / imgWidth - zoom_start.x) / (zoom_end.x - zoom_start.x);
+			float y_inRatio = (imgPt.y / imgHeight - zoom_start.y) / (zoom_end.y - zoom_start.y);
+			float x = x_inRatio * canvas_size.x + canvas_location.x + ImGui::GetWindowPos().x;
+			float y = y_inRatio * canvas_size.y + canvas_location.y + ImGui::GetWindowPos().y;
+			return ImVec2(x, y);
+		}
 		static ImageLabel* getImageLabel(const ImVec2& draw_pos_, const int& canvasMaxSide_)
 		{
 			if (ImageLabel::instance == nullptr)
@@ -61,7 +77,6 @@ namespace label
 			}
 			else
 			{
-				resizeFactor = 1;
 				hasImageContext = true;
 				LoadTextureFromMat(img, &image_texture, &currentImgWidth, &currentImgHeight);
 				float a = 1.f * currentImgWidth / ImageLabel::canvasMaxSide;
@@ -78,6 +93,8 @@ namespace label
 				{
 					ImageLabel::canvas = ImVec2(currentImgWidth / b, currentImgHeight / b);
 				}
+				ImageLabel::canvasInv.x = 1. / ImageLabel::canvas.x;
+				ImageLabel::canvasInv.y = 1. / ImageLabel::canvas.y;
 			}
 			return true;
 		}
@@ -87,43 +104,90 @@ namespace label
 			{
 				ImGui::SetCursorPos(draw_pos);
 				ImGui::Image((ImTextureID)(intptr_t)image_texture, ImageLabel::canvas, ImageLabel::zoom_start, ImageLabel::zoom_end, ImVec4(1, 1, 1, 1), ImVec4(.5, .5, .5, .5));
+				if (ptsData.tempPt.x>0)
+				{
+					ImVec2 guiPt = imgPt2GuiPt(ptsData.tempPt, currentImgHeight, currentImgWidth, canvas, zoom_start, zoom_end, draw_pos);
+					ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, 0xC80688FB);
+				}
 			}
 			return true;
 		}
-		bool control(const ImVec2&mousePosInImage,const float wheel, const bool&mouseLeftDown)
+		ImVec2 control(const ImVec2&mousePosInImage,const float wheel, const bool&mouseLeftDown)
 		{
-			if (abs(wheel)>0.01)
+			if (abs(wheel) > 0.01)
 			{
-				resizeFactor -= 0.05 * wheel;
-				if (resizeFactor > 4)
+				if (mousePosInImage.x >= 0 && mousePosInImage.y >= 0 && mousePosInImage.x < canvas.x && mousePosInImage.y < canvas.y)
 				{
-					resizeFactor = 4;
+					float x_inRatio = mousePosInImage.x * ImageLabel::canvasInv.x * (ImageLabel::zoom_end.x - ImageLabel::zoom_start.x) + ImageLabel::zoom_start.x;
+					float y_inRatio = mousePosInImage.y * ImageLabel::canvasInv.y * (ImageLabel::zoom_end.y - ImageLabel::zoom_start.y) + ImageLabel::zoom_start.y;
+					float x_inPic = x_inRatio * currentImgWidth;
+					float y_inPic = y_inRatio * currentImgHeight;
+
+					{
+						//zoom out: resizeFactor=1 (0,0)->(1,1);
+						//zoom in:  resizeFactor=4 (0.25,0.25)->(.75,.75);
+						resizeFactor += (0.05 * wheel);//    
+						if (resizeFactor > 0.375)
+						{
+							resizeFactor = 0.375;
+						}
+						if (resizeFactor < 0)
+						{
+							resizeFactor = 0;
+						}
+						float regionRadius = 0.5 - resizeFactor;
+						float regionDiameter = 2 * resizeFactor;
+						ImageLabel::zoom_start.x = x_inRatio - regionRadius;
+						ImageLabel::zoom_start.y = y_inRatio - regionRadius;
+						ImageLabel::zoom_end.x = x_inRatio + regionRadius;
+						ImageLabel::zoom_end.y = y_inRatio + regionRadius;
+						if (ImageLabel::zoom_start.x < 0)
+						{
+							ImageLabel::zoom_start.x = 0;
+							ImageLabel::zoom_end.x = (1 - regionDiameter);
+						}
+						if (ImageLabel::zoom_start.y < 0)
+						{
+							ImageLabel::zoom_start.y = 0;
+							ImageLabel::zoom_end.y = (1 - regionDiameter);
+						}
+						if (ImageLabel::zoom_end.x > 1)
+						{
+							ImageLabel::zoom_start.x = regionDiameter;
+							ImageLabel::zoom_end.x = 1;
+						}
+						if (ImageLabel::zoom_end.y > 1)
+						{
+							ImageLabel::zoom_start.y = regionDiameter;
+							ImageLabel::zoom_end.y = 1;
+						}
+
+					}
 				}
-				if (resizeFactor < 0.25)
-				{
-					resizeFactor = 0.25;
-				}
-				ImageLabel::zoom_start.x += resizeFactor;
-				ImageLabel::zoom_start.y += resizeFactor;
-				ImageLabel::zoom_end.x -= resizeFactor;
-				ImageLabel::zoom_end.y -= resizeFactor;
-				if (ImageLabel::zoom_start.x < 0)ImageLabel::zoom_start.x = 0;
-				if (ImageLabel::zoom_start.y < 0)ImageLabel::zoom_start.y = 0;
-				if (ImageLabel::zoom_end.x > 1)ImageLabel::zoom_end.x = 1;
-				if (ImageLabel::zoom_end.y > 1)ImageLabel::zoom_end.y = 1;
-				
 			}
-			return true;
+			if (mouseLeftDown)
+			{
+				if (mousePosInImage.x >= 0 && mousePosInImage.y >= 0 && mousePosInImage.x < canvas.x && mousePosInImage.y < canvas.y)
+				{
+					float x_inRatio = mousePosInImage.x * ImageLabel::canvasInv.x * (ImageLabel::zoom_end.x - ImageLabel::zoom_start.x) + ImageLabel::zoom_start.x;
+					float y_inRatio = mousePosInImage.y * ImageLabel::canvasInv.y * (ImageLabel::zoom_end.y - ImageLabel::zoom_start.y) + ImageLabel::zoom_start.y;
+					float x_inPic = x_inRatio * currentImgWidth;
+					float y_inPic = y_inRatio * currentImgHeight;
+					return ImVec2(x_inPic, y_inPic);
+				}
+			}
+			return ImVec2(-1,-1);
 		}
 	};
 	ImageLabel* ImageLabel::instance = nullptr;
 	ImVec2 ImageLabel::draw_pos = ImVec2();
 	ImVec2 ImageLabel::canvas = ImVec2();
+	ImVec2 ImageLabel::canvasInv = ImVec2();
 	ImVec2 ImageLabel::zoom_start = ImVec2();
 	ImVec2 ImageLabel::zoom_end = ImVec2();
 	GLuint ImageLabel::image_texture = 0; 
 	int ImageLabel::canvasMaxSide = 0;
-	float ImageLabel::resizeFactor = 0;
+	float ImageLabel::resizeFactor = 1;
 }
 class AnnotationManger
 {
@@ -321,6 +385,8 @@ bool annotationFrame(bool* show_regist_window)
 			{
 				cv::Mat asd = cv::imread("../a.bmp");
 				labelControlPtr->feedImg(asd);
+				bool&mouseLeftDown = ImGui::GetIO().MouseReleased[0];
+				mouseLeftDown = false;
 			}
 			labelControlPtr->draw();
 			if (labelControlPtr->hasImageContext)
@@ -332,7 +398,13 @@ bool annotationFrame(bool* show_regist_window)
 				//ImGui::Text("Mouse pos: (%g, %g)", mousePosInImage.x, mousePosInImage.y);
 				//ImGui::Text("Mouse wheel: %.1f", ImGui::GetIO().MouseWheel);
 				bool mouseLeftDown = ImGui::GetIO().MouseReleased[0];
-				labelControlPtr->control(mousePosInImage, wheel, mouseLeftDown);
+				ImVec2 maybeClik = labelControlPtr->control(mousePosInImage, wheel, mouseLeftDown);
+				if (maybeClik.x>0)
+				{
+					labelControlPtr->ptsData.tempPt = maybeClik;
+				}
+				
+
 			}
 		}
 		break;
