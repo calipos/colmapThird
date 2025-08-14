@@ -21,7 +21,7 @@
 #ifdef JUDGE_NAN
 #undef JUDGE_NAN
 #endif 
-#define JUDGE_NAN(x)  0  //if (dnn::ncnnHelper::dataHasNanInf(x)){  LOG_ERR_OUT << "nan in "<<#x; exit(-1); }
+#define JUDGE_NAN(x)   if (dnn::ncnnHelper::dataHasNanInf(x)){  LOG_ERR_OUT << "nan in "<<#x; exit(-1); }
 #ifdef SHOW_NCNN_BLOB
 #undef SHOW_NCNN_BLOB
 #endif 
@@ -894,7 +894,7 @@ namespace pips2
                     ys0[i] = traj[squenceStartId][i].y / this->stride;
                 }
             }
-            ncnn::Mat feat0 = this->bilinear_sample2d(fmapsVec[squenceStartId], xs0, ys0, this->bilinearOpNet);       
+            ncnn::Mat feat0 = this->bilinear_sample2d(fmapsVec[squenceStartId], xs0, ys0, this->bilinearOpNet);
             std::vector<int> initFrameIdx(sequenceLimit);
             std::iota(initFrameIdx.begin(), initFrameIdx.end(), squenceStartId);
             ncnn::Mat fmaps = pips2::Pips2::concatFmapsWithBatch(fmapsVec, initFrameIdx);
@@ -973,7 +973,6 @@ namespace pips2
                 ncnn::Mat corrs2 = this->pyramidSample({ corrs2_pyramid0, corrs2_pyramid1, corrs2_pyramid2, corrs2_pyramid3 }, xs, ys);
                 ncnn::Mat corrs4 = this->pyramidSample({ corrs4_pyramid0, corrs4_pyramid1, corrs4_pyramid2, corrs4_pyramid3 }, xs, ys);
                 ncnn::Mat deltaNetInput = this->fillPositionDiffCosSin(corrs1, corrs2, corrs4, xs, ys);
-
                 ncnn::Extractor ex3 = this->deltaNet->create_extractor();
                 ex3.input("deltaIn", deltaNetInput);
                 ex3.input("padding64", this->padding64);
@@ -984,7 +983,11 @@ namespace pips2
                 ex3.input("padding256b", this->padding256);
                 ncnn::Mat delta_out;
                 ex3.extract("delta", delta_out);
-                //SHOW_NCNN_BLOB(delta_out);
+                //JUDGE_NAN(delta_out);
+                if (lastLoop)
+                {
+                    SHOW_NCNN_BLOB(delta_out);
+                }
 
                 int blobDataI = 0;
                 for (int p = 0; p < xs[0].size(); p++)
@@ -1202,7 +1205,7 @@ int test_pips2()
     using dnn::ocvHelper::operator<<;
     using dnn::ncnnHelper::operator<<;
     cv::Mat colorMap;    
-    std::vector<std::filesystem::path>paths = listImgPaths("D:/repo/colmapThird/data2/a");
+    std::vector<std::filesystem::path>paths = listImgPaths("../data/a");
     pips2::Pips2 ins("../models/pips2_base_ncnn.param", "../models/pips2_base_ncnn.bin", "../models/pips2_deltaBlock_ncnn.param", "../models/pips2_deltaBlock_ncnn.bin");
     if (ins.inputImage(paths))
     {
@@ -1211,7 +1214,7 @@ int test_pips2()
         {
             
             colorMap = cv::imread("../models/bremm.png");
-            int totalControlPtsCnt = 36;
+            int totalControlPtsCnt = 4;
             int w = sqrt(totalControlPtsCnt);
             int h = w;
             int w_1 = w + 1;

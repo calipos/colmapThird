@@ -119,10 +119,13 @@ namespace label
 				if (showLabeled)
 				{
 					const std::map<std::string, ImVec2>&tags = ptsData.controlPtsAndTag[imgPickIdx];
-					for (const auto&d: tags)
+					if (tags.size() > 0)
 					{
-						ImVec2 guiPt = imgPt2GuiPt(d.second, currentImgHeight, currentImgWidth, canvas, zoom_start, zoom_end, draw_pos);
-						ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, ptsData.colors.at(d.first));
+						for (const auto& d : tags)
+						{
+							ImVec2 guiPt = imgPt2GuiPt(d.second, currentImgHeight, currentImgWidth, canvas, zoom_start, zoom_end, draw_pos);
+							ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, ptsData.colors.at(d.first));
+						}
 					}
 				}
 			}
@@ -142,7 +145,7 @@ namespace label
 					{
 						//zoom out: resizeFactor=1 (0,0)->(1,1);
 						//zoom in:  resizeFactor=4 (0.25,0.25)->(.75,.75);
-						resizeFactor += (0.05 * wheel);//    
+						resizeFactor += (0.02 * wheel);//    
 						if (resizeFactor > 0.375)
 						{
 							resizeFactor = 0.375;
@@ -455,6 +458,7 @@ bool annotationFrame(bool* show_regist_window)
 						[&]() {
 							annotationManger->pips2Ins->inputImage(annotationManger->tempTrackImgPaths);
 							annotationManger->pips2Ins->trackLimit(annotationManger->tempHint, annotationManger->trajs, 16, 6);
+							label::ImageLabel::tarStr[0] = '\0';
 							progress.procRunning.store(0);
 						}
 					);
@@ -491,6 +495,9 @@ bool annotationFrame(bool* show_regist_window)
 				{
 					labelControlPtr->ptsData.colors[tagStr] = getImguiColor();
 				}
+				AnnotationManger::trajs.clear();
+				labelControlPtr->ptsData.tempPt.x = -1;
+				labelControlPtr->ptsData.tempPt.y = -1;
 				label::ImageLabel::tarStr[0] = '\0';
 			}
 

@@ -47,6 +47,7 @@ private:
 			{
 				ColorMap::instance = nullptr;
 			}
+			return ColorMap::instance;
 		}
 	}
 	ColorMap(){}

@@ -6953,7 +6953,7 @@ int test_deltaNet()
 int main()
 {
     //return test_corrs();
-    return test_deltaNet();
+    //return test_deltaNet();
     if (1)
     {
         if (!std::filesystem::exists("pips2_base_opencv.onnx"))
@@ -6966,7 +6966,7 @@ int main()
         const char* ncnn_modelbin = "pips2_base_ncnn.bin";
         convert_main(onnxpb, ncnn_prototxt, ncnn_modelbin);
     }
-    if (1)
+    if (0)
     {
         if (!std::filesystem::exists("pips2_corrBlock_opencv.onnx"))
         {
