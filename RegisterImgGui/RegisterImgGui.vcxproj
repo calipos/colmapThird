@@ -166,6 +166,7 @@
     <ClCompile Include="bundle_adjustment.cpp" />
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="camera_rig.cpp" />
+    <ClCompile Include="colorMap.cpp" />
     <ClCompile Include="colString.cpp" />
     <ClCompile Include="dnnHelper.cpp" />
     <ClCompile Include="essential_matrix.cpp" />

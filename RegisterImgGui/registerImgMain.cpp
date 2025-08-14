@@ -29,7 +29,7 @@ extern int test_sam2();
 extern int test_geometry();
 extern int test_incremental(); 
 extern int test_pips2();
-
+extern ImU32 getImguiColor();
 
 int main(int, char**)
 {

@@ -21,8 +21,10 @@ namespace label
 	struct ControlLogic
 	{
 		std::vector<std::string>picShortName;
-		std::vector<std::pair<cv::Point2f, std::string>>controlPtsAndTag;
+		std::vector< std::map<std::string, ImVec2>>controlPtsAndTag;
 		ImVec2 tempPt{-1,-1};
+
+		std::map<std::string, ImU32> colors;
 	};
 	class ImageLabel
 	{
@@ -38,12 +40,15 @@ namespace label
 		ImageLabel(const ImageLabel&) = delete;
 		ImageLabel& operator=(const ImageLabel&) = delete;
 	public:
+		static const int tagLengthMax{24};
+		static char tarStr[tagLengthMax];
 		ControlLogic ptsData;
 		static ImVec2 draw_pos;
 		static ImVec2 canvas;//(w,h)
 		static ImVec2 canvasInv;//(1/w,1/h)
 		static float resizeFactor;
 		bool hasImageContext{ false };
+		bool showLabeled{ false };
 		static ImVec2 imgPt2GuiPt(const ImVec2& imgPt, const int& imgHeight, const int& imgWidth, const ImVec2& canvas_size, const ImVec2& zoom_start, const ImVec2& zoom_end, const ImVec2& canvas_location)
 		{
 			float x_inRatio = (imgPt.x / imgWidth - zoom_start.x) / (zoom_end.x - zoom_start.x);
@@ -52,11 +57,13 @@ namespace label
 			float y = y_inRatio * canvas_size.y + canvas_location.y + ImGui::GetWindowPos().y;
 			return ImVec2(x, y);
 		}
-		static ImageLabel* getImageLabel(const ImVec2& draw_pos_, const int& canvasMaxSide_)
+		static ImageLabel* getImageLabel(const ImVec2& draw_pos_, const int& canvasMaxSide_,const std::vector<std::string>& picShortName)
 		{
 			if (ImageLabel::instance == nullptr)
 			{
 				ImageLabel::instance = new ImageLabel();
+				instance->ptsData.picShortName.insert(instance->ptsData.picShortName.end(), picShortName.begin(), picShortName.end());
+				instance->ptsData.controlPtsAndTag.resize(picShortName.size());
 			}
 			else
 			{
@@ -98,7 +105,7 @@ namespace label
 			}
 			return true;
 		}
-		bool draw()
+		bool draw(const int& imgPickIdx)
 		{
 			if (hasImageContext)
 			{
@@ -108,6 +115,15 @@ namespace label
 				{
 					ImVec2 guiPt = imgPt2GuiPt(ptsData.tempPt, currentImgHeight, currentImgWidth, canvas, zoom_start, zoom_end, draw_pos);
 					ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, 0xC80688FB);
+				}
+				if (showLabeled)
+				{
+					const std::map<std::string, ImVec2>&tags = ptsData.controlPtsAndTag[imgPickIdx];
+					for (const auto&d: tags)
+					{
+						ImVec2 guiPt = imgPt2GuiPt(d.second, currentImgHeight, currentImgWidth, canvas, zoom_start, zoom_end, draw_pos);
+						ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, ptsData.colors.at(d.first));
+					}
 				}
 			}
 			return true;
@@ -188,6 +204,7 @@ namespace label
 	GLuint ImageLabel::image_texture = 0; 
 	int ImageLabel::canvasMaxSide = 0;
 	float ImageLabel::resizeFactor = 1;
+	char ImageLabel::tarStr[tagLengthMax] = "\0";
 }
 class AnnotationManger
 {
@@ -243,7 +260,6 @@ public:
 						imgPaths.emplace_back(thisFilename);
 						std::string stem = "   " + thisFilename.filename().stem().string();
 						imgName.emplace_back(stem);
-						imgDat.emplace_back();
 					}
 
 				}
@@ -265,20 +281,24 @@ public:
 	~AnnotationManger()
 	{}
 	pips2::Pips2* pips2Ins{ nullptr };
+	std::vector<std::filesystem::path>tempTrackImgPaths;//for other thread do track,keep the temporary variable
+	std::vector<cv::Point2f> tempHint;//for other thread do track,keep the temporary variable
 	std::vector<std::filesystem::path>imgPaths;
 	std::vector<std::string>imgName;
-	std::vector<cv::Mat> imgDat;
 	std::filesystem::path imgDirPath_;
 	std::filesystem::path modelDirPath_;
 	static GLuint image_texture;
 	static int viewWindowHeight;
 	static int viewWindowWidth;
-	int imgPickIdx{ 0 };
+	static int imgPickIdx;
+	static std::vector<std::vector<cv::Point2f>>trajs;
 };
 static AnnotationManger* annotationManger = nullptr;
 GLuint AnnotationManger::image_texture = 0;
 int AnnotationManger::viewWindowHeight = 720;
 int AnnotationManger::viewWindowWidth = 960;
+int AnnotationManger::imgPickIdx = -1;
+std::vector<std::vector<cv::Point2f>>AnnotationManger::trajs;
 bool annotationFrame(bool* show_regist_window)
 {
 	ImGui::SetNextWindowSize(ImVec2(1280, 960));//ImVec2(x, y)
@@ -312,6 +332,7 @@ bool annotationFrame(bool* show_regist_window)
 			progress.proc = nullptr;
 		}
 	}
+	ImVec2 deployButtom(-1,-1);
 	while (isProcRunning == 0)
 	{
 		if (ImGui::Button("pick image dir"))
@@ -378,17 +399,25 @@ bool annotationFrame(bool* show_regist_window)
 			imgDirPath = "";
 			modelDirPath = "";
 		}
+		if(annotationManger != nullptr && annotationManger->imgName.size()>0)
 		{
 			auto currentPos = ImGui::GetCursorPos();
-			label::ImageLabel* labelControlPtr = label::ImageLabel::getImageLabel(currentPos,720);
-			if (!labelControlPtr->hasImageContext)
+			bool pickedChanged = false;
+			ImVec2 listWH(100,500);
+			listComponent("picPick", listWH,annotationManger->imgName, AnnotationManger::imgPickIdx, pickedChanged);
+			//ImGui::Text("Mouse pos: (%d, %d)", AnnotationManger::imgPickIdx, pickedChanged);
+			currentPos.x += listWH.x;
+			label::ImageLabel* labelControlPtr = label::ImageLabel::getImageLabel(currentPos,720, annotationManger->imgName);
+			
+			if (AnnotationManger::imgPickIdx >=0 && pickedChanged)
 			{
-				cv::Mat asd = cv::imread("../a.bmp");
+				annotationManger->tempTrackImgPaths.clear();
+				cv::Mat asd = cv::imread(annotationManger->imgPaths[AnnotationManger::imgPickIdx].string());
 				labelControlPtr->feedImg(asd);
 				bool&mouseLeftDown = ImGui::GetIO().MouseReleased[0];
 				mouseLeftDown = false;
 			}
-			labelControlPtr->draw();
+			labelControlPtr->draw(AnnotationManger::imgPickIdx);
 			if (labelControlPtr->hasImageContext)
 			{
 				ImVec2 mousePosInImage;
@@ -399,16 +428,79 @@ bool annotationFrame(bool* show_regist_window)
 				//ImGui::Text("Mouse wheel: %.1f", ImGui::GetIO().MouseWheel);
 				bool mouseLeftDown = ImGui::GetIO().MouseReleased[0];
 				ImVec2 maybeClik = labelControlPtr->control(mousePosInImage, wheel, mouseLeftDown);
-				if (maybeClik.x>0)
+				if (maybeClik.x > 0 && label::ImageLabel::tarStr[0] == '\0')
 				{
 					labelControlPtr->ptsData.tempPt = maybeClik;
 				}
-				
-
 			}
+			deployButtom = ImVec2(currentPos.x - listWH.x+ ImGui::GetWindowPos().x, std::max(listWH.y, labelControlPtr->canvas.y) + currentPos.y+ ImGui::GetWindowPos().y);
+			if (AnnotationManger::imgPickIdx >= 0)
+			{
+				ImGui::SetCursorScreenPos(deployButtom);
+				ImGui::InputTextMultiline("<-tag", label::ImageLabel::tarStr, label::ImageLabel::tagLengthMax, ImVec2(200, 20), ImGuiInputTextFlags_CharsHexadecimal+ ImGuiInputTextFlags_CharsNoBlank);
+				std::string tagStr = std::string(label::ImageLabel::tarStr);
+				if (labelControlPtr->ptsData.tempPt.x < 0 || tagStr.length() == 0)
+				{
+					ImGui::BeginDisabled();
+				}
+				if (ImGui::Button("track"))
+				{
+					LOG_OUT << "tag = " << tagStr;
+					LOG_OUT << "track from " << AnnotationManger::imgPickIdx;
+					annotationManger->tempTrackImgPaths.insert(annotationManger->tempTrackImgPaths.end(), annotationManger->imgPaths.begin() + AnnotationManger::imgPickIdx, annotationManger->imgPaths.end());
+					annotationManger->tempHint = std::vector<cv::Point2f>{ {labelControlPtr->ptsData.tempPt.x, labelControlPtr->ptsData.tempPt.y} };
+					progress.numerator.store(-1);
+					progress.procRunning.fetch_add(1);
+					progress.proc = new std::thread(
+						[&]() {
+							annotationManger->pips2Ins->inputImage(annotationManger->tempTrackImgPaths);
+							annotationManger->pips2Ins->trackLimit(annotationManger->tempHint, annotationManger->trajs, 16, 6);
+							progress.procRunning.store(0);
+						}
+					);
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				}
+				if (labelControlPtr->ptsData.tempPt.x < 0 || tagStr.length() == 0)
+				{
+					ImGui::EndDisabled();
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("clearTag"))
+				{
+					labelControlPtr->ptsData.tempPt.x = -1;
+					labelControlPtr->ptsData.tempPt.y = -1;
+					label::ImageLabel::tarStr[0] = '\0';
+				}
+				ImGui::SameLine();
+				if (ImGui::Checkbox("show", &labelControlPtr->showLabeled))
+				{
+
+				}
+				deployButtom.y += 45;
+			}
+			if (AnnotationManger::trajs.size()>0)
+			{
+				std::string tagStr = std::string(label::ImageLabel::tarStr);
+				for (int i = AnnotationManger::imgPickIdx; i < labelControlPtr->ptsData.picShortName.size(); i++)
+				{
+					const cv::Point2f pt = AnnotationManger::trajs[i - AnnotationManger::imgPickIdx][0];
+					labelControlPtr->ptsData.controlPtsAndTag[i][tagStr].x = pt.x;
+					labelControlPtr->ptsData.controlPtsAndTag[i][tagStr].y = pt.y;
+				}
+				if (labelControlPtr->ptsData.colors.count(tagStr)==0)
+				{
+					labelControlPtr->ptsData.colors[tagStr] = getImguiColor();
+				}
+				label::ImageLabel::tarStr[0] = '\0';
+			}
+
 		}
 		break;
 	}
+	if (deployButtom.x > 0)
+	{
+		ImGui::SetCursorScreenPos(deployButtom);
+	}	
 	if (progress.msg.length() > 0)
 	{
 		ImGui::Text(progress.msg.c_str());

@@ -20,6 +20,6 @@ struct ProgressThread
 	static std::uint64_t getCaptureTimestamp();
 };
 
-
-
+cv::Vec3b getColor();
+ImU32 getImguiColor();
 #endif // !_IMGUI_TOOLS_H__
