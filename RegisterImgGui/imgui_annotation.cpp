@@ -75,6 +75,13 @@ namespace label
 				}
 			}
 		}
+		bool save(const std::vector<std::filesystem::path>& picPath)const
+		{
+			if (true)
+			{
+
+			}
+		}
 	};
 	int ControlLogic::tagPickIdx = -1;
 	class ImageLabel
@@ -521,7 +528,7 @@ bool annotationFrame(bool* show_regist_window)
 			ImVec2 canvas_location = imgListLocation;
 			canvas_location.x += listPicSize.x;
 			label::ImageLabel* labelControlPtr = label::ImageLabel::getImageLabel(canvas_location,720, annotationManger->imgName);
-			if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+			if (ImGui::IsKeyPressed(ImGuiKey_Z))
 			{
 				pickedChanged = true;
 				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = ' ';
@@ -532,8 +539,9 @@ bool annotationFrame(bool* show_regist_window)
 					pickedChanged = false;
 				}
 				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = '-';
+				//continue;
 			}
-			if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+			if (ImGui::IsKeyPressed(ImGuiKey_X))
 			{
 				pickedChanged = true;
 				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = ' ';
@@ -544,6 +552,7 @@ bool annotationFrame(bool* show_regist_window)
 					pickedChanged = false;
 				}
 				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = '-';
+				//continue;
 			}
 			if (AnnotationManger::imgPickIdx >=0 && pickedChanged)
 			{
@@ -556,6 +565,7 @@ bool annotationFrame(bool* show_regist_window)
 			labelControlPtr->draw(AnnotationManger::imgPickIdx, AnnotationManger::alignTrack);
 			if (labelControlPtr->hasImageContext)
 			{
+				labelControlPtr->ptsData.pickedChanged = false;
 				ImVec2 tagListlocation = label::ImageLabel::draw_pos;
 				tagListlocation.x += labelControlPtr->canvas.x;
 				tagListlocation.x += ImGui::GetWindowPos().x;
@@ -598,7 +608,7 @@ bool annotationFrame(bool* show_regist_window)
 						std::map<std::string, ImVec2>& tags = labelControlPtr->ptsData.controlPtsAndTag[AnnotationManger::imgPickIdx];
 						tags[pickedTag] = maybeClik;
 						labelControlPtr->ptsData.tempPt2 = maybeClik; // may re-track base the fixed point.
-						labelControlPtr->ptsData.hasTagFlags[pickedTag][AnnotationManger::imgPickIdx][0] = '*';
+						labelControlPtr->ptsData.hasTagFlags[pickedTag][AnnotationManger::imgPickIdx][1] = '*';
 
 						annotationManger->imgName.clear();
 						const auto& newPicName = labelControlPtr->ptsData.hasTagFlags[pickedTag];
@@ -717,6 +727,11 @@ bool annotationFrame(bool* show_regist_window)
 				{
 					ImGui::EndDisabled();
 				}
+				ImGui::SameLine();
+				if (ImGui::Button("save"))
+				{
+
+				}
 				deployButtom.y += 45;
 			}
 			if (AnnotationManger::trajs.size()>0)
@@ -755,7 +770,7 @@ bool annotationFrame(bool* show_regist_window)
 					{
 						if (labelControlPtr->ptsData.controlPtsAndTag[j].count(d.first)>0)
 						{
-							labelControlPtr->ptsData.hasTagFlags[d.first][j][0]='*';
+							labelControlPtr->ptsData.hasTagFlags[d.first][j][1]='*';
 						}
 					}
 				} 
