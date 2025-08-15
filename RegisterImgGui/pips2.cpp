@@ -699,7 +699,6 @@ namespace pips2
             std::string shortName = fmapDataPath.filename().stem().string();
             auto parentDir = fmapDataPath.parent_path();
             fmapDataPath = parentDir / (shortName+".pipsEncode");
-            auto start1 = std::chrono::steady_clock::now();
             if (std::filesystem::exists(fmapDataPath) && dnn::ncnnHelper::readBlob(fmapDataPath.string(), fmap))
             {
             }
@@ -714,9 +713,6 @@ namespace pips2
                 dnn::ncnnHelper::writeBlob(fmapDataPath.string(), fmap);
             }
             fmapsVec.emplace_back(fmap);
-            auto end1 = std::chrono::steady_clock::now();
-            auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
-            std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
         }
         return true;
     }
@@ -984,7 +980,7 @@ namespace pips2
                 ncnn::Mat delta_out;
                 ex3.extract("delta", delta_out);
                 //JUDGE_NAN(delta_out);
-                if (lastLoop)
+                if (lastLoop && iter == iterCnt-1)
                 {
                     SHOW_NCNN_BLOB(delta_out);
                 }
@@ -1114,10 +1110,14 @@ namespace pips2
     }
     bool Pips2::inputImage(const cv::Mat& img, ncnn::Mat& fmap)
     {
+        auto start1 = std::chrono::steady_clock::now();
         ncnn::Mat in = ncnn::Mat::from_pixels(img.data, ncnn::Mat::PIXEL_BGR, img.cols, img.rows);
         ncnn::Extractor ex1 = encoderNet.create_extractor();
         ex1.input("rgbs", in);
         ex1.extract("fmaps", fmap);
+        auto end1 = std::chrono::steady_clock::now();
+        auto elapsed1 = std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1).count();
+        std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
         return true;
     }
 }
