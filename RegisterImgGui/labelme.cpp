@@ -1,8 +1,9 @@
 #include <fstream>
+#include <map>
 #include "labelme.h"
 #include "json/json.h"
 #include "log.h"
-
+#include "opencv2/opencv.hpp"
 namespace labelme
 {
 	bool readPtsFromLabelMeJson(const std::filesystem::path& jsonPath,
@@ -67,5 +68,53 @@ namespace labelme
 		}
 		return true;
 	}
+
+
+	int writeLabelMeLinestripJson(const std::filesystem::path& imgPath, const std::map<std::string, Eigen::Vector2d>& sortedPtsBaseLabel)
+	{
+		std::filesystem::path root = imgPath.parent_path();
+		std::string stem = imgPath.stem().string();
+		std::filesystem::path jsonPath = root / (stem + ".json");
+		cv::Mat image = cv::imread(imgPath.string());
+		//std::string encodedImage = Base64::encodeMat(image, ".jpg");
+		Json::Value labelRoot;
+		labelRoot["version"] = Json::Value("5.4.1");
+		labelRoot["flags"] = Json::Value(Json::objectValue);
+
+		Json::Value labelPts;
+		for (const auto& d : sortedPtsBaseLabel)
+		{
+			Json::Value labelPt;
+			labelPt["label"] = Json::Value(d.first);
+			{
+				Json::Value pt;
+				pt.append(d.second[0]);
+				pt.append(d.second[1]);
+				labelPt["points"].append(pt);
+			}
+			labelPt["group_id"] = Json::nullValue;
+			labelPt["description"] = Json::Value("");
+			labelPt["shape_type"] = Json::Value("point");
+			labelPt["flags"] = Json::Value(Json::objectValue);
+			labelPt["mask"] = Json::nullValue;
+			labelRoot["shapes"].append(labelPt);
+		}
+		labelRoot["imagePath"] = Json::Value(imgPath.filename().string());
+		labelRoot["imageData"] = Json::Value();
+		labelRoot["imageHeight"] = Json::Value(image.rows);
+		labelRoot["imageWidth"] = Json::Value(image.cols);
+
+		Json::StyledWriter sw;
+		std::fstream fout(jsonPath, std::ios::out);
+		fout << sw.write(labelRoot);
+		fout.close();
+		return 0;
+	}
 }
 
+int test_writelabel()
+{
+	std::map<std::string, Eigen::Vector2d>  sortedPtsBaseLabel = { {"a",{300,240}}, {"b",{700,640}} };
+	labelme::writeLabelMeLinestripJson("D:/repo/colmap-third/a.bmp", sortedPtsBaseLabel);
+	return 0;
+}

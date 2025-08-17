@@ -11,6 +11,7 @@
 #include "log.h"
 #include "pips2.h"
 #include "imgui_annotation.h"
+#include "labelme.h"
 static bool showImgDirBrowser = false;
 static std::filesystem::path imgDirPath;
 static std::filesystem::path modelDirPath;
@@ -70,17 +71,69 @@ namespace label
 				{
 					if (controlPtsAndTag[j].count(d.first) > 0)
 					{
-						hasTagFlags[d.first][j][0] = '*';
+						hasTagFlags[d.first][j][1] = '*';
 					}
 				}
 			}
 		}
 		bool save(const std::vector<std::filesystem::path>& picPath)const
 		{
-			if (true)
+			if (picShortName.size()!= picPath.size())
 			{
-
+				return false;
 			}
+			for (int i = 0; i < picPath.size(); i++)
+			{
+				const auto& imgPath = picPath[i];
+				std::filesystem::path parentDir = imgPath.parent_path();
+				std::string shortName = imgPath.filename().stem().string();
+				std::map<std::string, Eigen::Vector2d>picLabel;
+				for (const auto&d: controlPtsAndTag[i])
+				{
+					picLabel[d.first] = Eigen::Vector2d(d.second.x, d.second.y);
+				}
+				labelme::writeLabelMeLinestripJson(imgPath, picLabel);
+			}
+			return true;
+		}
+		bool loadOnlyOnce(const std::vector<std::filesystem::path>& picPath)
+		{
+			std::unordered_set<std::string>labelNames;
+			for (int i = 0; i < picPath.size(); i++)
+			{
+				const auto& imgPath = picPath[i];
+				std::string shortName = imgPath.filename().stem().string();
+				std::filesystem::path parentDir = imgPath.parent_path();
+				std::string tempShort = picShortName[i].substr(picShortName[i].length()- shortName.length(), shortName.length());
+				if (tempShort.compare(shortName)!=0)
+				{
+					LOG_ERR_OUT << "name err! jump.";
+					continue;
+				}
+				auto jsonPath = parentDir / (shortName+".json");
+				if (std::filesystem::exists(jsonPath))
+				{
+					std::map<std::string, Eigen::Vector2d> imgPts;
+					Eigen::Vector2i imgSizeWH;
+					labelme::readPtsFromLabelMeJson(jsonPath, imgPts, imgSizeWH);
+					controlPtsAndTag[i].clear();
+					for (const auto&d: imgPts)
+					{
+						controlPtsAndTag[i][d.first] = ImVec2(d.second[0], d.second[1]);
+						labelNames.insert(d.first);
+					}
+				}
+			}
+			tagsListName.reserve(labelNames.size());
+			tagsName.reserve(labelNames.size());
+			for (const auto&d: labelNames)
+			{
+				tagsListName.emplace_back(" "+d);
+				tagsName.emplace_back(d);
+				colors[d] = getImguiColor();
+			}
+			updata();
+			return true;
 		}
 	};
 	int ControlLogic::tagPickIdx = -1;
@@ -115,13 +168,15 @@ namespace label
 			float y = y_inRatio * canvas_size.y + canvas_location.y + ImGui::GetWindowPos().y;
 			return ImVec2(x, y);
 		}
-		static ImageLabel* getImageLabel(const ImVec2& draw_pos_, const int& canvasMaxSide_,const std::vector<std::string>& picShortName)
+		static ImageLabel* getImageLabel(const ImVec2& draw_pos_, const int& canvasMaxSide_, const std::vector<std::string>& picShortName, const std::vector<std::filesystem::path>& picPaths)
 		{
 			if (ImageLabel::instance == nullptr)
 			{
 				ImageLabel::instance = new ImageLabel();
 				instance->ptsData.picShortName.insert(instance->ptsData.picShortName.end(), picShortName.begin(), picShortName.end());
 				instance->ptsData.controlPtsAndTag.resize(picShortName.size());
+
+				instance->ptsData.loadOnlyOnce(picPaths);
 			}
 			else
 			{
@@ -518,17 +573,17 @@ bool annotationFrame(bool* show_regist_window)
 			imgDirPath = "";
 			modelDirPath = "";
 		}
-		if(annotationManger != nullptr && annotationManger->imgName.size()>0)
+		if (annotationManger != nullptr && annotationManger->imgName.size() > 0)
 		{
 			auto imgListLocation = ImGui::GetCursorPos();
 			bool pickedChanged = false;
-			ImVec2 listPicSize(100,500);
-			listComponent("picPick", listPicSize,annotationManger->imgName, AnnotationManger::imgPickIdx, pickedChanged);
+			ImVec2 listPicSize(100, 500);
+			listComponent("picPick", listPicSize, annotationManger->imgName, AnnotationManger::imgPickIdx, pickedChanged);
 			//ImGui::Text("Mouse pos: (%d, %d)", AnnotationManger::imgPickIdx, pickedChanged);
 			ImVec2 canvas_location = imgListLocation;
 			canvas_location.x += listPicSize.x;
-			label::ImageLabel* labelControlPtr = label::ImageLabel::getImageLabel(canvas_location,720, annotationManger->imgName);
-			if (ImGui::IsKeyPressed(ImGuiKey_Z))
+			label::ImageLabel* labelControlPtr = label::ImageLabel::getImageLabel(canvas_location, 720, annotationManger->imgName, annotationManger->imgPaths);
+			if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) || ImGui::IsKeyPressed(ImGuiKey_UpArrow))
 			{
 				pickedChanged = true;
 				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = ' ';
@@ -541,7 +596,7 @@ bool annotationFrame(bool* show_regist_window)
 				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = '-';
 				//continue;
 			}
-			if (ImGui::IsKeyPressed(ImGuiKey_X))
+			if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)|| ImGui::IsKeyPressed(ImGuiKey_DownArrow))
 			{
 				pickedChanged = true;
 				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = ' ';
@@ -571,7 +626,9 @@ bool annotationFrame(bool* show_regist_window)
 				tagListlocation.x += ImGui::GetWindowPos().x;
 				tagListlocation.y += ImGui::GetWindowPos().y;
 				ImGui::SetCursorScreenPos(tagListlocation);
-				listComponent("tag", listPicSize, labelControlPtr->ptsData.tagsListName, labelControlPtr->ptsData.tagPickIdx, labelControlPtr->ptsData.pickedChanged);
+				ImVec2 listTagSize = listPicSize;
+				listTagSize.x += 100;
+				listComponent("tag", listTagSize, labelControlPtr->ptsData.tagsListName, labelControlPtr->ptsData.tagPickIdx, labelControlPtr->ptsData.pickedChanged);
 			}
 			if (labelControlPtr->ptsData.pickedChanged && labelControlPtr->ptsData.tagPickIdx>=0)
 			{
@@ -620,7 +677,7 @@ bool annotationFrame(bool* show_regist_window)
 			if (AnnotationManger::imgPickIdx >= 0)
 			{
 				ImGui::SetCursorScreenPos(deployButtom);
-				ImGui::InputTextMultiline("<-tag", label::ImageLabel::tarStr, label::ImageLabel::tagLengthMax, ImVec2(200, 20), ImGuiInputTextFlags_CharsHexadecimal+ ImGuiInputTextFlags_CharsNoBlank);
+				ImGui::InputTextMultiline("<-tag", label::ImageLabel::tarStr, label::ImageLabel::tagLengthMax, ImVec2(200, 20), ImGuiTreeNodeFlags_None + ImGuiInputTextFlags_CharsNoBlank);
 				std::string tagStr = std::string(label::ImageLabel::tarStr);
 				if ((labelControlPtr->ptsData.tempPt.x < 0&& labelControlPtr->ptsData.tempPt2.x < 0) || tagStr.length() == 0)
 				{
@@ -694,7 +751,7 @@ bool annotationFrame(bool* show_regist_window)
 				{
 					ImGui::BeginDisabled();
 				}
-				if (ImGui::Button("~Tag"))
+				if (ImGui::Button("~Tag")|| ImGui::IsKeyPressed(ImGuiKey_Delete))
 				{
 					auto&thisPicTags = labelControlPtr->ptsData.controlPtsAndTag[AnnotationManger::imgPickIdx];
 					const auto&tagName = labelControlPtr->ptsData.tagsName[labelControlPtr->ptsData.tagPickIdx];
@@ -703,6 +760,11 @@ bool annotationFrame(bool* show_regist_window)
 					{
 						thisPicTags.erase(iter);
 						labelControlPtr->ptsData.updata();
+						labelControlPtr->ptsData.hasTagFlags[tagName][AnnotationManger::imgPickIdx][1] = ' ';
+
+						annotationManger->imgName.clear();
+						const auto& newPicName = labelControlPtr->ptsData.hasTagFlags[tagName];
+						annotationManger->imgName.insert(annotationManger->imgName.end(), newPicName.begin(), newPicName.end());
 					}
 				}
 				ImGui::SameLine();
@@ -718,9 +780,13 @@ bool annotationFrame(bool* show_regist_window)
 							if (iter != thisPicTags.end())
 							{
 								thisPicTags.erase(iter);
+								labelControlPtr->ptsData.hasTagFlags[tagName][ip][1] = ' ';
 							}
 						}
-					}
+					} 
+					annotationManger->imgName.clear();
+					const auto& newPicName = labelControlPtr->ptsData.hasTagFlags[tagName];
+					annotationManger->imgName.insert(annotationManger->imgName.end(), newPicName.begin(), newPicName.end());
 					labelControlPtr->ptsData.updata();
 				}
 				if (labelControlPtr->ptsData.tagPickIdx < 0 || AnnotationManger::imgPickIdx < 0)
@@ -730,7 +796,7 @@ bool annotationFrame(bool* show_regist_window)
 				ImGui::SameLine();
 				if (ImGui::Button("save"))
 				{
-
+					labelControlPtr->ptsData.save(annotationManger->imgPaths);
 				}
 				deployButtom.y += 45;
 			}

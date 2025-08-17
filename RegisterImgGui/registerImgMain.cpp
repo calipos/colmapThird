@@ -30,12 +30,12 @@ extern int test_geometry();
 extern int test_incremental(); 
 extern int test_pips2();
 extern ImU32 getImguiColor();
-
+extern int test_writelabel();
 int main(int, char**)
 {
     //return test_pips2();
     //return test_sam2();
-    //return test_incremental();
+    return test_incremental();
 
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())

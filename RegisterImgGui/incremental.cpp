@@ -42,9 +42,10 @@ int test_bitmap()
 
 int test_incremental()
 {
-    /// input img sort
-    std::vector<image_t>incrementalImages = { 0,1,2,3,4 };
-    std::filesystem::path dataPath = "../data2";
+    std::vector<image_t> incrementalImages(55);
+    std::iota(incrementalImages.begin(), incrementalImages.end(), 0);
+    //std::vector<image_t>incrementalImages = { 0,1,2,3,4 };
+    std::filesystem::path dataPath = "../data/a";
     std::map<Camera, std::vector<Image>> dataset = loadImageData(dataPath, ImageIntrType::SHARED_ALL);
     std::vector<Camera>cameraList;
     std::vector<Image> imageList;
