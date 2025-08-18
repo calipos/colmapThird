@@ -381,6 +381,10 @@ void ParameterizePoints(
     std::unordered_map<point3D_t, int>objTrack;
     for (const auto&img: imageList)
     {
+        if (config.Images().count(img.ImageId())==0)
+        {
+            continue;
+        }
         for (const auto&[ptId,pt2d]:img.featPts)
         {
             if (objTrack.count(ptId)==0)
