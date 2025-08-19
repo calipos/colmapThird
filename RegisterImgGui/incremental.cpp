@@ -54,6 +54,7 @@ int test_incremental()
     std::unordered_map < image_t, struct Rigid3d>poses;
     for (int i = 1; i < incrementalImages.size(); i++)
     {
+        LOG_OUT << i;
         image_t picked2 = incrementalImages[i];
         {
             //figure new frame pose from prev Image

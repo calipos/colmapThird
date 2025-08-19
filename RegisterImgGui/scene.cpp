@@ -53,7 +53,7 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 	Image::keypointNameToIndx.clear();;
 	Image::keypointIndexToName.clear();;
 	std::map<Camera, std::vector<Image>>dataSet;
-	const auto& defaultCameraType = CameraModelId::kSimpleRadial;
+	const auto& defaultCameraType = CameraModelId::kSimplePinhole;
 	LOG_OUT << "use default focus length = 1.2*max(w,h)";
 	LOG_OUT << "use default CameraType = "<<CameraModelIdToName(defaultCameraType);
 	camera_t camera_id = 0;

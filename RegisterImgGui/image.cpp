@@ -16,8 +16,17 @@ Image::Image()
 void Image::SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>& featPts)
 {
     if (featPts.size()==0)LOG_ERR_OUT << "error!!!";
-    points2D_.resize(featPts.size());
     std::vector<point2D_t>featIds;
+    {
+        std::vector<point2D_t>idSet;
+        idSet.reserve(featPts.size());
+        for (const auto& d : featPts)
+        {
+            idSet.emplace_back(d.first);
+        }
+        int maxId = *(std::max_element(idSet.begin(), idSet.end()));
+        points2D_.resize(maxId + 1, Eigen::Vector2d(std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN()));
+    }
     featIds.reserve(featPts.size());
     for (const auto&d: featPts)
     {
@@ -25,7 +34,7 @@ void Image::SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>& featPts)
     }
     std::sort(featIds.begin(), featIds.end());
     for (int point2D_idx = 0; point2D_idx < featIds.size(); ++point2D_idx) {
-        points2D_[point2D_idx] = featPts.at(featIds[point2D_idx]);
+        points2D_[featIds[point2D_idx]] = featPts.at(featIds[point2D_idx]);
     }
 }
 void Image::SetPoint3DForPoint2D(const point2D_t point2D_idx,
