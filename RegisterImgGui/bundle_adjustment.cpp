@@ -387,6 +387,10 @@ void ParameterizePoints(
         }
         for (const auto&[ptId,pt2d]:img.featPts)
         {
+            if (objPts.count(ptId)==0)
+            {
+                continue;
+            }
             if (objTrack.count(ptId)==0)
             {
                 objTrack[ptId] = 1;
@@ -402,7 +406,7 @@ void ParameterizePoints(
         Eigen::Vector3d& point3D = objPts[point3D_id];
         //if (num_observations > some_config) // freezen the point3d you want
         {
-            problem.SetParameterBlockConstant(point3D.data());
+            problem.SetParameterBlockVariable(point3D.data());
         }
     }
     for (const point3D_t point3D_id : config.ConstantPoints()) 
@@ -483,6 +487,10 @@ void ParameterizePoints(
 
             for (const auto& [ptId, point2D] : image.featPts)
             {
+                if (objPts.count(ptId)==0)
+                {
+                    continue;
+                }
                 auto& point3D = objPts[ptId];
 
                 if (constant_cam_pose) {

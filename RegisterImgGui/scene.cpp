@@ -116,13 +116,15 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 
 	return  dataSet;
 }
-bool convertDataset(const std::map<Camera, std::vector<Image>>& d, std::vector<Camera>&cameraList, std::vector<Image>& imageList)
+bool convertDataset(std::map<Camera, std::vector<Image>>& d, std::vector<Camera>&cameraList, std::vector<Image>& imageList)
 {
-	for (const auto&d1:d)
+	for (auto&d1:d)
 	{
-		cameraList.emplace_back(d1.first);
-		for (const auto&d2:d1.second)
+		const Camera& camera = d1.first;
+		cameraList.emplace_back(camera);
+		for (auto&d2:d1.second)
 		{
+			d2.SetCameraPtr(&cameraList.back());
 			imageList.emplace_back(d2);
 		}
 	}
@@ -196,8 +198,8 @@ bool writeResult(const std::filesystem::path& dataDir,
 		fout.close();
 	}
 
-	Json::Value labelRoot;
-	 
+	std::fstream fPtsTxt(dataDir / "pts.txt", std::ios::out);
+	Json::Value labelRoot;	 
 	std::filesystem::path ptsJsonPath = dataDir / "pts.json";
 	for (const auto&[ptId,pt]: objPts)
 	{
@@ -210,10 +212,12 @@ bool writeResult(const std::filesystem::path& dataDir,
 		ptNode["xyz"].append(pt.y());
 		ptNode["xyz"].append(pt.z());
 		labelRoot.append(ptNode);
+		fPtsTxt << pt.x() << " " << pt.y() << " " << pt.z() << std::endl;
 	}
 	Json::StyledWriter sw;
 	std::fstream fout(ptsJsonPath.string(), std::ios::out);
 	fout << sw.write(labelRoot);
 	fout.close();
+	fPtsTxt.close();
 	return true;
 }

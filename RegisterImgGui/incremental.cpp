@@ -17,6 +17,7 @@
 #include "two_view_geometry.h"
 #include "bitmap.h"
 #include "undistortion.h"
+#include "opencv2/opencv.hpp"
 int test_bitmap()
 {
     std::filesystem::path dataPath = "../data";
@@ -42,8 +43,9 @@ int test_bitmap()
 
 int test_incremental()
 {
-    std::vector<image_t> incrementalImages(55);
+    std::vector<image_t> incrementalImages(12);// (55);
     std::iota(incrementalImages.begin(), incrementalImages.end(), 0);
+    //std::shuffle(incrementalImages.begin(), incrementalImages.end(), std::default_random_engine(0));
     //std::vector<image_t>incrementalImages = { 0,1,2,3,4 };
     std::filesystem::path dataPath = "../data/a";
     std::map<Camera, std::vector<Image>> dataset = loadImageData(dataPath, ImageIntrType::SHARED_ALL);
@@ -78,6 +80,28 @@ int test_incremental()
             }
             poses[picked2] = two_view_geometry.cam2_from_cam1 * poses[picked1];
             image2.SetCamFromWorld(poses[picked2]);
+
+            {
+
+                std::vector<cv::Point2d>imgPtsPnp;
+                std::vector<cv::Point3d>objPtsPnp;
+                imgPtsPnp.reserve(image2.featPts.size());
+                objPtsPnp.reserve(image2.featPts.size());
+                for (const auto&[ptId, imgPt]: image2.featPts)
+                {
+                    if (objPts.count(ptId)>0)
+                    {
+                        imgPtsPnp.emplace_back(imgPt[0], imgPt[1]);
+                        objPtsPnp.emplace_back(objPts[ptId][0], objPts[ptId][1], objPts[ptId][2]);
+                    }
+                }
+                if (objPtsPnp.size()>=5)
+                {
+                    cv::solvePnP(objPtsPnp, imgPtsPnp, calibBefore.at(cameraSN).intr, cv::Mat(), rvec, tvec, true);
+                }
+
+
+            }
         }
         {
             //updata pose3d from total prev
@@ -111,6 +135,8 @@ int test_incremental()
                     if (triangulatePointRet)
                     {
                         objPts[ptId] = xyz;
+                        std::pair<bool, Eigen::Vector2d>imgPt1 = image1.ProjectPoint(xyz);
+                        std::pair<bool, Eigen::Vector2d>imgPt2 = image2.ProjectPoint(xyz);
                     }
                 }
             }
@@ -119,7 +145,11 @@ int test_incremental()
             //ba
             BundleAdjustmentOptions ba_options;
             BundleAdjustmentConfig ba_config;
-            for (int j = 0; j <= i; j++) ba_config.AddImage(incrementalImages[j]);
+            for (int j = 0; j <= i; j++) 
+            { 
+                ba_config.AddImage(incrementalImages[j]);
+                //LOG_OUT << incrementalImages[j];
+            }
             for (const auto& d : objPts) ba_config.AddVariablePoint(d.first);
             std::unique_ptr<BundleAdjuster> bundle_adjuster;
             ba_config.SetConstantCamPose(incrementalImages[0]);  // 1st image
