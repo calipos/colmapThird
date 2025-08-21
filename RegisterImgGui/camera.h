@@ -342,7 +342,27 @@ struct Camera {
 
     // Get intrinsic calibration matrix composed from focal length and principal
     // point parameters, excluding distortion parameters.
-    Eigen::Matrix3d CalibrationMatrix() const;
+    Eigen::Matrix3d CalibrationMatrix() const {
+        Eigen::Matrix3d K = Eigen::Matrix3d::Identity();
+
+        const span<const size_t> idxs = FocalLengthIdxs();
+        if (idxs.size() == 1) {
+            K(0, 0) = params[idxs[0]];
+            K(1, 1) = params[idxs[0]];
+        }
+        else if (idxs.size() == 2) {
+            K(0, 0) = params[idxs[0]];
+            K(1, 1) = params[idxs[1]];
+        }
+        else {
+            LOG_ERR_OUT << "Camera model must either have 1 or 2 focal length parameters.";
+        }
+
+        K(0, 2) = PrincipalPointX();
+        K(1, 2) = PrincipalPointY();
+
+        return K;
+    }
 
     // Get human-readable information about the parameter vector ordering.
     inline const std::string& ParamsInfo() const

@@ -40,7 +40,37 @@ int test_bitmap()
     undistorted_bitmap.Write(image1.Name() + ".jpg");
     return 0;
 }
-
+namespace utils
+{
+    cv::Mat intrConvert(const Eigen::Matrix3d& intr)
+    {
+        cv::Mat intrMat(3, 3, CV_64FC1);
+        for (int i = 0; i < 9; i++)
+        {
+            int r = i / 3;
+            int c = i % 3;
+            intrMat.ptr<double>(r)[c] = intr(r, c);
+        }
+        return intrMat;
+    }
+    bool convertRt(const Eigen::Matrix3x4d&Rt, cv::Mat&rvec, cv::Mat& tvec)
+    {
+        cv::Mat R(3, 3, CV_64FC1);
+        for (int i = 0; i < 9; i++)
+        {
+            int r = i / 3;
+            int c = i % 3;
+            R.ptr<double>(r)[c] = Rt(r, c);
+        }
+        cv::Rodrigues(R,rvec);
+        tvec = cv::Mat(3,1,CV_64FC1);
+        for (int r = 0; r < 3; r++)
+        {
+            tvec.ptr<double>(r)[0] = Rt(r, 3);
+        }
+        return true;
+    }
+}
 int test_incremental()
 {
     std::vector<image_t> incrementalImages(12);// (55);
@@ -95,9 +125,22 @@ int test_incremental()
                         objPtsPnp.emplace_back(objPts[ptId][0], objPts[ptId][1], objPts[ptId][2]);
                     }
                 }
-                if (objPtsPnp.size()>=5)
+                if (objPtsPnp.size()>=6)
                 {
-                    cv::solvePnP(objPtsPnp, imgPtsPnp, calibBefore.at(cameraSN).intr, cv::Mat(), rvec, tvec, true);
+                    Eigen::Matrix3x4d Rt = image1.CamFromWorld().ToMatrix();
+                    cv::Mat rvec, tvec;
+                    utils::convertRt(Rt, rvec, tvec);
+
+                    Eigen::AngleAxisd eulerAngle(cv::norm(rvec), Eigen::Vector3d(rvec.ptr<double>(0)[0] / cv::norm(rvec), rvec.ptr<double>(1)[0] / cv::norm(rvec), rvec.ptr<double>(2)[0] / cv::norm(rvec)));
+                    //Eigen::Quaterniond q2(eulerAngle);
+                    //LOG_OUT << q2;
+
+
+                    cv::Mat intrMat = utils:: intrConvert(camera2.CalibrationMatrix());
+                    cv::solvePnP(objPtsPnp, imgPtsPnp, intrMat, cv::Mat(), rvec, tvec, true);
+
+                    Rigid3d pnpRt(Eigen::Quaterniond(eulerAngle), Eigen::Vector3d(tvec.ptr<double>(0)[0], tvec.ptr<double>(1)[0], rvec.ptr<double>(2)[0]));
+                    image2.SetCamFromWorld(pnpRt);
                 }
 
 
