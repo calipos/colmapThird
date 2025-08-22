@@ -13,10 +13,12 @@ Image::Image()
 
 
 
-void Image::SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>& featPts)
+bool Image::SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>& featPts)
 {
     if (featPts.size()==0)LOG_ERR_OUT << "error!!!";
-    std::vector<point2D_t>featIds;
+    points2D_.resize(featPts.size(), Eigen::Vector2d(std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN()));
+
+
     {
         std::vector<point2D_t>idSet;
         idSet.reserve(featPts.size());
@@ -25,17 +27,29 @@ void Image::SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>& featPts)
             idSet.emplace_back(d.first);
         }
         int maxId = *(std::max_element(idSet.begin(), idSet.end()));
+        maxId = abs(maxId);
         points2D_.resize(maxId + 1, Eigen::Vector2d(std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN()));
     }
-    featIds.reserve(featPts.size());
-    for (const auto&d: featPts)
+    for (const auto& d : featPts)
     {
-        featIds.emplace_back(d.first);
+        if (d.first<0 || d.first>points2D_.size())
+        {
+            return false;
+        }
+        points2D_[d.first] = d.second;
     }
-    std::sort(featIds.begin(), featIds.end());
-    for (int point2D_idx = 0; point2D_idx < featIds.size(); ++point2D_idx) {
-        points2D_[featIds[point2D_idx]] = featPts.at(featIds[point2D_idx]);
-    }
+    return true;
+    //std::vector<point2D_t>featIds;
+    //featIds.reserve(featPts.size());
+    //for (const auto&d: featPts)
+    //{
+    //    featIds.emplace_back(d.first);
+    //}
+    //std::sort(featIds.begin(), featIds.end());
+    //for (int point2D_idx = 0; point2D_idx < featIds.size(); ++point2D_idx) {
+    //    points2D_[featIds[point2D_idx]] = featPts.at(featIds[point2D_idx]);
+    //}
+
 }
 void Image::SetPoint3DForPoint2D(const point2D_t point2D_idx,
     const point3D_t point3D_id) {

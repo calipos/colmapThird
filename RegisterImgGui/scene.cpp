@@ -82,7 +82,10 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 			const int& featId = Image::keypointNameToIndx[featName];
 			thisImg.featPts[featId] = featPos;
 		}
-		thisImg.SetPoints2D(thisImg.featPts);
+		if (!thisImg.SetPoints2D(thisImg.featPts))
+		{
+			LOG_ERR_OUT << "feat formate error. must be [0: 1: 2: ...]";
+		}
 		if (type== ImageIntrType::DIFFERENT)
 		{
 			double focal_length = 1.2 * std::max(sizeWH.x(), sizeWH.y());

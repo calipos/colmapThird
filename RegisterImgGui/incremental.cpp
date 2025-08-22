@@ -73,7 +73,7 @@ namespace utils
 }
 int test_incremental()
 {
-    std::vector<image_t> incrementalImages(12);// (55);
+    std::vector<image_t> incrementalImages (55);
     std::iota(incrementalImages.begin(), incrementalImages.end(), 0);
     //std::shuffle(incrementalImages.begin(), incrementalImages.end(), std::default_random_engine(0));
     //std::vector<image_t>incrementalImages = { 0,1,2,3,4 };
@@ -86,7 +86,7 @@ int test_incremental()
     std::unordered_map < image_t, struct Rigid3d>poses;
     for (int i = 1; i < incrementalImages.size(); i++)
     {
-        LOG_OUT << i;
+        LOG_OUT << "\n====================================  "<<i<<" ====================================";
         image_t picked2 = incrementalImages[i];
         {
             //figure new frame pose from prev Image
@@ -131,16 +131,22 @@ int test_incremental()
                     cv::Mat rvec, tvec;
                     utils::convertRt(Rt, rvec, tvec);
 
-                    Eigen::AngleAxisd eulerAngle(cv::norm(rvec), Eigen::Vector3d(rvec.ptr<double>(0)[0] / cv::norm(rvec), rvec.ptr<double>(1)[0] / cv::norm(rvec), rvec.ptr<double>(2)[0] / cv::norm(rvec)));
+                    //Eigen::AngleAxisd eulerAngle(cv::norm(rvec), Eigen::Vector3d(rvec.ptr<double>(0)[0] / cv::norm(rvec), rvec.ptr<double>(1)[0] / cv::norm(rvec), rvec.ptr<double>(2)[0] / cv::norm(rvec)));
                     //Eigen::Quaterniond q2(eulerAngle);
                     //LOG_OUT << q2;
 
 
                     cv::Mat intrMat = utils:: intrConvert(camera2.CalibrationMatrix());
                     cv::solvePnP(objPtsPnp, imgPtsPnp, intrMat, cv::Mat(), rvec, tvec, true);
-
+                    Eigen::AngleAxisd eulerAngle(cv::norm(rvec), Eigen::Vector3d(rvec.ptr<double>(0)[0] / cv::norm(rvec), rvec.ptr<double>(1)[0] / cv::norm(rvec), rvec.ptr<double>(2)[0] / cv::norm(rvec)));
                     Rigid3d pnpRt(Eigen::Quaterniond(eulerAngle), Eigen::Vector3d(tvec.ptr<double>(0)[0], tvec.ptr<double>(1)[0], rvec.ptr<double>(2)[0]));
-                    image2.SetCamFromWorld(pnpRt);
+                    LOG_OUT << "before pnp: "<< image2.CamFromWorld().ToMatrix();
+                    //if (i!=9)
+                    //{
+                        image2.SetCamFromWorld(pnpRt);
+                        LOG_OUT << "after  pnp: " << image2.CamFromWorld().ToMatrix();
+                    //}
+                    
                 }
 
 
@@ -171,6 +177,10 @@ int test_incremental()
                 }
                 for (const auto& ptId : matchesPointId)
                 {
+                    //if (j==8)
+                    //{
+                    //    continue;
+                    //}
                     const Eigen::Vector2d point2D1 = camera1.CamFromImg(image1.featPts[ptId]);
                     const Eigen::Vector2d point2D2 = camera2.CamFromImg(image2.featPts[ptId]);
                     Eigen::Vector3d xyz;
@@ -184,6 +194,7 @@ int test_incremental()
                 }
             }
         }
+        if(i!=1)// only two images need not ba.
         {
             //ba
             BundleAdjustmentOptions ba_options;
@@ -197,13 +208,19 @@ int test_incremental()
             std::unique_ptr<BundleAdjuster> bundle_adjuster;
             ba_config.SetConstantCamPose(incrementalImages[0]);  // 1st image
             bundle_adjuster = CreateDefaultBundleAdjuster(std::move(ba_options), std::move(ba_config), cameraList, imageList, objPts);
-
-            //for (int j = 0; j <= i; j++) LOG_OUT << imageList[incrementalImages[j]].CamFromWorld();
+             
             auto solverRet = bundle_adjuster->Solve();
+            for (const auto& d : objPts) LOG_OUT<<"objPts : " << d.second[0] << "  " << d.second[1] << "  " << d.second[2];
+            LOG_OUT << "after  ba: " << imageList[picked2].CamFromWorld().ToMatrix();
             for (int j = 0; j < cameraList.size(); j++) LOG_OUT << cameraList[j];
             if (solverRet.termination_type != ceres::CONVERGENCE)
             {
                 LOG_ERR_OUT << "not convergence!";
+                return -1;
+            }
+            {
+                //std::filesystem::create_directories(dataPath / ("result"+std::to_string(i)));
+                //writeResult(dataPath / ("result" + std::to_string(i)), cameraList, imageList, objPts, poses);
             }
         }
     }

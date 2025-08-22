@@ -91,7 +91,7 @@ public:
     static std::map<std::string, point2D_t>keypointNameToIndx;
     static std::map<point2D_t,std::string>keypointIndexToName;
     std::map<point2D_t, Eigen::Vector2d>featPts;
-    void SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>&featPts);
+    bool SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>&featPts);
 private:
     // Identifier of the image, if not specified `kInvalidImageId`.
     image_t image_id_;
