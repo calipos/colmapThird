@@ -10,8 +10,16 @@ import landmarkShapeType
 import insightFaceLandmark
 import undistotImg
 import segment
+import json
+
+
+
+ 
 class Camera:
-    def __init__(self, cameraStr):
+
+    def __init__(self, cameraStr=''):
+        if len(cameraStr) == 0:
+            return
         seges = cameraStr.split(" ")
         self.cameraId = int(seges[0])
         self.width = None
@@ -94,7 +102,9 @@ def readColmapCameraTxt(path):
 
 
 class Image:
-    def __init__(self, imageStr):
+    def __init__(self, imageStr=''):
+        if len(imageStr) == 0:
+            return
         seges = imageStr.split(" ")
         self.imageId = None
         if (len(seges) < 10):
@@ -110,6 +120,39 @@ class Image:
         self.Rt[0:3, 3] = self.t
         self.cameraId = int(seges[8])
         self.filePath = seges[9].replace("\n", "")
+
+
+def listImg(path):
+    imgs = []
+    cameras = {}
+    files = os.listdir(path)
+    for file in files:
+        if file.endswith('.json'):
+            file_path = os.path.join(path, file)
+            with open(file_path, 'r') as file:
+                data = json.load(file)
+                try :
+                    if os.path.exists(data['imagePath']) :
+                        c = Camera()
+                        c.cameraId = len(cameras)
+                        c.cameraType = 'SIMPLE_PINHOLE'
+                        c.intr = np.array([data['fx'], 0, data['cx'], 0, data['fy'], data['cy'], 0, 0, 1]).reshape(3, 3)
+                        c.width = int(data['height'])
+                        c.height = int(data['width'])
+                        c.disto = []
+
+                        p = Image()
+                        p.imagePath = data['imagePath'] 
+                        p.Qt = data['Qt']
+                        p.t = p.Qt[4:7]
+                        p.Q = p.Qt[0:4]
+                        p.R = Rotation.from_quat(p.Q).as_matrix()
+                        p.cameraId = c.cameraId
+                        imgs.append(p)
+                        cameras[c.cameraId] = c
+                except:
+                    continue
+    return cameras, imgs
 
 
 def readColmapImagesTxt(path):
@@ -180,6 +223,7 @@ def readFromColmapPointsTxt(ColmapTxtPath):
     pts=np.array(pts)
     return pts.reshape(-1, 3)
 
+
 def readColmapResult(dataDir):
     # CameraTxt = os.path.join(dataDir, os.path.join('sparse', 'cameras.txt'))
     # imagesTxt = os.path.join(dataDir, os.path.join('sparse', 'images.txt'))
@@ -203,11 +247,27 @@ def readColmapResult(dataDir):
     return cameraDict, ImageList, pts
 
 
+def readColmapResult2(dataDir):
+    ptsTxt = os.path.join(dataDir, 'pts.txt')
+    with open(ptsTxt, 'r') as f:
+            # Read the entire content of the file
+        lines = f.readlines()
+        pts = np.zeros([len(lines),3])
+        for i in range(len(lines)):
+            strs = lines[i].split()
+            pts[i, 0] = float(strs[0])
+            pts[i, 1] = float(strs[1])
+            pts[i, 2] = float(strs[2])
+
+    return  pts
+
+
 
 
 if __name__ == '__main__':
-    dataRoot = 'data'
-    cameraDict, ImageList, pts = readColmapResult(dataRoot)
+    dataRoot = 'data/a/result'
+    cameraDict, imgs = listImg(dataRoot)
+    pts = readColmapResult2(dataRoot)
 
     minBorder = np.min(pts, axis=0)
     maxBorder = np.max(pts, axis=0)
@@ -253,13 +313,10 @@ if __name__ == '__main__':
     if isinstance(sam2model, int):
         print('sam2model error')
         exit(-1)
-    for img in ImageList:
-        imgPath = os.path.join(dataRoot, img.filePath)
-        possibleUndistortedImgPath = os.path.join(
-            os.path.join(dataRoot, 'images'), img.filePath)
-        if os.path.exists(imgPath):
-            imgPath = possibleUndistortedImgPath
-        imgPath = Path(imgPath)  
+    # for img in ImageList:
+        # imgPath = os.path.join(dataRoot, img.filePath)
+    for img in imgs:
+        imgPath = Path(img.imagePath)
         imgName = imgPath.name
         parentName = imgPath.parent.name
         newPath = os.path.join(shapeMaskDir, parentName+imgName)

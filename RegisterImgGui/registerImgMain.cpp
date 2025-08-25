@@ -1,6 +1,6 @@
 #include <iostream>
 #include <vector>
-#include <fstream>
+#include <filesystem>
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -31,11 +31,13 @@ extern int test_incremental();
 extern int test_pips2();
 extern ImU32 getImguiColor();
 extern int test_writelabel();
+
 int main(int, char**)
 {
     //return test_pips2();
     //return test_sam2();
-    return test_incremental();
+    //return test_incremental();
+    return load_comp_table();
 
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
