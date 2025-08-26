@@ -14,7 +14,6 @@ class SpaceMap:
         regionEnd = np.array(regionEnd)
         self.imgWidth = -1
         self.imgHeight = -1
-        print('max uint64=',np.iinfo(np.uint64).max)
         if (regionStart == None).any():
             self.xSize = 2
             self.ySize = 2
@@ -47,15 +46,20 @@ class SpaceMap:
             self.xSize = regionEnd[0]-regionStart[0]
             self.ySize = regionEnd[1]-regionStart[1]
             self.zSize = regionEnd[2]-regionStart[2]
-            self.maxUint64 = np.iinfo(np.uint64).max
-            resolution = np.uint64(
-                np.power(self.maxUint64/self.zSize/self.zSize*self.xSize*self.ySize, 0.333))
+            self.maxUint64 = np.iinfo(np.uint32).max*2
+
+            print('self.maxUint64 =', self.maxUint64)
+            resolution = np.uint32(
+                np.power(self.maxUint64/self.zSize/self.ySize/self.xSize, 0.333))
             self.unit = self.xSize/resolution
+ 
+
             assert self.unit < unit, "parameter error"
             self.unit = unit
             self.resolutionX = np.uint64(self.xSize/self.unit)
             self.resolutionY = np.uint64(self.ySize/self.unit)
             self.resolutionZ = np.uint64(self.zSize/self.unit)
+            print('resolutionX =', self.resolutionX)
             self.xSize = self.unit*self.resolutionX
             self.ySize = self.unit*self.resolutionY
             self.zSize = self.unit*self.resolutionZ
@@ -87,8 +91,9 @@ class SpaceMap:
         imgHeights = {}
         imgWidths = {}
         for id in self.camera_dict.keys():
-            if id.find('@')>0:
-                imgName, Data = id.split('@')
+            if id.rfind('@')>0:
+                imgName = id[:id.rfind('@')]
+                Data = id[id.rfind('@')+1:]
                 jsonPath = os.path.join(
                     data_dir, imgName[0:imgName.rfind('.')]+'.json')
                 orMaskPath = os.path.join(
@@ -177,9 +182,10 @@ class SpaceMap:
 
             pickedGridFlag[imgRectFlag] = pickedGridFlag2
             self.gridFlag[validPos] = pickedGridFlag
+            self.getCloud(picIdx)
         vertices, triangles =mcubes.marching_cubes(self.gridFlag.reshape(self.resolutionX,self.resolutionY,self.resolutionZ), 0)
         mcubes.export_obj(vertices, triangles, 'sphere.obj')
-        # self.getCloud(100)
+        
     def inputData(self, data_dir, cam_file=None):
         self.instance_dir = data_dir
         assert os.path.exists(self.instance_dir), "Data directory is empty"

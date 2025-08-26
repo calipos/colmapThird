@@ -146,7 +146,10 @@ def listImg(path):
                         p.Qt = data['Qt']
                         p.t = p.Qt[4:7]
                         p.Q = p.Qt[0:4]
-                        p.R = Rotation.from_quat(p.Q).as_matrix()
+                        p.R = Rotation.from_quat(p.Q, scalar_first=True).as_matrix()
+                        p.Rt = np.eye(4)
+                        p.Rt[0:3, 0:3] = p.R
+                        p.Rt[0:3, 3] = p.t
                         p.cameraId = c.cameraId
                         imgs.append(p)
                         cameras[c.cameraId] = c
@@ -271,7 +274,7 @@ if __name__ == '__main__':
 
     minBorder = np.min(pts, axis=0)
     maxBorder = np.max(pts, axis=0)
-    faceCenter = np.mean(pts, axis=0)
+    faceCenter = (minBorder+maxBorder)*0.5
     radius = 1.2*np.max([np.linalg.norm(faceCenter-minBorder),
            np.linalg.norm(faceCenter-maxBorder)])
     regionStart = faceCenter-radius

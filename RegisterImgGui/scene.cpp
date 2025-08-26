@@ -199,6 +199,33 @@ bool writeResult(const std::filesystem::path& dataDir,
 		std::fstream fout(imgJsonPath, std::ios::out);
 		fout << sw.write(labelRoot);
 		fout.close();
+
+
+
+		Eigen::MatrixXd pts3d(4, objPts.size());
+		Eigen::MatrixXd pts2d(2, objPts.size());
+		int idx = 0;
+		for (const auto& [ptId, pt] : objPts)
+		{
+			pts3d(0, idx) = pt.x();
+			pts3d(1, idx) = pt.y();
+			pts3d(2, idx) = pt.z();
+			pts3d(3, idx) = 1.;
+			idx++;
+		}
+		LOG_OUT << newImgPath;
+		LOG_OUT << pts3d;
+		Rigid3d  Rtinv = Inverse(Rt);
+		Eigen::MatrixXd pts3d2 = Rtinv.ToMatrix() * pts3d;
+		pts3d2 = Rt.ToMatrix() * pts3d;
+		LOG_OUT << undistorted_camera.params[0] << " " << undistorted_camera.params[1] << " " << undistorted_camera.params[2] << " " << undistorted_camera.params[3] << " ";
+		for (int i = 0; i < objPts.size(); i++)
+		{
+			pts2d(0, i) = pts3d2(0, i) / pts3d2(2, i) * undistorted_camera.params[0] + undistorted_camera.params[2];
+			pts2d(1, i) = pts3d2(1, i) / pts3d2(2, i) * undistorted_camera.params[1] + undistorted_camera.params[3];
+		}
+		LOG_OUT << pts2d;
+		LOG_OUT<<"=======================================================";
 	}
 
 	std::fstream fPtsTxt(dataDir / "pts.txt", std::ios::out);

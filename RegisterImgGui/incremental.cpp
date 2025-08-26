@@ -225,6 +225,10 @@ int test_incremental()
         }
     }
 
+    for (auto&d: poses)
+    {
+        d.second = imageList[d.first].CamFromWorld();
+    }
     writeResult(dataPath/"result", cameraList, imageList, objPts, poses);
 
     return 0;
