@@ -35,8 +35,8 @@ extern int test_writelabel();
 int main(int, char**)
 {
     //return test_pips2();
-    //return test_sam2();
-    return test_incremental();
+    return test_sam2();
+    //return test_incremental();
 
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit())
@@ -67,7 +67,8 @@ int main(int, char**)
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    //ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    ImVec4 clear_color = ImVec4(0.f, 0.f, 0.f, 1.00f);
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();

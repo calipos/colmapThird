@@ -19,13 +19,14 @@ namespace sam2
 		bool inputImage(const cv::Mat& img);
 		bool inputHint();
 		bool inputHint(const std::vector<std::pair<int, cv::Point2i>>& hint, cv::Mat& mask);
+		bool inputSingleHint(const float& hintx, const float& hinty, const cv::Mat& inPutMask, cv::Mat& mask);
 		cv::Size oringalSize;
 		bool serializationFeat(const std::filesystem::path& path);
 		bool deserializationFeat(const std::filesystem::path& path);
 		const static std::vector<int>high_res_feats_0_shape;
 		const static std::vector<int>high_res_feats_1_shape;
 		const static std::vector<int>image_embed_shape;
-	private:
+	public:
 		ncnn::Net encoderNet;
 		std::optional < cv::dnn::Net> positionDecoderNet;
 		cv::Mat high_res_feats_0;

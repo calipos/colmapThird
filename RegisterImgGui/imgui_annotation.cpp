@@ -437,10 +437,10 @@ public:
 				}
 			}
 		}
-		if (imgName.size() < 3)
+		if (imgName.size() < 1)
 		{
 			progress.procRunning.store(0);
-			LOG_ERR_OUT << "imgName.size()<3";
+			LOG_ERR_OUT << "imgName.size()<1";
 			return;
 		}
 		progress.denominator.store(imgName.size());
@@ -566,7 +566,7 @@ bool annotationFrame(bool* show_regist_window)
 			);
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
-		if (annotationManger != nullptr && annotationManger->imgName.size() < 3)
+		if (annotationManger != nullptr && annotationManger->imgName.size() < 1)
 		{
 			delete annotationManger;
 			annotationManger = nullptr;
@@ -583,7 +583,7 @@ bool annotationFrame(bool* show_regist_window)
 			ImVec2 canvas_location = imgListLocation;
 			canvas_location.x += listPicSize.x;
 			label::ImageLabel* labelControlPtr = label::ImageLabel::getImageLabel(canvas_location, 720, annotationManger->imgName, annotationManger->imgPaths);
-			if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) || ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+			if (AnnotationManger::imgPickIdx >= 0 && (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) || ImGui::IsKeyPressed(ImGuiKey_UpArrow)))
 			{
 				pickedChanged = true;
 				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = ' ';
@@ -596,7 +596,7 @@ bool annotationFrame(bool* show_regist_window)
 				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = '-';
 				//continue;
 			}
-			if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)|| ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+			if (AnnotationManger::imgPickIdx >= 0 && (ImGui::IsKeyPressed(ImGuiKey_RightArrow)|| ImGui::IsKeyPressed(ImGuiKey_DownArrow)))
 			{
 				pickedChanged = true;
 				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = ' ';

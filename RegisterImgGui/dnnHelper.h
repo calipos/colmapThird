@@ -131,12 +131,12 @@ namespace dnn
             {
                 if (shape[0] != 1)
                 {
-                    std::cout << "slice param not support!" << std::endl;
+                    LOG_ERR_OUT << "slice param not support!";
                     return Blob<dtype>();
                 }
                 if (start<0 || start>shape[1])
                 {
-                    std::cout << "slice param error!" << std::endl;
+                    LOG_ERR_OUT << "slice param error!";
                     return Blob<dtype>();
                 }
                 int dataTotalCnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
@@ -182,7 +182,7 @@ namespace dnn
                 }
                 if (neg_1_count > 1)
                 {
-                    std::cout << "slice param error!" << std::endl;
+                    LOG_ERR_OUT << "slice param error!";
                     return Blob<dtype>();
                 }
                 cv::dnn::MatShape shape2 = newShape;
@@ -247,14 +247,14 @@ namespace dnn
                 const cv::dnn::MatShape& dataSrcShape = dataSrc.getShape();
                 if (dataSrcShape.size() > shapeLike.size())
                 {
-                    std::cout << "slice param error!" << std::endl;
+                    LOG_ERR_OUT << "slice param error!";
                     return Blob<dtype>();
                 }
                 for (size_t i = 0; i < dataSrcShape.size(); i++)
                 {
                     if (dataSrcShape[i] != shapeLike[i])
                     {
-                        std::cout << "slice param error!" << std::endl;
+                        LOG_ERR_OUT << "slice param error!";
                         return Blob<dtype>();
                     }
                 }
@@ -282,7 +282,7 @@ namespace dnn
             {
                 if (gatherAxis.size() == 0)
                 {
-                    std::cout << "gatherDim0 param error!" << std::endl;
+                    LOG_ERR_OUT << "gatherDim0 param error!";
                     return Blob<dtype>();
                 }
                 if (gatherAxis.size() == 1)
@@ -298,7 +298,7 @@ namespace dnn
                 }
                 else
                 {
-                    std::cout << "gatherDim0 param not support yet!" << std::endl;
+                    LOG_ERR_OUT << "gatherDim0 param not support yet!";
                     return Blob<dtype>();
                 }
             }
@@ -310,7 +310,7 @@ namespace dnn
                 }
                 else
                 {
-                    std::cout << "gatherDim0 param error!" << std::endl;
+                    LOG_ERR_OUT << "gatherDim0 param error!";
                     return *this;
                 }
                 int totalCnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
@@ -332,7 +332,7 @@ namespace dnn
                 }
                 else
                 {
-                    std::cout << "gatherDim0 param error!" << std::endl;
+                    LOG_ERR_OUT << "gatherDim0 param error!";
                     return *this;
                 }
                 int totalCnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
@@ -365,7 +365,7 @@ namespace dnn
                 }
                 else
                 {
-                    std::cout << "slice param not support!" << std::endl;
+                    LOG_ERR_OUT << "slice param not support!";
                     return cv::Mat();
                 }
             }
