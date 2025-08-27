@@ -79,6 +79,28 @@ def segFaceBaseLandmark(sam2model, imgPath, landmarks):
     return masks[faceLabel]
 
 
+def segFaceBaseAnchor(sam2model, imgPath, anchor):
+    img = cv2.imread(imgPath)
+    sam2model.set_image(img)  
+
+    faceLabel = 0
+    sam2model.add_point(
+        (anchor[0], anchor[1]), True, faceLabel)
+    masks = sam2model.get_masks()
+    masked_img = draw_masks(img, masks)
+    pos1 = imgPath.rfind('\\')
+    pos2 = imgPath.rfind('/')
+    if pos1 > pos2:
+        pos2 = pos1
+    else:
+        pos1 = pos2
+    parent = imgPath[:pos1+1]
+    filename = imgPath[pos1+1:]
+    cv2.imwrite(parent+'blender_'+filename, masked_img)
+
+    return masks[faceLabel]
+
+
 def onnx_datatype_to_npType(data_type):
     if data_type == 1:
         return np.float32

@@ -46,7 +46,7 @@ class SpaceMap:
             self.xSize = regionEnd[0]-regionStart[0]
             self.ySize = regionEnd[1]-regionStart[1]
             self.zSize = regionEnd[2]-regionStart[2]
-            self.maxUint64 = np.iinfo(np.uint32).max*2
+            self.maxUint64 = np.iinfo(np.uint32).max*4
 
             print('self.maxUint64 =', self.maxUint64)
             resolution = np.uint32(
@@ -55,7 +55,7 @@ class SpaceMap:
  
 
             assert self.unit < unit, "parameter error"
-            self.unit = unit
+            # self.unit = unit
             self.resolutionX = np.uint64(self.xSize/self.unit)
             self.resolutionY = np.uint64(self.ySize/self.unit)
             self.resolutionZ = np.uint64(self.zSize/self.unit)
@@ -77,6 +77,7 @@ class SpaceMap:
                      self.regionStartY], [self.regionStartZ]])
         self.gridCenter = np.vstack(
             [self.gridCenter, np.ones([1, self.gridCenter.shape[1]]).astype(np.float32)])
+
  
     def inputData2(self, data_dir, cam_file):
         self.instance_dir = data_dir
@@ -182,7 +183,7 @@ class SpaceMap:
 
             pickedGridFlag[imgRectFlag] = pickedGridFlag2
             self.gridFlag[validPos] = pickedGridFlag
-            self.getCloud(picIdx)
+            # self.getCloud(picIdx)
         vertices, triangles =mcubes.marching_cubes(self.gridFlag.reshape(self.resolutionX,self.resolutionY,self.resolutionZ), 0)
         mcubes.export_obj(vertices, triangles, 'sphere.obj')
         
@@ -281,8 +282,8 @@ class SpaceMap:
             pickedGridFlag[imgRectFlag] = pickedGridFlag2
             self.gridFlag[validPos] = pickedGridFlag
         self.getCloud(100)
-    def getCloud(self,idx=0):
-        a=np.where(self.gridFlag>1)
+    def getCloud(self,idx=0,thre=1):
+        a = np.where(self.gridFlag > thre)
         xyz = self.gridCenter[0:3,a].reshape(3,-1)
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(xyz.T) 

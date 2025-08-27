@@ -4,11 +4,6 @@ import os
 import numpy as np
 from scipy.spatial.transform import Rotation 
 from pathlib import Path
-# import figureMediapipeKeyPts
-import dlibLandMark
-import landmarkShapeType
-import insightFaceLandmark
-import undistotImg
 import segment
 import json
 
@@ -137,8 +132,8 @@ def listImg(path):
                         c.cameraId = len(cameras)
                         c.cameraType = 'SIMPLE_PINHOLE'
                         c.intr = np.array([data['fx'], 0, data['cx'], 0, data['fy'], data['cy'], 0, 0, 1]).reshape(3, 3)
-                        c.width = int(data['height'])
-                        c.height = int(data['width'])
+                        c.width = int(data['width'])
+                        c.height = int(data['height'])
                         c.disto = []
 
                         p = Image()
@@ -265,9 +260,25 @@ def readColmapResult2(dataDir):
     return  pts
 
 
+def segmentPatch(path,npyOutName):
+    imgPath = Path(path)
+    imgName = imgPath.name
+    parentName = imgPath.parent.name
+
+    sam2model = segment.initSAM2()
+    imgCenter2=np.array([234,650])
+    mask = segment.segFaceBaseAnchor(sam2model, path, imgCenter2)
+    maskPath = os.path.join(imgPath.parent, npyOutName)
+    np.save(maskPath, mask)
+    return 0
 
 
 if __name__ == '__main__':
+    segmentPatch('D:/repo/colmapThird/data/a/result/shapeMask/resulta@00034.jpg',
+                 'mask_resulta@00034.jpg.npy')
+    exit(0)
+
+
     dataRoot = 'data/a/result'
     cameraDict, imgs = listImg(dataRoot)
     pts = readColmapResult2(dataRoot)
@@ -275,7 +286,7 @@ if __name__ == '__main__':
     minBorder = np.min(pts, axis=0)
     maxBorder = np.max(pts, axis=0)
     faceCenter = (minBorder+maxBorder)*0.5
-    radius = 1.2*np.max([np.linalg.norm(faceCenter-minBorder),
+    radius = np.max([np.linalg.norm(faceCenter-minBorder),
            np.linalg.norm(faceCenter-maxBorder)])
     regionStart = faceCenter-radius
     regionEnd = faceCenter+radius
@@ -284,30 +295,6 @@ if __name__ == '__main__':
     if os.path.exists(shapeMaskDir):
         shutil.rmtree(shapeMaskDir)
     os.mkdir(shapeMaskDir)
-
- 
-    landmarkFinder=None
-    landmarkType = 'insightface'
-
-    if landmarkType=='dlib':
-        faceParamPath = 'models/mmod_human_face_detector.dat'
-        landmarkParamPath = 'models/shape_predictor_68_face_landmarks.dat'
-        landmarkFinder = dlibLandMark.DlibFinder(
-            faceParamPath, landmarkParamPath)
-
-    if landmarkType == 'mediapipe':
-        paramPath = 'models/face_landmarker_v2_with_blendshapes.task'
-        landmarkFinder = figureMediapipeKeyPts.MediapipeFinder(paramPath)
-
-    if landmarkType == 'insightface':
-        faceParamPath = 'models/buffalo_l/det_10g.onnx'
-        landmarkParamPath = 'models/buffalo_l/2d106det.onnx'
-        landmarkFinder = insightFaceLandmark.InsightFaceFinder(
-            faceParamPath, landmarkParamPath)
-
-    if landmarkFinder == None:
-        print('landmarkFinder == None')
-        exit(-1) 
 
     cam_file = {}
     cam_file['regionStart'] = regionStart
@@ -324,23 +311,22 @@ if __name__ == '__main__':
         parentName = imgPath.parent.name
         newPath = os.path.join(shapeMaskDir, parentName+imgName)
         shutil.copy(imgPath, newPath)
-        findFaceHullRet = landmarkFinder.proc(
-            newPath, landmarkShapeType.LandmarkShapeType.Contour, writeJson = False)
-        if isinstance(findFaceHullRet, np.ndarray):
-            cam_file[parentName+imgName+"@Rt"] = img.Rt
-            cam_file[parentName+imgName +
-                     "@intr"] = cameraDict[img.cameraId].intr
-            cam_file[parentName+imgName +
-                     "@h"] = cameraDict[img.cameraId].height
-            cam_file[parentName+imgName +
-                     "@w"] = cameraDict[img.cameraId].width
-            mask = segment.segFaceBaseLandmark(sam2model, newPath, findFaceHullRet)
 
-            maskPath = os.path.join(shapeMaskDir, 'mask_'+parentName+imgName+'.npy')
-            np.save(maskPath, mask)
-        else:
-            print("nit find the face hull,delete -> ", newPath)
-            os.remove(newPath)
+        objCenter2 = img.Rt@np.hstack([faceCenter, 1])
+        objCenter2 = (objCenter2/objCenter2[2])[:3]
+        imgCenter2 = cameraDict[img.cameraId].intr @ objCenter2.T
+
+        cam_file[parentName+imgName+"@Rt"] = img.Rt
+        cam_file[parentName+imgName +
+                    "@intr"] = cameraDict[img.cameraId].intr
+        cam_file[parentName+imgName +
+                    "@h"] = cameraDict[img.cameraId].height
+        cam_file[parentName+imgName +
+                    "@w"] = cameraDict[img.cameraId].width
+        mask = segment.segFaceBaseAnchor(sam2model, newPath, imgCenter2)
+
+        maskPath = os.path.join(shapeMaskDir, 'mask_'+parentName+imgName+'.npy')
+        np.save(maskPath, mask)
     np.save(os.path.join(shapeMaskDir, 'cam_file.npy'),
              cam_file)
     print()
