@@ -588,12 +588,12 @@ namespace dnn
             memcpy(out.data, data.data, tarTotal * sizeof(float));
             return true;
         }
-        bool serializationBlob(const cv::Mat& blob, cv::dnn::MatShape& shape, std::vector<float>& dat)
+        bool serializationBlob(const cv::Mat& blob, cv::dnn::MatShape& shape, std::vector<char>& dat)
         {
             shape = getBlobShape(blob);
-            int totalcnt = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int>());
+            int totalcnt = blob.dataend- blob.data;
             dat.resize(totalcnt);
-            memcpy(&dat[0], blob.data, sizeof(float) * totalcnt);
+            memcpy(&dat[0], blob.data, sizeof(char) * totalcnt);
             return true;
         }
         cv::dnn::MatShape getBlobShape(const cv::Mat& blob)

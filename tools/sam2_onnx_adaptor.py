@@ -27,11 +27,12 @@ shared_out = [
     #'masks', 'iou_predictions'
     '/Reshape_12_output_0', '/GreaterOrEqual_output_0', '/iou_prediction_head/Sigmoid_output_0','/ArgMax_output_0',
     # '/Gather_31_output_0', '/Shape_36_output_0'
-    '/Slice_7_output_0',
-    '/Gather_26_output_0',
-    '/Range_4_output_0',
-    '/Mul_18_output_0',
-    '/Add_14_output_0'
+    # '/Slice_7_output_0',
+    # '/Gather_26_output_0',
+    # '/Range_4_output_0',
+    # '/Mul_18_output_0',
+    # '/Add_14_output_0',
+    # '/Shape_34_output_0'
     ]
 checkmodel = True
 inferShapes = True

@@ -19,7 +19,7 @@ namespace sam2
 		bool inputImage(const cv::Mat& img);
 		bool inputHint();
 		bool inputHint(const std::vector<std::pair<int, cv::Point2i>>& hint, cv::Mat& mask);
-		bool inputSingleHint(const float& hintx, const float& hinty, const cv::Mat& inPutMask, cv::Mat& mask);
+		bool inputSingleHint(const float& hintx, const float& hinty, const int labelId, const cv::Mat& inPutMask, cv::Mat& mask);
 		cv::Size oringalSize;
 		bool serializationFeat(const std::filesystem::path& path);
 		bool deserializationFeat(const std::filesystem::path& path);

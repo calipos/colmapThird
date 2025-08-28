@@ -35,7 +35,7 @@ extern int test_writelabel();
 int main(int, char**)
 {
     //return test_pips2();
-    return test_sam2();
+    //return test_sam2();
     //return test_incremental();
 
     glfwSetErrorCallback(glfw_error_callback);

@@ -46,7 +46,7 @@ namespace sam2
             Add_15_output_0.emplace_back(i * 3 + ArgMax_output_0.getData()[0]);
             int d = i * Gather_26_output_0 + ArgMax_output_0.getData()[0];
             Add_14_output_0.emplace_back(d);
-            Concat_19_output_0.emplace_back(d);
+            Concat_19_output_0.emplace_back(1);
         }
         Concat_19_output_0.emplace_back(Shape_33_output_0[3]);
         Concat_19_output_0.emplace_back(Shape_33_output_0[3]);
@@ -414,7 +414,7 @@ namespace sam2
         }
         return true;
     }
-    bool Sam2::inputSingleHint(const float& hintx, const float& hinty, const cv::Mat&inPutMask, cv::Mat& mask)
+    bool Sam2::inputSingleHint(const float& hintx, const float& hinty, const int labelId,const cv::Mat&inPutMask, cv::Mat& mask)
     {
         if (positionDecoderNet == std::nullopt)
         {
@@ -440,7 +440,7 @@ namespace sam2
         std::vector<float>point_label(1);
         point_coord[0][0] = hintx;
         point_coord[0][1] = hinty;
-        point_label[0] = 1;
+        point_label[0] = labelId;
         LOG_OUT << point_label[0] << " " << point_coord[0];
         cv::Mat point_coord_blob;
         cv::Mat point_label_blob;
@@ -449,12 +449,18 @@ namespace sam2
         dnn::ocvHelper::generDnnBlob(inputArrayPlus6, { 1,static_cast<int>(point_coord.size()) + 6,1 });
         cv::Mat mask_input;
         dnn::ocvHelper::generDnnBlob(mask_input, { 1, 1, 1024 / 4, 1024 / 4 });
-        mask_input.setTo(0);
+        if (inPutMask.rows == 1024/4 && inPutMask.cols == 1024/4)
+        {
+            memcpy(mask_input.data, inPutMask.data, sizeof(float) * 65536);
+        }
+        else
+        {
+            mask_input.setTo(0);
+        }
+        
         cv::Mat has_mask_input;
         dnn::ocvHelper::generDnnBlob(has_mask_input, { 1 });
         has_mask_input.setTo(1);
-        cv::Mat orig_im_size;
-        dnn::ocvHelper::generDnnBlob(orig_im_size, { 2 }, dnn::ocvHelper::OnnxType::onnx_int32);
 
         std::vector<float> iou_predictions;
         {
@@ -466,7 +472,6 @@ namespace sam2
             positionDecoderNet->setInput(point_label_blob, "/Unsqueeze_8_output_0");
             positionDecoderNet->setInput(mask_input, "mask_input");
             positionDecoderNet->setInput(has_mask_input, "has_mask_input");
-            //positionDecoderNet.setInput(orig_im_size, "orig_im_size");
             std::vector<std::string> layersNames = positionDecoderNet->getLayerNames();
             std::vector<std::string> unconnectedOutLayersNames = positionDecoderNet->getUnconnectedOutLayersNames();
             std::vector<std::string> outLayersNames = {
@@ -478,7 +483,7 @@ namespace sam2
             auto end2 = std::chrono::steady_clock::now();
             auto elapsed2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - start2).count();
             LOG_OUT << "Elapsed time: " << elapsed2 * 0.001 << " s";
-            decoderTails(1080, 1920, out[0], out[1], out[2], out[3], mask, iou_predictions);
+            decoderTails(oringalSize.height, oringalSize.width, out[0], out[1], out[2], out[3], mask, iou_predictions);
             LOG_OUT << "done ";
             cv::Mat asd2;
             cv::threshold(mask, asd2, 0, 255, cv::THRESH_BINARY);
@@ -494,16 +499,18 @@ namespace sam2
         cv::dnn::MatShape feat0_shape;
         cv::dnn::MatShape feat1_shape;
         cv::dnn::MatShape imbed_shape;
-        std::vector<float> feat0_dat;
-        std::vector<float> feat1_dat;
-        std::vector<float> imbed_dat;
+        std::vector<char> feat0_dat;
+        std::vector<char> feat1_dat;
+        std::vector<char> imbed_dat;
         dnn::ocvHelper::serializationBlob(high_res_feats_0, feat0_shape, feat0_dat);
         dnn::ocvHelper::serializationBlob(high_res_feats_1, feat1_shape, feat1_dat);
         dnn::ocvHelper::serializationBlob(image_embed, imbed_shape, imbed_dat);
         std::fstream fout(path, std::ios::out | std::ios::binary);
-        fout.write((char*)&feat0_dat[0], sizeof(float) * feat0_dat.size());
-        fout.write((char*)&feat1_dat[0], sizeof(float) * feat1_dat.size());
-        fout.write((char*)&imbed_dat[0], sizeof(float) * imbed_dat.size());
+        fout.write((char*)&oringalSize.height, sizeof(int));
+        fout.write((char*)&oringalSize.width, sizeof(int));
+        fout.write((char*)&feat0_dat[0], sizeof(char) * feat0_dat.size());
+        fout.write((char*)&feat1_dat[0], sizeof(char) * feat1_dat.size());
+        fout.write((char*)&imbed_dat[0], sizeof(char) * imbed_dat.size());
         fout.close();
         return true;
     }
@@ -519,12 +526,14 @@ namespace sam2
             high_res_feats_1.create(high_res_feats_1_shape.size(), &high_res_feats_1_shape[0], CV_32F);
             image_embed.create(image_embed_shape.size(), &image_embed_shape[0], CV_32F);
             std::fstream fin(path, std::ios::in | std::ios::binary);
-            int dataTotalCnt = std::accumulate(high_res_feats_0_shape.begin(), high_res_feats_0_shape.end(), 1, std::multiplies<int>());
-            fin.write((char*)high_res_feats_0.data, sizeof(float) * dataTotalCnt);
-            dataTotalCnt = std::accumulate(high_res_feats_1_shape.begin(), high_res_feats_1_shape.end(), 1, std::multiplies<int>());
-            fin.write((char*)high_res_feats_1.data, sizeof(float) * dataTotalCnt);
-            dataTotalCnt = std::accumulate(image_embed_shape.begin(), image_embed_shape.end(), 1, std::multiplies<int>());
-            fin.write((char*)image_embed.data, sizeof(float) * dataTotalCnt);
+            fin.read((char*)&oringalSize.height, sizeof(int));
+            fin.read((char*)&oringalSize.width, sizeof(int));
+            int dataTotalCnt = high_res_feats_0.dataend- high_res_feats_0.data;
+            fin.read((char*)high_res_feats_0.data, sizeof(char) * dataTotalCnt);
+            dataTotalCnt = high_res_feats_1.dataend - high_res_feats_1.data;
+            fin.read((char*)high_res_feats_1.data, sizeof(char) * dataTotalCnt);
+            dataTotalCnt = image_embed.dataend - image_embed.data;
+            fin.read((char*)image_embed.data, sizeof(char) * dataTotalCnt);
             fin.close();
             return true;
         }
@@ -560,7 +569,7 @@ static void sam2_onMouse(int event, int x, int y, int flags, void* sam2Ins)
     if (event == cv::MouseEventTypes::EVENT_RBUTTONUP)
     {
         LOG_OUT << "minus  " << x << " " << y;
-        gui_hint.emplace_back(std::make_pair(-1, cv::Point2i(x, y)));
+        gui_hint.emplace_back(std::make_pair(0, cv::Point2i(x, y)));
     }
     if (event == cv::MouseEventTypes::EVENT_MBUTTONUP)
     { 
@@ -591,7 +600,7 @@ int test_sam_gui()
 {
     gui_hint.clear();
     std::string imgPath= "../a.bmp";
-    std::filesystem::path featPath = "../a.segDat";
+    std::filesystem::path featPath = "../a.samDat";
     gui_img = cv::imread(imgPath);;
     gui_img.copyTo(gui_addWeight);
     sam2::Sam2 sam2Ins("../models/ncnnEncoder.param", "../models/ncnnEncoder.bin", "../models/opencv_decoder.onnx");
@@ -617,10 +626,6 @@ int test_decoder()
 {
     std::string imgPath = "../a.bmp";
     cv::Mat img = cv::imread(imgPath);
-    sam2::Sam2 sam2Ins("../models/ncnnEncoder.param", "../models/ncnnEncoder.bin", "../models/opencv_decoder.onnx");
-
-        sam2Ins.inputImage(img);
-
 
     cv::Mat  high_res_feats_0, high_res_feats_1, image_embed;
     dnn::ocvHelper::readBlobFile("D:/repo/colmapThird/high_res_feats_0_blob.dat", high_res_feats_0);
@@ -684,8 +689,9 @@ int test_mask()
 {
     sam2::Sam2 sam2Ins("../models/ncnnEncoder.param", "../models/ncnnEncoder.bin", "../models/opencv_decoder.onnx");
     std::filesystem::path imgPath = "../data3/00002.jpg";
-    std::filesystem::path featPath = "../data3/00002.segDat";
+    std::filesystem::path featPath = "../data3/00002.samDat";
     std::filesystem::path outMaskPath = "../data3/00002.bmp";
+    cv::Mat img = cv::imread(imgPath.string());
     if (std::filesystem::exists(featPath))
     {
         sam2Ins.deserializationFeat(featPath);
@@ -696,15 +702,25 @@ int test_mask()
         sam2Ins.serializationFeat(featPath);
     }
     cv::Mat outMask;
-    sam2Ins.inputSingleHint(217,286,cv::Mat(), outMask);
-    cv::imwrite(outMaskPath.string(),outMask);
+    sam2Ins.inputSingleHint(100, 150, 1,cv::Mat(), outMask);
+
+
+    cv::Mat mask1024 = cv::Mat::zeros(256, 256, CV_8UC1);
+    cv::circle(mask1024,cv::Point(100/4, 150 /4),20,cv::Scalar(1),-1);
+    mask1024 = 1 - mask1024;
+    mask1024.convertTo(mask1024,CV_32FC1);
+    cv::Mat outMask2;
+    sam2Ins.inputSingleHint(100, 150, 2,mask1024, outMask2);
+    outMask2 = 1 - outMask2;
+
+    cv::imwrite(outMaskPath.string(),outMask*200);
     return 0;
 }
 int test_sam2()
 {
-    //return test_mask();
+    return test_mask();
     //return test_multitimes_construction();
-    return test_decoder();
+    //return test_decoder();
     //return test_sam_gui();
     //dnn::test();
 

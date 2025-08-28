@@ -87,7 +87,7 @@ public:
 		{
 			const auto& parentDir = std::filesystem::canonical(imgPaths[i].parent_path());
 			std::string shortName = imgPaths[i].filename().stem().string();
-			const auto& segData = parentDir / (shortName + ".segDat");
+			const auto& segData = parentDir / (shortName + ".samDat");
 			bool reload = false;
 			if (std::filesystem::exists(segData))
 			{
@@ -115,20 +115,55 @@ public:
 	static int viewWindowHeight;
 	static int viewWindowWidth;
 	static int imgPickIdx;
+	static bool showMask;
 };
 static SegmentMgr* segmentMgr = nullptr;
 GLuint SegmentMgr::image_texture = 0;
 int SegmentMgr::viewWindowHeight = 720;
-int SegmentMgr::viewWindowWidth = 960; 
+int SegmentMgr::viewWindowWidth = 960;
 int SegmentMgr::imgPickIdx = -1;
+bool SegmentMgr::showMask = true;
+
 
 struct SegmentControl
 {
-	ImVec2 tempPt{ -1,-1 }; 
-	std::vector<std::string>picShortName;
-	std::vector< std::map<std::string, ImVec2>>controlPtsAndTag;
-	std::vector<std::string>segmentNameListName;
-	std::vector<std::string>segmentNamesName;
+	std::vector<ImVec2>tempPt;
+	std::vector<ImVec2>tempNegPt;
+	std::vector<std::vector<std::pair<int, cv::Point2i>>>hints;
+	std::vector<cv::Mat>masks;
+	static bool load(const std::filesystem::path& picPath, std::vector<std::pair<int, cv::Point2i>>& hints, cv::Mat& mask)
+	{
+		if (!std::filesystem::exists(picPath))
+		{
+			LOG_ERR_OUT << "not found : " << picPath;
+			return false;
+		}
+		cv::Mat img = cv::imread(picPath.string());
+		if (img.empty())
+		{
+			LOG_ERR_OUT << "img.empty";
+			return false;
+		}
+		auto parentDir = picPath.parent_path();
+		auto shortName = picPath.filename().stem();
+		auto jsonPath = parentDir / (shortName.string() + ".json");
+		auto binPath = parentDir / (shortName.string() + ".segBin");
+		auto showPath = parentDir / ("mask_" + shortName.string() + ".jpg");
+		if (std::filesystem::exists(jsonPath) && std::filesystem::exists(binPath))
+		{
+
+		}
+		else
+		{
+			mask = cv::Mat(img.size(),CV_8UC3);
+			mask.setTo(cv::Scalar(0,0,0));
+		}
+		return true;
+	}
+	static bool save(const std::filesystem::path& picPath)
+	{
+		return true;
+	}
 };
 class SegmentGui
 {
@@ -166,6 +201,12 @@ public:
 		if (SegmentGui::instance == nullptr)
 		{
 			SegmentGui::instance = new SegmentGui();
+			instance->ptsData.hints.resize(picPaths.size());
+			instance->ptsData.masks.resize(picPaths.size());
+			for (int i = 0; i < picPaths.size(); i++)
+			{
+				SegmentControl::load(picPaths[i], instance->ptsData.hints[i], instance->ptsData.masks[i]);
+			}
 			//instance->ptsData.picShortName.insert(instance->ptsData.picShortName.end(), picShortName.begin(), picShortName.end());
 			//instance->ptsData.controlPtsAndTag.resize(picShortName.size());
 			//instance->ptsData.loadOnlyOnce(picPaths);
@@ -216,15 +257,22 @@ public:
 		{
 			ImGui::SetCursorPos(draw_pos);
 			ImGui::Image((ImTextureID)(intptr_t)image_texture, SegmentGui::canvas, SegmentGui::zoom_start, SegmentGui::zoom_end, ImVec4(1, 1, 1, 1), ImVec4(.5, .5, .5, .5));
-			if (ptsData.tempPt.x > 0)
+			for (int i = 0; i < ptsData.tempPt.size(); i++)
 			{
-				ImVec2 guiPt = imgPt2GuiPt(ptsData.tempPt, currentImgHeight, currentImgWidth, canvas, zoom_start, zoom_end, draw_pos);
+				ImVec2 guiPt = imgPt2GuiPt(ptsData.tempPt[i], currentImgHeight, currentImgWidth, canvas, zoom_start, zoom_end, draw_pos);
 				ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, 0xC80688FB);
+				ImGui::GetForegroundDrawList()->AddCircle(guiPt, 4.0f, 0xC8000000);
+			}
+			for (int i = 0; i < ptsData.tempNegPt.size(); i++)
+			{
+				ImVec2 guiPt = imgPt2GuiPt(ptsData.tempNegPt[i], currentImgHeight, currentImgWidth, canvas, zoom_start, zoom_end, draw_pos);
+				ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, 0xFF54FF36);
+				ImGui::GetForegroundDrawList()->AddCircle(guiPt, 4.0f, 0xC8000000);
 			}
 		}
 		return true;
 	}
-	ImVec2 control(const ImVec2& mousePosInImage, const float wheel, const bool& mouseLeftDown)
+	ImVec2 control(const ImVec2& mousePosInImage, const float wheel, const bool& mouseLeftDown, const bool& mouseRightDown)
 	{
 		if (abs(wheel) > 0.01)
 		{
@@ -273,7 +321,7 @@ public:
 				}
 			}
 		}
-		if (mouseLeftDown)
+		if (mouseLeftDown|| mouseRightDown)
 		{
 			if (mousePosInImage.x >= 0 && mousePosInImage.y >= 0 && mousePosInImage.x < canvas.x && mousePosInImage.y < canvas.y)
 			{
@@ -396,6 +444,7 @@ bool segmentFrame(bool* show_regist_window)
 			imgDirPath = "";
 			modelDirPath = "";
 		}
+		ImGui::ColorButton("drag me", ImGui::ColorConvertU32ToFloat4(0xC80688FB), ImGuiColorEditFlags_NoPicker| ImGuiColorEditFlags_NoOptions| ImGuiColorEditFlags_NoSmallPreview| ImGuiColorEditFlags_NoTooltip| ImGuiColorEditFlags_NoLabel| ImGuiColorEditFlags_InputRGB);
 		if (segmentMgr != nullptr && segmentMgr->imgName.size() > 0)
 		{
 			auto imgListLocation = ImGui::GetCursorPos();
@@ -434,10 +483,13 @@ bool segmentFrame(bool* show_regist_window)
 			}
 			if (SegmentMgr::imgPickIdx >= 0 && pickedChanged)
 			{
+				segmentControlPtr->ptsData.tempPt.clear();
+				segmentControlPtr->ptsData.tempNegPt.clear();
 				cv::Mat asd = cv::imread(segmentMgr->imgPaths[SegmentMgr::imgPickIdx].string());
 				segmentControlPtr->feedImg(asd);
 				bool& mouseLeftDown = ImGui::GetIO().MouseReleased[0];
-				mouseLeftDown = false;
+				bool& mouseRightDown = ImGui::GetIO().MouseReleased[1];
+				mouseRightDown = false;
 			}
 			segmentControlPtr->draw(SegmentMgr::imgPickIdx);
 			if (segmentControlPtr->hasImageContext)
@@ -457,53 +509,75 @@ bool segmentFrame(bool* show_regist_window)
 				//ImGui::Text("Mouse pos: (%g, %g)", mousePosInImage.x, mousePosInImage.y);
 				//ImGui::Text("Mouse wheel: %.1f", ImGui::GetIO().MouseWheel);
 				bool mouseLeftDown = ImGui::GetIO().MouseReleased[0];
-				ImVec2 maybeClik = segmentControlPtr->control(mousePosInImage, wheel, mouseLeftDown);
+				bool mouseRightDown = ImGui::GetIO().MouseReleased[1];
+				ImVec2 maybeClik = segmentControlPtr->control(mousePosInImage, wheel, mouseLeftDown, mouseRightDown);
 				if (maybeClik.x > 0)
 				{
-					segmentControlPtr->ptsData.tempPt = maybeClik;
+					if (mouseLeftDown)
+					{
+						segmentControlPtr->ptsData.tempPt.emplace_back(maybeClik);
+					}
+					else
+					{
+						segmentControlPtr->ptsData.tempNegPt.emplace_back(maybeClik);
+					}
 				}
 			}
 			deployButtom = ImVec2(imgListLocation.x + ImGui::GetWindowPos().x, std::max(listPicSize.y, segmentControlPtr->canvas.y) + imgListLocation.y + ImGui::GetWindowPos().y);
 			if (SegmentMgr::imgPickIdx >= 0)
 			{
 				ImGui::SetCursorScreenPos(deployButtom);
-				ImGui::InputTextMultiline("<-tag", SegmentGui::segmentNameStr, SegmentGui::segmentNameStrLengthMax, ImVec2(200, 20), ImGuiTreeNodeFlags_None + ImGuiInputTextFlags_CharsNoBlank);
-				std::string segmentNameStr = std::string(SegmentGui::segmentNameStr);
-				if (segmentControlPtr->ptsData.tempPt.x < 0 || segmentNameStr.length() == 0)
+				if (segmentControlPtr->ptsData.tempPt.size() <= 0)
 				{
 					ImGui::BeginDisabled();
 				}
 				if (ImGui::Button("seg"))
 				{
-					LOG_OUT << "tag = " << segmentNameStr;
 					LOG_OUT << "seg at " << SegmentMgr::imgPickIdx;
-					LOG_OUT << "seg at [" << segmentControlPtr->ptsData.tempPt.x << ", " << segmentControlPtr->ptsData.tempPt.y << "]";
 
 					progress.numerator.store(-1);
 					progress.procRunning.fetch_add(1);
 					progress.proc = new std::thread(
 						[&]() {
-							//std::vector<std::pair<int, cv::Point2i>> gui_hint = { {1,{segmentControlPtr->ptsData.tempPt.x , segmentControlPtr->ptsData.tempPt.y}} };
-							//segmentMgr->sam2Ins->inputHint(gui_hint, cv::Mat());
-							 
 
+
+							segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx].clear();
+							for (const auto&d: segmentControlPtr->ptsData.tempPt)
+							{
+								segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx].emplace_back(std::make_pair(1, cv::Point2i(d.x, d.y)));
+							}
+							for (const auto& d : segmentControlPtr->ptsData.tempNegPt)
+							{
+								segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx].emplace_back(std::make_pair(0, cv::Point2i(d.x, d.y)));
+							}
+							segmentMgr->sam2Ins->inputHint(segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx], segmentControlPtr->ptsData.masks[SegmentMgr::imgPickIdx]);
+							segmentControlPtr->ptsData.tempPt.clear();
+							segmentControlPtr->ptsData.tempNegPt.clear();
 							progress.procRunning.store(0);
 						}
 					);
 					std::this_thread::sleep_for(std::chrono::milliseconds(100));
 				}
-				if (segmentControlPtr->ptsData.tempPt.x < 0 || segmentNameStr.length() == 0)
+				if (segmentControlPtr->ptsData.tempPt.size() <= 0)
 				{
 					ImGui::EndDisabled();
 				}
 				ImGui::SameLine();
-				if (ImGui::Button("~Tag") || ImGui::IsKeyPressed(ImGuiKey_Delete))
-				{
-					
+				if (ImGui::Checkbox("showMask", &SegmentMgr::showMask))
+				{ 
+					cv::Mat asd = cv::imread(segmentMgr->imgPaths[SegmentMgr::imgPickIdx].string());
+					const cv::Mat& mask = segmentControlPtr->ptsData.masks[SegmentMgr::imgPickIdx];
+					const float gamma = 0;
+					const float mixFacter = 0.5;
+					cv::Mat mixImg;
+					cv::addWeighted(asd, mixFacter, mask, 1 - mixFacter, gamma, mixImg);
+					segmentControlPtr->feedImg(mixImg);
 				}
 				ImGui::SameLine();
-				if (ImGui::Button("~TagAll"))
+				if (ImGui::Button("~Tag") || ImGui::IsKeyPressed(ImGuiKey_Delete))
 				{
+					segmentControlPtr->ptsData.tempPt.clear();
+					segmentControlPtr->ptsData.tempNegPt.clear();
 				}
 				ImGui::SameLine();
 				if (ImGui::Button("save"))

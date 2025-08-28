@@ -397,7 +397,7 @@ namespace dnn
             cv::Mat& point_label_blob,
             const cv::Size& originalImgSize);
         bool convertNcnnBlobToOpencv(const ncnn::Mat& data, const std::vector<int>& targetShape, cv::Mat& out);
-        bool serializationBlob(const cv::Mat& blob, cv::dnn::MatShape& shape, std::vector<float>& dat);
+        bool serializationBlob(const cv::Mat& blob, cv::dnn::MatShape& shape, std::vector<char>& dat);
         cv::dnn::MatShape getBlobShape(const cv::Mat& blob);
         std::vector<int>getDenominators(const cv::dnn::MatShape& shape);
         std::vector<int>getPos(const int& idx, const std::vector<int>& denominators);
