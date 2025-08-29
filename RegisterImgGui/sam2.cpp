@@ -380,7 +380,7 @@ namespace sam2
         mask_input.setTo(0);
         cv::Mat has_mask_input;
         dnn::ocvHelper::generDnnBlob(has_mask_input, { 1 });
-        has_mask_input.setTo(1);
+        has_mask_input.setTo(0);
         cv::Mat orig_im_size;
         dnn::ocvHelper::generDnnBlob(orig_im_size, { 2 }, dnn::ocvHelper::OnnxType::onnx_int32);
 
@@ -406,11 +406,13 @@ namespace sam2
             auto end2 = std::chrono::steady_clock::now();
             auto elapsed2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - start2).count();
             LOG_OUT << "Elapsed time: " << elapsed2 * 0.001 << " s";
-            decoderTails(1080, 1920, out[0], out[1], out[2], out[3], mask, iou_predictions);
+            cv::Mat maskFloat;
+            decoderTails(oringalSize.height, oringalSize.width, out[0], out[1], out[2], out[3], maskFloat, iou_predictions);
             LOG_OUT << "done ";
             cv::Mat asd2;
-            cv::threshold(mask, asd2, 0, 255, cv::THRESH_BINARY);
-            asd2.convertTo(mask, CV_8UC1);
+            cv::threshold(maskFloat, asd2, 0, 255, cv::THRESH_BINARY);
+            asd2.convertTo(asd2, CV_8UC1);
+            asd2.copyTo(mask);
         }
         return true;
     }
@@ -522,6 +524,18 @@ namespace sam2
         }
         try
         {
+            if (!high_res_feats_0.empty())
+            {
+                high_res_feats_0.release();
+            }
+            if (!high_res_feats_1.empty())
+            {
+                high_res_feats_1.release();
+            }
+            if (!image_embed.empty())
+            {
+                image_embed.release();
+            }
             high_res_feats_0.create(high_res_feats_0_shape.size(), &high_res_feats_0_shape[0], CV_32F);
             high_res_feats_1.create(high_res_feats_1_shape.size(), &high_res_feats_1_shape[0], CV_32F);
             image_embed.create(image_embed_shape.size(), &image_embed_shape[0], CV_32F);
@@ -599,8 +613,8 @@ static void sam2_onMouse(int event, int x, int y, int flags, void* sam2Ins)
 int test_sam_gui()
 {
     gui_hint.clear();
-    std::string imgPath= "../a.bmp";
-    std::filesystem::path featPath = "../a.samDat";
+    std::string imgPath= "../data3/00002.jpg";
+    std::filesystem::path featPath = "../data3/00002.samDat";
     gui_img = cv::imread(imgPath);;
     gui_img.copyTo(gui_addWeight);
     sam2::Sam2 sam2Ins("../models/ncnnEncoder.param", "../models/ncnnEncoder.bin", "../models/opencv_decoder.onnx");
@@ -685,6 +699,10 @@ int test_multitimes_construction()
     }
     return 0;
 }
+int segmentDirWithLandmarks(const std::filesystem::path& dir)
+{
+    return 0;
+}
 int test_mask()
 {
     sam2::Sam2 sam2Ins("../models/ncnnEncoder.param", "../models/ncnnEncoder.bin", "../models/opencv_decoder.onnx");
@@ -718,10 +736,9 @@ int test_mask()
 }
 int test_sam2()
 {
-    return test_mask();
     //return test_multitimes_construction();
     //return test_decoder();
-    //return test_sam_gui();
+    return test_sam_gui();
     //dnn::test();
 
     //sam2::ncnnHelper::convertImgToMemFile("../a.bmp");

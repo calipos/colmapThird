@@ -11,7 +11,13 @@ void WarpImageBetweenCameras(const Camera& source_camera,
     const Camera& target_camera,
     const Bitmap& source_image,
     Bitmap* target_image);
-
+void WarpImageBetweenCameras(const Camera& source_camera,
+    const Camera& target_camera,
+    const Bitmap& source_image,
+    Bitmap* target_image,
+    Eigen::MatrixXi& source_to_target_x_map,
+    Eigen::MatrixXi& source_to_target_y_map
+);
 // Warp an image with the given homography, where H defines the pixel mapping
 // from the target to source image. Note that the pixel centers are assumed to
 // have coordinates (0.5, 0.5).

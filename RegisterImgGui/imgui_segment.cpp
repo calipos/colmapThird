@@ -10,13 +10,21 @@
 #include "imgui_tools.h"
 #include "log.h"
 #include "sam2.h"
+#include "opencvTools.h"
 static bool showImgDirBrowser = false;
 static std::filesystem::path imgDirPath;
 static std::filesystem::path modelDirPath;
 static browser::Browser* imgDirPicker = nullptr;
 static browser::Browser* modelDirPicker = nullptr;
 static ProgressThread progress;
-
+static ImU32 includeColor = 0xFF1840FF;
+static ImU32 excludeColor = 0xFFFF8418;
+static ImU32 tempIncludeColor = 0xFF1818FF;
+static ImU32 tempExcludeColor = 0xFFFF1820;
+static ImVec4 includeColor_v = ImGui::ColorConvertU32ToFloat4(includeColor);
+static ImVec4 excludeColor_v = ImGui::ColorConvertU32ToFloat4(excludeColor);
+static ImVec4 tempIncludeColor_v = ImGui::ColorConvertU32ToFloat4(tempIncludeColor);
+static ImVec4 tempExcludeColor_v = ImGui::ColorConvertU32ToFloat4(tempExcludeColor);
 class SegmentMgr
 {
 public:
@@ -51,6 +59,14 @@ public:
 		imgName.clear();
 		imgNameForList.clear();
 		imgDat.clear();
+
+
+		high_res_feats_0s.clear();
+		high_res_feats_1s.clear();
+		image_embeds.clear();
+		oringalSizes.clear();
+
+
 		imgDirPath_ = dirPath;
 		for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ imgDirPath_ })
 		{
@@ -92,11 +108,20 @@ public:
 			if (std::filesystem::exists(segData))
 			{
 				reload = sam2Ins->deserializationFeat(segData);
+				high_res_feats_0s.emplace_back(sam2Ins->high_res_feats_0);
+				high_res_feats_1s.emplace_back(sam2Ins->high_res_feats_1);
+				image_embeds.emplace_back(sam2Ins->image_embed);
+				oringalSizes.emplace_back(sam2Ins->oringalSize);
 			}
 			if(!reload)
 			{
 				sam2Ins->inputImage(imgPaths[i]);
 				sam2Ins->serializationFeat(segData);
+
+				high_res_feats_0s.emplace_back(sam2Ins->high_res_feats_0);
+				high_res_feats_1s.emplace_back(sam2Ins->high_res_feats_1);
+				image_embeds.emplace_back(sam2Ins->image_embed);
+				oringalSizes.emplace_back(sam2Ins->oringalSize);
 			}
 			progress.numerator.fetch_add(1);			
 		}
@@ -109,6 +134,12 @@ public:
 	std::vector<std::string>imgName;
 	std::vector<std::string>imgNameForList;
 	std::vector<cv::Mat> imgDat;
+
+	std::vector<cv::Mat> high_res_feats_0s;
+	std::vector<cv::Mat> high_res_feats_1s;
+	std::vector<cv::Mat> image_embeds;
+	std::vector<cv::Size> oringalSizes; 
+
 	std::filesystem::path imgDirPath_;
 	std::filesystem::path modelDirPath_;
 	static GLuint image_texture;
@@ -131,35 +162,6 @@ struct SegmentControl
 	std::vector<ImVec2>tempNegPt;
 	std::vector<std::vector<std::pair<int, cv::Point2i>>>hints;
 	std::vector<cv::Mat>masks;
-	static bool load(const std::filesystem::path& picPath, std::vector<std::pair<int, cv::Point2i>>& hints, cv::Mat& mask)
-	{
-		if (!std::filesystem::exists(picPath))
-		{
-			LOG_ERR_OUT << "not found : " << picPath;
-			return false;
-		}
-		cv::Mat img = cv::imread(picPath.string());
-		if (img.empty())
-		{
-			LOG_ERR_OUT << "img.empty";
-			return false;
-		}
-		auto parentDir = picPath.parent_path();
-		auto shortName = picPath.filename().stem();
-		auto jsonPath = parentDir / (shortName.string() + ".json");
-		auto binPath = parentDir / (shortName.string() + ".segBin");
-		auto showPath = parentDir / ("mask_" + shortName.string() + ".jpg");
-		if (std::filesystem::exists(jsonPath) && std::filesystem::exists(binPath))
-		{
-
-		}
-		else
-		{
-			mask = cv::Mat(img.size(),CV_8UC3);
-			mask.setTo(cv::Scalar(0,0,0));
-		}
-		return true;
-	}
 	static bool save(const std::filesystem::path& picPath)
 	{
 		return true;
@@ -196,7 +198,7 @@ public:
 		float y = y_inRatio * canvas_size.y + canvas_location.y + ImGui::GetWindowPos().y;
 		return ImVec2(x, y);
 	}
-	static SegmentGui* getSegmentGui(const ImVec2& draw_pos_, const int& canvasMaxSide_, const std::vector<std::string>& picShortName, const std::vector<std::filesystem::path>& picPaths)
+	static SegmentGui* getSegmentGui(const ImVec2& draw_pos_, const int& canvasMaxSide_, const std::vector<std::string>& picShortName, const std::vector<std::filesystem::path>& picPaths, std::vector<std::string>&imgNameForList)
 	{
 		if (SegmentGui::instance == nullptr)
 		{
@@ -205,7 +207,16 @@ public:
 			instance->ptsData.masks.resize(picPaths.size());
 			for (int i = 0; i < picPaths.size(); i++)
 			{
-				SegmentControl::load(picPaths[i], instance->ptsData.hints[i], instance->ptsData.masks[i]);
+				auto parentDir = picPaths[i].parent_path();
+				auto showPath = parentDir / ("mask_" + picShortName[i] + ".dat");
+				if (std::filesystem::exists(showPath))
+				{ 
+					instance->ptsData.masks[i] = tools::loadMask(showPath.string());
+					if (!instance->ptsData.masks[i].empty())
+					{
+						imgNameForList[i][1] = '*';
+					}
+				}				 
 			}
 			//instance->ptsData.picShortName.insert(instance->ptsData.picShortName.end(), picShortName.begin(), picShortName.end());
 			//instance->ptsData.controlPtsAndTag.resize(picShortName.size());
@@ -260,14 +271,29 @@ public:
 			for (int i = 0; i < ptsData.tempPt.size(); i++)
 			{
 				ImVec2 guiPt = imgPt2GuiPt(ptsData.tempPt[i], currentImgHeight, currentImgWidth, canvas, zoom_start, zoom_end, draw_pos);
-				ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, 0xC80688FB);
+				ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, tempIncludeColor);
 				ImGui::GetForegroundDrawList()->AddCircle(guiPt, 4.0f, 0xC8000000);
 			}
 			for (int i = 0; i < ptsData.tempNegPt.size(); i++)
 			{
 				ImVec2 guiPt = imgPt2GuiPt(ptsData.tempNegPt[i], currentImgHeight, currentImgWidth, canvas, zoom_start, zoom_end, draw_pos);
-				ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, 0xFF54FF36);
+				ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, tempExcludeColor);
 				ImGui::GetForegroundDrawList()->AddCircle(guiPt, 4.0f, 0xC8000000);
+			}
+			for (const auto&[labelId,pt]: ptsData.hints[imgPickIdx])
+			{
+				if (labelId == 0)
+				{
+					ImVec2 guiPt = imgPt2GuiPt(ImVec2(pt.x,pt.y), currentImgHeight, currentImgWidth, canvas, zoom_start, zoom_end, draw_pos);
+					ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, excludeColor);
+					ImGui::GetForegroundDrawList()->AddCircle(guiPt, 4.0f, 0xC8000000);
+				}
+				else
+				{
+					ImVec2 guiPt = imgPt2GuiPt(ImVec2(pt.x, pt.y), currentImgHeight, currentImgWidth, canvas, zoom_start, zoom_end, draw_pos);
+					ImGui::GetForegroundDrawList()->AddCircleFilled(guiPt, 4.0f, includeColor);
+					ImGui::GetForegroundDrawList()->AddCircle(guiPt, 4.0f, 0xC8000000);
+				}
 			}
 		}
 		return true;
@@ -349,6 +375,8 @@ char SegmentGui::segmentNameStr[segmentNameStrLengthMax] = "\0";
 
 bool segmentFrame(bool* show_regist_window)
 {
+
+
 	ImGui::SetNextWindowSize(ImVec2(1280, 960));//ImVec2(x, y)
 	ImGui::Begin("segment", show_regist_window, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
 	ImGui::Text("segment"); 
@@ -444,17 +472,28 @@ bool segmentFrame(bool* show_regist_window)
 			imgDirPath = "";
 			modelDirPath = "";
 		}
-		ImGui::ColorButton("drag me", ImGui::ColorConvertU32ToFloat4(0xC80688FB), ImGuiColorEditFlags_NoPicker| ImGuiColorEditFlags_NoOptions| ImGuiColorEditFlags_NoSmallPreview| ImGuiColorEditFlags_NoTooltip| ImGuiColorEditFlags_NoLabel| ImGuiColorEditFlags_InputRGB);
+		ImGui::ColorButton("includeColor", includeColor_v, ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_NoOptions | ImGuiColorEditFlags_NoSmallPreview | ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_NoBorder);
+		ImGui::SameLine();
+		ImGui::ColorButton("tempIncludeColor_v", tempIncludeColor_v, ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_NoOptions | ImGuiColorEditFlags_NoSmallPreview | ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_NoBorder);
+		ImGui::SameLine();
+		ImGui::Text("inlier      ");
+		ImGui::SameLine();
+		ImGui::ColorButton("excludeColor", excludeColor_v, ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_NoOptions | ImGuiColorEditFlags_NoSmallPreview | ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_NoBorder);
+		ImGui::SameLine();
+		ImGui::ColorButton("tempExcludeColor_v", tempExcludeColor_v, ImGuiColorEditFlags_NoPicker | ImGuiColorEditFlags_NoOptions | ImGuiColorEditFlags_NoSmallPreview | ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_NoBorder);
+		ImGui::SameLine();
+		ImGui::Text("outlier");
 		if (segmentMgr != nullptr && segmentMgr->imgName.size() > 0)
 		{
 			auto imgListLocation = ImGui::GetCursorPos();
 			bool pickedChanged = false;
 			ImVec2 listPicSize(100, 500);
-			listComponent("picPick", listPicSize, segmentMgr->imgName, SegmentMgr::imgPickIdx, pickedChanged);
+			listComponent("picPick", listPicSize, segmentMgr->imgNameForList, SegmentMgr::imgPickIdx, pickedChanged);
 			ImVec2 canvas_location = imgListLocation;
 			canvas_location.x += listPicSize.x;
 			canvas_location.x += 10;
-			SegmentGui* segmentControlPtr = SegmentGui::getSegmentGui(canvas_location, 720, segmentMgr->imgName, segmentMgr->imgPaths);
+			SegmentGui* segmentControlPtr = SegmentGui::getSegmentGui(canvas_location, 720, segmentMgr->imgName, segmentMgr->imgPaths, segmentMgr->imgNameForList);
+			
 			if (SegmentMgr::imgPickIdx>=0 && (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) || ImGui::IsKeyPressed(ImGuiKey_UpArrow)))
 			{
 				pickedChanged = true;
@@ -483,9 +522,27 @@ bool segmentFrame(bool* show_regist_window)
 			}
 			if (SegmentMgr::imgPickIdx >= 0 && pickedChanged)
 			{
+				segmentMgr->sam2Ins->high_res_feats_0 = segmentMgr->high_res_feats_0s[SegmentMgr::imgPickIdx];
+				segmentMgr->sam2Ins->high_res_feats_1 = segmentMgr->high_res_feats_1s[SegmentMgr::imgPickIdx];
+				segmentMgr->sam2Ins->image_embed = segmentMgr->image_embeds[SegmentMgr::imgPickIdx];
+				segmentMgr->sam2Ins->oringalSize = segmentMgr->oringalSizes[SegmentMgr::imgPickIdx];
+
 				segmentControlPtr->ptsData.tempPt.clear();
 				segmentControlPtr->ptsData.tempNegPt.clear();
 				cv::Mat asd = cv::imread(segmentMgr->imgPaths[SegmentMgr::imgPickIdx].string());
+				const cv::Mat& mask = segmentControlPtr->ptsData.masks[SegmentMgr::imgPickIdx];
+				if (SegmentMgr::showMask && !mask.empty())
+				{
+					cv::Mat greenMask = cv::Mat::zeros(mask.size(), CV_8UC1);
+					cv::Mat blueMask = cv::Mat::zeros(mask.size(), CV_8UC1);
+					cv::Mat maskBgr;
+					cv::merge(std::vector<cv::Mat>{ blueMask, greenMask, mask }, maskBgr);
+					const float gamma = 0;
+					const float mixFacter = 0.5;
+					cv::Mat mixImg;
+					cv::addWeighted(asd, mixFacter, maskBgr, 1 - mixFacter, gamma, mixImg);
+					std::swap(mixImg,asd);
+				}
 				segmentControlPtr->feedImg(asd);
 				bool& mouseLeftDown = ImGui::GetIO().MouseReleased[0];
 				bool& mouseRightDown = ImGui::GetIO().MouseReleased[1];
@@ -531,34 +588,55 @@ bool segmentFrame(bool* show_regist_window)
 				{
 					ImGui::BeginDisabled();
 				}
+				bool trigerSeg = false;
 				if (ImGui::Button("seg"))
 				{
 					LOG_OUT << "seg at " << SegmentMgr::imgPickIdx;
-
-					progress.numerator.store(-1);
-					progress.procRunning.fetch_add(1);
-					progress.proc = new std::thread(
-						[&]() {
-
-
-							segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx].clear();
-							for (const auto&d: segmentControlPtr->ptsData.tempPt)
-							{
-								segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx].emplace_back(std::make_pair(1, cv::Point2i(d.x, d.y)));
-							}
-							for (const auto& d : segmentControlPtr->ptsData.tempNegPt)
-							{
-								segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx].emplace_back(std::make_pair(0, cv::Point2i(d.x, d.y)));
-							}
-							segmentMgr->sam2Ins->inputHint(segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx], segmentControlPtr->ptsData.masks[SegmentMgr::imgPickIdx]);
-							segmentControlPtr->ptsData.tempPt.clear();
-							segmentControlPtr->ptsData.tempNegPt.clear();
-							progress.procRunning.store(0);
+					for (const auto& d : segmentControlPtr->ptsData.tempPt)
+					{
+						segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx].emplace_back(std::make_pair(1, cv::Point2i(d.x, d.y)));
+					}
+					for (const auto& d : segmentControlPtr->ptsData.tempNegPt)
+					{
+						segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx].emplace_back(std::make_pair(0, cv::Point2i(d.x, d.y)));
+					}
+					int includeCnt = 0;
+					for (const auto&d: segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx])
+					{
+						if (d.first!=0)
+						{
+							includeCnt++;
 						}
-					);
-					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+					}
+					segmentControlPtr->ptsData.tempPt.clear();
+					segmentControlPtr->ptsData.tempNegPt.clear();
+					if (includeCnt!=0)
+					{ 			
+						segmentMgr->sam2Ins->inputHint(segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx], segmentControlPtr->ptsData.masks[SegmentMgr::imgPickIdx]);
+						trigerSeg = true;
+						segmentMgr->imgNameForList[SegmentMgr::imgPickIdx][1] = '*';
+						cv::Mat asd = cv::imread(segmentMgr->imgPaths[SegmentMgr::imgPickIdx].string());
+						const cv::Mat& mask = segmentControlPtr->ptsData.masks[SegmentMgr::imgPickIdx];
+						if (SegmentMgr::showMask && !mask.empty())
+						{
+							cv::Mat greenMask = cv::Mat::zeros(mask.size(), CV_8UC1);
+							cv::Mat blueMask = cv::Mat::zeros(mask.size(), CV_8UC1);
+							cv::Mat maskBgr;
+							cv::merge(std::vector<cv::Mat>{ blueMask, greenMask, mask }, maskBgr);
+							const float gamma = 0;
+							const float mixFacter = 0.5;
+							cv::Mat mixImg;
+							cv::addWeighted(asd, mixFacter, maskBgr, 1 - mixFacter, gamma, mixImg);
+							std::swap(mixImg, asd);
+						}
+						segmentControlPtr->feedImg(asd);
+					}
+					else
+					{
+						LOG_ERR_OUT << "must exist one point labeled non-zero";
+					}
 				}
-				if (segmentControlPtr->ptsData.tempPt.size() <= 0)
+				if (segmentControlPtr->ptsData.tempPt.size() <= 0 && !trigerSeg)
 				{
 					ImGui::EndDisabled();
 				}
@@ -567,21 +645,59 @@ bool segmentFrame(bool* show_regist_window)
 				{ 
 					cv::Mat asd = cv::imread(segmentMgr->imgPaths[SegmentMgr::imgPickIdx].string());
 					const cv::Mat& mask = segmentControlPtr->ptsData.masks[SegmentMgr::imgPickIdx];
-					const float gamma = 0;
-					const float mixFacter = 0.5;
-					cv::Mat mixImg;
-					cv::addWeighted(asd, mixFacter, mask, 1 - mixFacter, gamma, mixImg);
-					segmentControlPtr->feedImg(mixImg);
+					if (SegmentMgr::showMask && !mask.empty())
+					{
+						cv::Mat greenMask = cv::Mat::zeros(mask.size(), CV_8UC1);
+						cv::Mat blueMask = cv::Mat::zeros(mask.size(), CV_8UC1);
+						cv::Mat maskBgr;
+						cv::merge(std::vector<cv::Mat>{ blueMask, greenMask, mask }, maskBgr);
+						const float gamma = 0;
+						const float mixFacter = 0.5;
+						cv::Mat mixImg;
+						cv::addWeighted(asd, mixFacter, maskBgr, 1 - mixFacter, gamma, mixImg);
+						std::swap(mixImg, asd);
+					}
+					segmentControlPtr->feedImg(asd);
 				}
 				ImGui::SameLine();
 				if (ImGui::Button("~Tag") || ImGui::IsKeyPressed(ImGuiKey_Delete))
 				{
 					segmentControlPtr->ptsData.tempPt.clear();
 					segmentControlPtr->ptsData.tempNegPt.clear();
+					if (SegmentMgr::imgPickIdx>=0)
+					{
+						segmentControlPtr->ptsData.hints[SegmentMgr::imgPickIdx].clear();
+						segmentControlPtr->ptsData.masks[SegmentMgr::imgPickIdx].release();
+						segmentMgr->imgNameForList[SegmentMgr::imgPickIdx][1] = ' ';
+						cv::Mat asd = cv::imread(segmentMgr->imgPaths[SegmentMgr::imgPickIdx].string());
+						segmentControlPtr->feedImg(asd);
+					}					
 				}
 				ImGui::SameLine();
 				if (ImGui::Button("save"))
 				{
+					progress.denominator.store(segmentMgr->imgPaths.size());
+					progress.numerator.store(0);
+					progress.procRunning.fetch_add(1);
+					progress.proc = new std::thread(
+						[&]() {
+							for (size_t i = 0; i < segmentMgr->imgPaths.size(); i++)
+							{
+								const cv::Mat& mask = segmentControlPtr->ptsData.masks[i];
+								if (!mask.empty())
+								{
+									auto dirPath = segmentMgr->imgPaths[i].parent_path();
+									auto maskPath = dirPath / ("mask_" + segmentMgr->imgName[i]+".dat");							
+									tools::saveMask(maskPath.string(), mask);
+								}							
+								progress.numerator.fetch_add(1);
+							}
+							progress.procRunning.store(0);
+							progress.denominator.store(-1);
+							progress.numerator.store(-1);
+						}
+					);
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
 				}
 				deployButtom.y += 45;
 			}

@@ -9,9 +9,12 @@
 #include "log.h"
 #include "browser.h"
 #include "labelme.h"
+#include "registerFrame.h"
+#include "sam2.h"
+#include "imgui_tools.h"
 static bool showImgDirBrowser = false;
-static std::filesystem::path imgPath;
-static browser::Browser* filePicker = nullptr;
+static std::filesystem::path imgDirPath;
+static browser::Browser* imgDirPicker = nullptr;
 
   
 class ImgDir
@@ -30,7 +33,7 @@ public:
 		{
 			return;
 		}
-		for (auto const& dir_entry : std::filesystem::directory_iterator{ imgDir_ })
+		for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ imgDir_ })
 		{
 			const auto& thisFilename = dir_entry.path();
 			if (thisFilename.has_extension())
@@ -64,36 +67,94 @@ private:
 	std::filesystem::path imgDir_;
 };
 
-
+static ProgressThread progress;
+void endThread(ProgressThread&progress)
+{
+	progress.denominator.store(-1);
+	progress.numerator.store(-1);
+	progress.procRunning.store(0);
+	return;
+}
 bool registFrame(bool* show_regist_window)
 {
 	ImGui::SetNextWindowSize(ImVec2(1280, 960));//ImVec2(x, y)
 	ImGui::Begin("register", show_regist_window, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
 	//ImGui::Begin(u8"¶ÔÆë", show_far_align_window);
 	ImGui::Text("register");
-
-	if (ImGui::Button("pick image dir"))
+	int isProcRunning = progress.procRunning.load();
+	if (progress.proc != nullptr && isProcRunning > 0)
 	{
-		if (filePicker ==nullptr)
+		progress.procRunning.fetch_add(1);
+		progress.msg = "--------------------";
+		//int timeProgress= align::getCaptureTimestamp() % 40;
+		progress.msg[ProgressThread::getCaptureTimestamp() % 1000 / 50] = '@';
+		int num = progress.numerator.load();
+		int den = progress.denominator.load();
+		if (progress.numerator.load() >= 0)
 		{
-			imgPath = "";
-			filePicker = new browser::Browser(browser::BrowserPick::PICK_DIR);
+			progress.msg += (std::to_string(num) + "/" + std::to_string(den));
 		}
 	}
-	if (filePicker != nullptr)
+	if (progress.proc != nullptr && isProcRunning == 0)
 	{
-		if (filePicker->pick(imgPath))
+		if (progress.proc != nullptr)
 		{
-			if (!imgPath.empty())
+			if (progress.proc->joinable())
 			{
-				new ImgDir(imgPath);
+				progress.msg = "";
+				progress.proc->join();
+				progress.procRunning.store(false);
 			}
-			delete filePicker;
-			filePicker = nullptr;
+			progress.proc = nullptr;
 		}
 	}
 
-
+	while (isProcRunning == 0)
+	{
+		if (ImGui::Button("pick image dir"))
+		{
+			imgDirPath = "";
+			if (imgDirPicker == nullptr)
+			{
+				imgDirPicker = new browser::Browser(browser::BrowserPick::PICK_DIR);
+			}
+		}
+		if (imgDirPicker != nullptr && imgDirPath.string().length() == 0)
+		{
+			if (imgDirPicker->pick(imgDirPath))
+			{
+				if (!imgDirPath.empty())
+				{
+					LOG_OUT << imgDirPath;
+				}
+				delete imgDirPicker;
+				imgDirPicker = nullptr;
+			}
+		}
+		if (std::filesystem::exists(imgDirPath))
+		{
+			progress.numerator.store(-1);
+			progress.procRunning.fetch_add(1);
+			progress.proc = new std::thread(
+				[&]() {
+					int registRet = register_incremental(imgDirPath.string());
+					if (0== registRet)
+					{
+						segmentDirWithLandmarks(imgDirPath / "result");
+					}
+					
+					endThread(progress);
+				}
+			);
+			std::this_thread::sleep_for(std::chrono::milliseconds(100)); 
+			imgDirPath = "";
+		}
+		break;
+	}
+	if (progress.msg.length() > 0)
+	{
+		ImGui::Text(progress.msg.c_str());
+	}
 	if (ImGui::Button("Close Me") && *show_regist_window) *show_regist_window = false;
 	ImGui::End();
 	return true;

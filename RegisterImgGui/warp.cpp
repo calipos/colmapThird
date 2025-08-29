@@ -69,6 +69,67 @@ void WarpImageBetweenCameras(const Camera& source_camera,
     }
 }
 
+void WarpImageBetweenCameras(const Camera& source_camera,
+    const Camera& target_camera,
+    const Bitmap& source_image,
+    Bitmap* target_image,
+    Eigen::MatrixXi& source_to_target_x_map,
+    Eigen::MatrixXi& source_to_target_y_map
+    ) {
+    THROW_CHECK_EQ(source_camera.width, source_image.Width());
+    THROW_CHECK_EQ(source_camera.height, source_image.Height());
+    THROW_CHECK_NOTNULL(target_image);
+
+    target_image->Allocate(static_cast<int>(source_camera.width),
+        static_cast<int>(source_camera.height),
+        source_image.IsRGB());
+
+    // To avoid aliasing, perform the warping in the source resolution and
+    // then rescale the image at the end.
+    Camera scaled_target_camera = target_camera;
+    if (target_camera.width != source_camera.width ||
+        target_camera.height != source_camera.height) {
+        scaled_target_camera.Rescale(source_camera.width, source_camera.height);
+    }
+    source_to_target_x_map = Eigen::MatrixXi::Zero(source_camera.height, source_camera.width);
+    source_to_target_y_map = Eigen::MatrixXi::Zero(source_camera.height, source_camera.width);
+
+    Eigen::Vector2d image_point;
+    for (int y = 0; y < target_image->Height(); ++y) {
+        image_point.y() = y + 0.5;
+        for (int x = 0; x < target_image->Width(); ++x) {
+            image_point.x() = x + 0.5;
+
+            // Camera models assume that the upper left pixel center is (0.5, 0.5).
+            const Eigen::Vector2d cam_point =
+                scaled_target_camera.CamFromImg(image_point);
+            const Eigen::Vector2d source_point = source_camera.ImgFromCam(cam_point);
+
+            BitmapColor<float> color;
+            if (source_image.InterpolateBilinear(
+                source_point.x() - 0.5, source_point.y() - 0.5, &color)) {
+                target_image->SetPixel(x, y, color.Cast<uint8_t>());
+
+                int srcX = source_point.x() - 0.5;
+                int srcY = source_point.y() - 0.5;
+                if (srcX >= 0 && srcX < source_camera.width&& srcY >= 0 && srcY < source_camera.height)
+                {
+                    source_to_target_x_map(srcY, srcX) = x;
+                    source_to_target_y_map(srcY, srcX) = y;
+                }
+            }
+            else {
+                target_image->SetPixel(x, y, BitmapColor<uint8_t>(0));
+            }
+        }
+    }
+
+    if (target_camera.width != source_camera.width ||
+        target_camera.height != source_camera.height) {
+        target_image->Rescale(target_camera.width, target_camera.height);
+    }
+}
+
 void WarpImageWithHomography(const Eigen::Matrix3d& H,
     const Bitmap& source_image,
     Bitmap* target_image) {

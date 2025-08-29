@@ -20,7 +20,6 @@ namespace sam2
 		bool inputHint();
 		bool inputHint(const std::vector<std::pair<int, cv::Point2i>>& hint, cv::Mat& mask);
 		bool inputSingleHint(const float& hintx, const float& hinty, const int labelId, const cv::Mat& inPutMask, cv::Mat& mask);
-		cv::Size oringalSize;
 		bool serializationFeat(const std::filesystem::path& path);
 		bool deserializationFeat(const std::filesystem::path& path);
 		const static std::vector<int>high_res_feats_0_shape;
@@ -32,7 +31,9 @@ namespace sam2
 		cv::Mat high_res_feats_0;
 		cv::Mat high_res_feats_1;
 		cv::Mat image_embed;
+		cv::Size oringalSize;
 	};
 
 }
+int segmentDirWithLandmarks(const std::filesystem::path& dir);
 #endif // !_SAM2_H_

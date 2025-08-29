@@ -188,6 +188,7 @@
     <ClCompile Include="labelme.cpp" />
     <ClCompile Include="log.cpp" />
     <ClCompile Include="misc.cpp" />
+    <ClCompile Include="opencvTools.cpp" />
     <ClCompile Include="pips2.cpp" />
     <ClCompile Include="pose.cpp" />
     <ClCompile Include="projection.cpp" />
@@ -228,6 +229,7 @@
     <ClInclude Include="manifold.h" />
     <ClInclude Include="matrix.h" />
     <ClInclude Include="misc.h" />
+    <ClInclude Include="opencvTools.h" />
     <ClInclude Include="pips2.h" />
     <ClInclude Include="pose.h" />
     <ClInclude Include="projection.h" />

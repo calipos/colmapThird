@@ -76,6 +76,10 @@ int main(int, char**)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame(); 
         ImGui::Begin("Hello, world!");
+        if (ImGui::Button("annotation") && !show_annotation_window)
+        {
+            show_annotation_window = !show_annotation_window;
+        }
         if (ImGui::Button("register") && !show_imgRegister_window)
         {
             show_imgRegister_window = !show_imgRegister_window;
@@ -83,10 +87,6 @@ int main(int, char**)
         if (ImGui::Button("segment") && !show_segment_window)
         {
             show_segment_window = !show_segment_window;
-        }
-        if (ImGui::Button("annotation") && !show_annotation_window)
-        {
-            show_annotation_window = !show_annotation_window;
         }
         ImGui::End();
         if (show_imgRegister_window)

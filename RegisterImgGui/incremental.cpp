@@ -18,6 +18,7 @@
 #include "bitmap.h"
 #include "undistortion.h"
 #include "opencv2/opencv.hpp"
+#include "registerFrame.h"
 int test_bitmap()
 {
     std::filesystem::path dataPath = "../data";
@@ -71,22 +72,22 @@ namespace utils
         return true;
     }
 }
-int test_incremental()
+int register_incremental(const std::string& folder)
 {
-    std::vector<image_t> incrementalImages (55);
-    std::iota(incrementalImages.begin(), incrementalImages.end(), 0);
     //std::shuffle(incrementalImages.begin(), incrementalImages.end(), std::default_random_engine(0));
     //std::vector<image_t>incrementalImages = { 0,1,2,3,4 };
-    std::filesystem::path dataPath = "../data/a";
+    std::filesystem::path dataPath = folder;
     std::map<Camera, std::vector<Image>> dataset = loadImageData(dataPath, ImageIntrType::SHARED_ALL);
     std::vector<Camera>cameraList;
     std::vector<Image> imageList;
     convertDataset(dataset, cameraList, imageList);
+    std::vector<image_t> incrementalImages(imageList.size());
+    std::iota(incrementalImages.begin(), incrementalImages.end(), 0);
     std::unordered_map<point3D_t, Eigen::Vector3d>objPts;
     std::unordered_map < image_t, struct Rigid3d>poses;
     for (int i = 1; i < incrementalImages.size(); i++)
     {
-        LOG_OUT << "\n====================================  "<<i<<" ====================================";
+        LOG_OUT << "\n====================================  " << i << " ====================================";
         image_t picked2 = incrementalImages[i];
         {
             //figure new frame pose from prev Image
@@ -117,15 +118,15 @@ int test_incremental()
                 std::vector<cv::Point3d>objPtsPnp;
                 imgPtsPnp.reserve(image2.featPts.size());
                 objPtsPnp.reserve(image2.featPts.size());
-                for (const auto&[ptId, imgPt]: image2.featPts)
+                for (const auto& [ptId, imgPt] : image2.featPts)
                 {
-                    if (objPts.count(ptId)>0)
+                    if (objPts.count(ptId) > 0)
                     {
                         imgPtsPnp.emplace_back(imgPt[0], imgPt[1]);
                         objPtsPnp.emplace_back(objPts[ptId][0], objPts[ptId][1], objPts[ptId][2]);
                     }
                 }
-                if (objPtsPnp.size()>=6)
+                if (objPtsPnp.size() >= 6)
                 {
                     Eigen::Matrix3x4d Rt = image1.CamFromWorld().ToMatrix();
                     cv::Mat rvec, tvec;
@@ -136,17 +137,17 @@ int test_incremental()
                     //LOG_OUT << q2;
 
 
-                    cv::Mat intrMat = utils:: intrConvert(camera2.CalibrationMatrix());
+                    cv::Mat intrMat = utils::intrConvert(camera2.CalibrationMatrix());
                     cv::solvePnP(objPtsPnp, imgPtsPnp, intrMat, cv::Mat(), rvec, tvec, true);
                     Eigen::AngleAxisd eulerAngle(cv::norm(rvec), Eigen::Vector3d(rvec.ptr<double>(0)[0] / cv::norm(rvec), rvec.ptr<double>(1)[0] / cv::norm(rvec), rvec.ptr<double>(2)[0] / cv::norm(rvec)));
                     Rigid3d pnpRt(Eigen::Quaterniond(eulerAngle), Eigen::Vector3d(tvec.ptr<double>(0)[0], tvec.ptr<double>(1)[0], rvec.ptr<double>(2)[0]));
-                    LOG_OUT << "before pnp: "<< image2.CamFromWorld().ToMatrix();
+                    LOG_OUT << "before pnp: " << image2.CamFromWorld().ToMatrix();
                     //if (i!=9)
                     //{
-                        image2.SetCamFromWorld(pnpRt);
-                        LOG_OUT << "after  pnp: " << image2.CamFromWorld().ToMatrix();
+                    image2.SetCamFromWorld(pnpRt);
+                    LOG_OUT << "after  pnp: " << image2.CamFromWorld().ToMatrix();
                     //}
-                    
+
                 }
 
 
@@ -194,13 +195,13 @@ int test_incremental()
                 }
             }
         }
-        if(i!=1)// only two images need not ba.
+        if (i != 1)// only two images need not ba.
         {
             //ba
             BundleAdjustmentOptions ba_options;
             BundleAdjustmentConfig ba_config;
-            for (int j = 0; j <= i; j++) 
-            { 
+            for (int j = 0; j <= i; j++)
+            {
                 ba_config.AddImage(incrementalImages[j]);
                 //LOG_OUT << incrementalImages[j];
             }
@@ -208,9 +209,9 @@ int test_incremental()
             std::unique_ptr<BundleAdjuster> bundle_adjuster;
             ba_config.SetConstantCamPose(incrementalImages[0]);  // 1st image
             bundle_adjuster = CreateDefaultBundleAdjuster(std::move(ba_options), std::move(ba_config), cameraList, imageList, objPts);
-             
+
             auto solverRet = bundle_adjuster->Solve();
-            for (const auto& d : objPts) LOG_OUT<<"objPts : " << d.second[0] << "  " << d.second[1] << "  " << d.second[2];
+            for (const auto& d : objPts) LOG_OUT << "objPts : " << d.second[0] << "  " << d.second[1] << "  " << d.second[2];
             LOG_OUT << "after  ba: " << imageList[picked2].CamFromWorld().ToMatrix();
             for (int j = 0; j < cameraList.size(); j++) LOG_OUT << cameraList[j];
             if (solverRet.termination_type != ceres::CONVERGENCE)
@@ -225,11 +226,17 @@ int test_incremental()
         }
     }
 
-    for (auto&d: poses)
+    for (auto& d : poses)
     {
         d.second = imageList[d.first].CamFromWorld();
     }
-    writeResult(dataPath/"result", cameraList, imageList, objPts, poses);
+    writeResult(dataPath / "result", cameraList, imageList, objPts, poses);
+
+    return 0;
+}
+int test_incremental()
+{
+    register_incremental("../data/a");
 
     return 0;
 }

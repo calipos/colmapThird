@@ -168,10 +168,23 @@ bool writeResult(const std::filesystem::path& dataDir,
 		Bitmap distorted_bitmap;
 		distorted_bitmap.Read(image1.Name());
 		Bitmap  undistorted_bitmap;//
+		//WarpImageBetweenCameras(distorted_camera,
+		//	undistorted_camera,
+		//	distorted_bitmap,
+		//	&undistorted_bitmap);
+
+		Eigen::MatrixXi source_to_target_x_map;
+		Eigen::MatrixXi source_to_target_y_map;
 		WarpImageBetweenCameras(distorted_camera,
 			undistorted_camera,
 			distorted_bitmap,
-			&undistorted_bitmap);
+			&undistorted_bitmap,
+			source_to_target_x_map,
+			source_to_target_y_map);
+
+		 
+
+
 		distorted_bitmap.CloneMetadata(&undistorted_bitmap);
 		undistorted_bitmap.Write(newImgPath.string());
 
@@ -186,6 +199,24 @@ bool writeResult(const std::filesystem::path& dataDir,
 		labelRoot["cy"] = Json::Value(undistorted_camera.params[3]);
 		labelRoot["width"] = Json::Value(undistorted_camera.width);
 		labelRoot["height"] = Json::Value(undistorted_camera.height);
+		for (const auto& d__ : image1.featPts)
+		{
+			int x = d__.second.x();
+			int y = d__.second.y();
+			int x2 = -1;
+			int y2 = -1;
+			if (x >= 0 && x < distorted_camera.width&& y >= 0 && y < distorted_camera.height)
+			{
+				x2 = source_to_target_x_map(y, x);
+				y2 = source_to_target_y_map(y, x);
+			} 
+			Json::Value undistortedFeatPt;
+			undistortedFeatPt.append(x2);
+			undistortedFeatPt.append(y2);
+			std::string ptName = "undistortedFeat_" + Image::keypointIndexToName[d__.first];
+			LOG_OUT << ptName;
+			labelRoot[ptName] = undistortedFeatPt;
+		}
 		Json::Value Qt;
 		Qt.append(Rt.rotation.w());
 		Qt.append(Rt.rotation.x());
@@ -214,7 +245,7 @@ bool writeResult(const std::filesystem::path& dataDir,
 			idx++;
 		}
 		LOG_OUT << newImgPath;
-		LOG_OUT << pts3d;
+		//LOG_OUT << pts3d;
 		Rigid3d  Rtinv = Inverse(Rt);
 		Eigen::MatrixXd pts3d2 = Rtinv.ToMatrix() * pts3d;
 		pts3d2 = Rt.ToMatrix() * pts3d;
