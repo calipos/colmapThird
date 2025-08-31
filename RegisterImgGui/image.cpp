@@ -1,6 +1,8 @@
 #include <numeric>
 #include <vector>
+#include <fstream>
 #include "image.h"
+#include "json/json.h"
 //#include "colmap/geometry/pose.h"
 //#include "colmap/scene/projection.h"
  
@@ -50,6 +52,57 @@ bool Image::SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>& featPts)
     //    points2D_[featIds[point2D_idx]] = featPts.at(featIds[point2D_idx]);
     //}
 
+}
+int Image::writeRegisterJson(const std::filesystem::path&imgJsonPath,
+    const int& version, const std::filesystem::path& imgPath,
+    const double& fx, const double& fy,
+    const double& cx, const double& cy,
+    const int& imgHeight, const int& imgWidth,
+    const struct Rigid3d& Rt,
+    const Eigen::MatrixXi& source_to_target_x_map,
+    const Eigen::MatrixXi& source_to_target_y_map)const
+{
+    Json::Value labelRoot;
+    labelRoot["version"] = Json::Value(std::to_string(version));
+    labelRoot["imagePath"] = Json::Value(imgPath.string());
+    labelRoot["fx"] = Json::Value(fx);
+    labelRoot["fy"] = Json::Value(fy);
+    labelRoot["cx"] = Json::Value(cx);
+    labelRoot["cy"] = Json::Value(cy);
+    labelRoot["width"] = Json::Value(imgWidth);
+    labelRoot["height"] = Json::Value(imgHeight);
+    for (const auto& d__ : this->featPts)
+    {
+        int x = d__.second.x();
+        int y = d__.second.y();
+        int x2 = -1;
+        int y2 = -1;
+        if (x >= 0 && x < imgWidth && y >= 0 && y < imgHeight)
+        {
+            x2 = source_to_target_x_map(y, x);
+            y2 = source_to_target_y_map(y, x);
+        }
+        Json::Value undistortedFeatPt;
+        undistortedFeatPt.append(x2);
+        undistortedFeatPt.append(y2);
+        std::string ptName = "undistortedFeat_" + Image::keypointIndexToName[d__.first];
+        labelRoot[ptName] = undistortedFeatPt;
+    }
+    Json::Value Qt;
+    Qt.append(Rt.rotation.w());
+    Qt.append(Rt.rotation.x());
+    Qt.append(Rt.rotation.y());
+    Qt.append(Rt.rotation.z());
+    Qt.append(Rt.translation.x());
+    Qt.append(Rt.translation.y());
+    Qt.append(Rt.translation.z());
+    labelRoot["Qt"] = Qt;
+    Json::StyledWriter sw;
+    std::fstream fout(imgJsonPath, std::ios::out);
+    fout << sw.write(labelRoot);
+    fout.close();
+
+    return 0;
 }
 void Image::SetPoint3DForPoint2D(const point2D_t point2D_idx,
     const point3D_t point3D_id) {

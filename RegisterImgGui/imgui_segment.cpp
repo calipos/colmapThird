@@ -4,12 +4,15 @@
 #include <fstream>
 #include <atomic>
 #include <map>
+#include "Eigen/Core"
+#include <Eigen/Geometry>
 #include "imgui.h" 
 #include "browser.h"
 #include "segmentFrame.h"
 #include "imgui_tools.h"
 #include "log.h"
 #include "sam2.h"
+#include "labelme.h"
 #include "opencvTools.h"
 static bool showImgDirBrowser = false;
 static std::filesystem::path imgDirPath;
@@ -81,9 +84,13 @@ public:
 					{
 						imgPaths.emplace_back(thisFilename);
 						std::string stem = thisFilename.filename().stem().string();
-						imgName.emplace_back(stem);
-						imgNameForList.emplace_back("   "+stem);
-						imgDat.emplace_back(img);
+						auto jsonPath = thisFilename.parent_path() / (stem+".json");
+						if (std::filesystem::exists(jsonPath))
+						{
+							imgName.emplace_back(stem);
+							imgNameForList.emplace_back("   " + stem);
+							imgDat.emplace_back(img);
+						}
 					}
 					
 				}
@@ -123,6 +130,25 @@ public:
 				image_embeds.emplace_back(sam2Ins->image_embed);
 				oringalSizes.emplace_back(sam2Ins->oringalSize);
 			}
+
+
+			auto jsonPath = parentDir / (shortName + ".json");
+			Eigen::MatrixX2d pts = labelme::readPtsFromRegisterJson(jsonPath);
+			if (pts.rows() != 0)
+			{
+				int hintx = pts.col(0).mean();
+				int hinty = pts.col(1).mean();
+				std::vector < std::pair<int, cv::Point2i> > hint={ {1,{hintx,hinty}} };
+				cv::Mat mask;
+				sam2Ins->inputHint(hint,mask);
+				LOG_OUT << shortName<<" "<< hintx<<", "<< hinty;
+				auto maskPath = parentDir / ("mask_" + shortName + ".dat");
+				tools::saveMask(maskPath.string(), mask);
+			}
+			
+
+
+
 			progress.numerator.fetch_add(1);			
 		}
 		progress.procRunning.store(0);

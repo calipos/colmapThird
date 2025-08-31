@@ -211,7 +211,7 @@ int register_incremental(const std::string& folder)
             bundle_adjuster = CreateDefaultBundleAdjuster(std::move(ba_options), std::move(ba_config), cameraList, imageList, objPts);
 
             auto solverRet = bundle_adjuster->Solve();
-            for (const auto& d : objPts) LOG_OUT << "objPts : " << d.second[0] << "  " << d.second[1] << "  " << d.second[2];
+            //for (const auto& d : objPts) LOG_OUT << "objPts : " << d.second[0] << "  " << d.second[1] << "  " << d.second[2];
             LOG_OUT << "after  ba: " << imageList[picked2].CamFromWorld().ToMatrix();
             for (int j = 0; j < cameraList.size(); j++) LOG_OUT << cameraList[j];
             if (solverRet.termination_type != ceres::CONVERGENCE)

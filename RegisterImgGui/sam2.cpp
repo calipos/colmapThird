@@ -8,7 +8,7 @@
 #include <fstream>
 #include "sam2.h"
 #include "dnnHelper.h"
-
+#include "labelme.h"
 namespace sam2
 {
     //"/Reshape_12_output_0", "/GreaterOrEqual_output_0","/iou_prediction_head/Sigmoid_output_0",  "/ArgMax_output_0"
@@ -613,8 +613,8 @@ static void sam2_onMouse(int event, int x, int y, int flags, void* sam2Ins)
 int test_sam_gui()
 {
     gui_hint.clear();
-    std::string imgPath= "../data3/00002.jpg";
-    std::filesystem::path featPath = "../data3/00002.samDat";
+    std::string imgPath= "../a.bmp";
+    std::filesystem::path featPath = "../a.samDat";
     gui_img = cv::imread(imgPath);;
     gui_img.copyTo(gui_addWeight);
     sam2::Sam2 sam2Ins("../models/ncnnEncoder.param", "../models/ncnnEncoder.bin", "../models/opencv_decoder.onnx");
@@ -697,10 +697,6 @@ int test_multitimes_construction()
     {
         sam2Ins.inputImage("../a.bmp");
     }
-    return 0;
-}
-int segmentDirWithLandmarks(const std::filesystem::path& dir)
-{
     return 0;
 }
 int test_mask()

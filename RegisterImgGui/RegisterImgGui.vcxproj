@@ -193,7 +193,7 @@
     <ClCompile Include="pose.cpp" />
     <ClCompile Include="projection.cpp" />
     <ClCompile Include="reconstruction.cpp" />
-    <ClCompile Include="registerFrame.cpp" />
+    <ClCompile Include="imgui_register.cpp" />
     <ClCompile Include="registerImgMain.cpp" />
     <ClCompile Include="rigid3.cpp" />
     <ClCompile Include="sam2.cpp" />

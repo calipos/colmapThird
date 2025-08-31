@@ -69,6 +69,58 @@ namespace labelme
 		return true;
 	}
 
+	Eigen::MatrixX2d readPtsFromRegisterJson(const std::filesystem::path& imgJsonPath)
+	{
+		std::stringstream ss;
+		std::string aline;
+		std::fstream fin(imgJsonPath, std::ios::in);
+		while (std::getline(fin, aline))
+		{
+			ss << aline;
+		}
+		fin.close();
+		aline = ss.str();
+		JSONCPP_STRING err;
+		Json::Value newRoot;
+		const auto rawJsonLength = static_cast<int>(aline.length());
+		Json::CharReaderBuilder newBuilder;
+		const std::unique_ptr<Json::CharReader> newReader(newBuilder.newCharReader());
+		if (!newReader->parse(aline.c_str(), aline.c_str() + rawJsonLength, &newRoot,
+			&err)) {
+			return  Eigen::MatrixX2d();
+		}
+		auto newMemberNames = newRoot.getMemberNames();
+		std::vector<std::string>keypointName;
+		keypointName.reserve(newMemberNames.size());
+		for (const auto&d: newMemberNames)
+		{
+			std::string name(d);
+			if (name.find("undistortedFeat_") == 0)
+			{
+				keypointName.emplace_back(name);
+			}
+		}
+		try
+		{
+
+			Eigen::MatrixX2d pts(keypointName.size(),2);
+			for (size_t i = 0; i < keypointName.size(); i++)
+			{
+				auto xy = newRoot[keypointName[i]];
+				if (xy.isArray() && xy.size() == 2)
+				{
+					pts(i, 0) = xy[0].asDouble();
+					pts(i, 1) = xy[1].asDouble();
+				}
+			}
+			return pts;
+		}
+		catch (const std::exception&)
+		{
+			return Eigen::MatrixX2d();
+		}
+		
+	}
 
 	int writeLabelMeLinestripJson(const std::filesystem::path& imgPath, const std::map<std::string, Eigen::Vector2d>& sortedPtsBaseLabel)
 	{

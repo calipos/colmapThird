@@ -182,55 +182,13 @@ bool writeResult(const std::filesystem::path& dataDir,
 			source_to_target_x_map,
 			source_to_target_y_map);
 
-		 
-
-
 		distorted_bitmap.CloneMetadata(&undistorted_bitmap);
 		undistorted_bitmap.Write(newImgPath.string());
 
-
 		newImgPath = std::filesystem::canonical(newImgPath);
-		Json::Value labelRoot;
-		labelRoot["version"] = Json::Value("1");
-		labelRoot["imagePath"] = Json::Value(newImgPath.string());
-		labelRoot["fx"] = Json::Value(undistorted_camera.params[0]);
-		labelRoot["fy"] = Json::Value(undistorted_camera.params[1]);
-		labelRoot["cx"] = Json::Value(undistorted_camera.params[2]);
-		labelRoot["cy"] = Json::Value(undistorted_camera.params[3]);
-		labelRoot["width"] = Json::Value(undistorted_camera.width);
-		labelRoot["height"] = Json::Value(undistorted_camera.height);
-		for (const auto& d__ : image1.featPts)
-		{
-			int x = d__.second.x();
-			int y = d__.second.y();
-			int x2 = -1;
-			int y2 = -1;
-			if (x >= 0 && x < distorted_camera.width&& y >= 0 && y < distorted_camera.height)
-			{
-				x2 = source_to_target_x_map(y, x);
-				y2 = source_to_target_y_map(y, x);
-			} 
-			Json::Value undistortedFeatPt;
-			undistortedFeatPt.append(x2);
-			undistortedFeatPt.append(y2);
-			std::string ptName = "undistortedFeat_" + Image::keypointIndexToName[d__.first];
-			LOG_OUT << ptName;
-			labelRoot[ptName] = undistortedFeatPt;
-		}
-		Json::Value Qt;
-		Qt.append(Rt.rotation.w());
-		Qt.append(Rt.rotation.x());
-		Qt.append(Rt.rotation.y());
-		Qt.append(Rt.rotation.z());
-		Qt.append(Rt.translation.x());
-		Qt.append(Rt.translation.y());
-		Qt.append(Rt.translation.z());
-		labelRoot["Qt"] = Qt;
-		Json::StyledWriter sw;
-		std::fstream fout(imgJsonPath, std::ios::out);
-		fout << sw.write(labelRoot);
-		fout.close();
-
+		image1.writeRegisterJson(imgJsonPath, 1, newImgPath,
+			undistorted_camera.params[0], undistorted_camera.params[1], undistorted_camera.params[2], undistorted_camera.params[3],
+			undistorted_camera.height, undistorted_camera.width, Rt, source_to_target_x_map, source_to_target_y_map);
 
 
 		Eigen::MatrixXd pts3d(4, objPts.size());
@@ -245,7 +203,6 @@ bool writeResult(const std::filesystem::path& dataDir,
 			idx++;
 		}
 		LOG_OUT << newImgPath;
-		//LOG_OUT << pts3d;
 		Rigid3d  Rtinv = Inverse(Rt);
 		Eigen::MatrixXd pts3d2 = Rtinv.ToMatrix() * pts3d;
 		pts3d2 = Rt.ToMatrix() * pts3d;

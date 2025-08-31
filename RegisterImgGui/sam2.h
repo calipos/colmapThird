@@ -35,5 +35,4 @@ namespace sam2
 	};
 
 }
-int segmentDirWithLandmarks(const std::filesystem::path& dir);
 #endif // !_SAM2_H_

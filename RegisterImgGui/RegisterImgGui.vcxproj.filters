@@ -75,7 +75,7 @@
     <ClCompile Include="reconstruction.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="registerFrame.cpp">
+    <ClCompile Include="imgui_register.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="registerImgMain.cpp">

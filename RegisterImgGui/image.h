@@ -92,6 +92,14 @@ public:
     static std::map<point2D_t,std::string>keypointIndexToName;
     std::map<point2D_t, Eigen::Vector2d>featPts;
     bool SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>&featPts);
+    int writeRegisterJson(const std::filesystem::path& imgJsonPath,
+        const int& version, const std::filesystem::path& imgPath,
+        const double& fx, const double& fy,
+        const double& cx, const double& cy,
+        const int& imgHeight, const int& imgWidth,
+        const struct Rigid3d& Rt,
+        const Eigen::MatrixXi& source_to_target_x_map,
+        const Eigen::MatrixXi& source_to_target_y_map)const;
 private:
     // Identifier of the image, if not specified `kInvalidImageId`.
     image_t image_id_;

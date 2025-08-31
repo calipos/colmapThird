@@ -34,8 +34,8 @@ shared_out = [
     # '/Add_14_output_0',
     # '/Shape_34_output_0'
     ]
-checkmodel = True
-inferShapes = True
+checkmodel = False
+inferShapes = False
 # point_coords = np.array(
 #     [[[10., 10.], [500., 400.], [200., 600.], [100., 300.], [200., 300.],[0,0]]]).astype(np.float32)
 # point_labels = np.array([[1, 1,1,1,-1,1]]).astype(np.float32)
@@ -1386,14 +1386,14 @@ def readBlob(path):
 
 if __name__=='__main__':
 
-    high_res_feats_0 = readBlob('D:/repo/colmapThird/high_res_feats_0_blob.dat')
-    high_res_feats_1 = readBlob('D:/repo/colmapThird/high_res_feats_1_blob.dat')
-    image_embed = readBlob('D:/repo/colmapThird/imgEmbedding_blob.dat')
-    image_embed = image_embed.reshape(1, 256, 64, 64)
+    # high_res_feats_0 = readBlob('D:/repo/colmapThird/high_res_feats_0_blob.dat')
+    # high_res_feats_1 = readBlob('D:/repo/colmapThird/high_res_feats_1_blob.dat')
+    # image_embed = readBlob('D:/repo/colmapThird/imgEmbedding_blob.dat')
+    # image_embed = image_embed.reshape(1, 256, 64, 64)
 
     if True:
-        # convert_sam2_hiera_large_encoder_to_opencvOnnx()
-        test_forward()
+        convert_sam2_hiera_large_encoder_to_opencvOnnx()
+        # test_forward()
     # convert_sam2_decoder_point_label()
     # test_dynamic_reshape()
 

@@ -137,12 +137,8 @@ bool registFrame(bool* show_regist_window)
 			progress.procRunning.fetch_add(1);
 			progress.proc = new std::thread(
 				[&]() {
-					int registRet = register_incremental(imgDirPath.string());
-					if (0== registRet)
-					{
-						segmentDirWithLandmarks(imgDirPath / "result");
-					}
-					
+					std::filesystem::path imgDirPath_ = imgDirPath;
+					int registRet = register_incremental(imgDirPath_.string());
 					endThread(progress);
 				}
 			);
