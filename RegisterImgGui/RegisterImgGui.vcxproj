@@ -187,6 +187,7 @@
     <ClCompile Include="incremental.cpp" />
     <ClCompile Include="labelme.cpp" />
     <ClCompile Include="log.cpp" />
+    <ClCompile Include="maskSynthesis.cpp" />
     <ClCompile Include="misc.cpp" />
     <ClCompile Include="opencvTools.cpp" />
     <ClCompile Include="pips2.cpp" />
@@ -227,6 +228,7 @@
     <ClInclude Include="labelme.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="manifold.h" />
+    <ClInclude Include="maskSynthesis.h" />
     <ClInclude Include="matrix.h" />
     <ClInclude Include="misc.h" />
     <ClInclude Include="opencvTools.h" />

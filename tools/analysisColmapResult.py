@@ -274,11 +274,6 @@ def segmentPatch(path,npyOutName):
 
 
 if __name__ == '__main__':
-    segmentPatch('D:/repo/colmapThird/data/a/result/shapeMask/resulta@00034.jpg',
-                 'mask_resulta@00034.jpg.npy')
-    exit(0)
-
-
     dataRoot = 'data/a/result'
     cameraDict, imgs = listImg(dataRoot)
     pts = readColmapResult2(dataRoot)

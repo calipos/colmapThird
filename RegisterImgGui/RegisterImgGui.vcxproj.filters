@@ -147,6 +147,9 @@
     <ClCompile Include="opencvTools.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="maskSynthesis.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">
@@ -267,6 +270,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="opencvTools.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="maskSynthesis.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

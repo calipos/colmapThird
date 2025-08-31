@@ -4,6 +4,7 @@
 #include "json/json.h"
 #include "log.h"
 #include "opencv2/opencv.hpp"
+#include "Eigen/Geometry"
 namespace labelme
 {
 	bool readPtsFromLabelMeJson(const std::filesystem::path& jsonPath,
@@ -122,6 +123,68 @@ namespace labelme
 		
 	}
 
+	bool readCmaeraFromRegisterJson(const std::filesystem::path& imgJsonPath, Eigen::Matrix4f& cameraMatrix, Eigen::Matrix4f& Rt)
+	{
+		std::stringstream ss;
+		std::string aline;
+		std::fstream fin(imgJsonPath, std::ios::in);
+		while (std::getline(fin, aline))
+		{
+			ss << aline;
+		}
+		fin.close();
+		aline = ss.str();
+		JSONCPP_STRING err;
+		Json::Value newRoot;
+		const auto rawJsonLength = static_cast<int>(aline.length());
+		Json::CharReaderBuilder newBuilder;
+		const std::unique_ptr<Json::CharReader> newReader(newBuilder.newCharReader());
+		if (!newReader->parse(aline.c_str(), aline.c_str() + rawJsonLength, &newRoot,
+			&err)) {
+			return  false;
+		}
+		auto newMemberNames = newRoot.getMemberNames();
+		if (newMemberNames.end() == std::find(newMemberNames.begin(), newMemberNames.end(), "fx"))
+		{
+			LOG_ERR_OUT << "not found : fx";
+			return  false;
+		}
+		if (newMemberNames.end() == std::find(newMemberNames.begin(), newMemberNames.end(), "fy"))
+		{
+			LOG_ERR_OUT << "not found : fy";
+			return  false;
+		}
+		if (newMemberNames.end() == std::find(newMemberNames.begin(), newMemberNames.end(), "cx"))
+		{
+			LOG_ERR_OUT << "not found : cx";
+			return  false;
+		}
+		if (newMemberNames.end() == std::find(newMemberNames.begin(), newMemberNames.end(), "cy"))
+		{
+			LOG_ERR_OUT << "not found : cy";
+			return  false;
+		}
+		if (newMemberNames.end() == std::find(newMemberNames.begin(), newMemberNames.end(), "Qt"))
+		{
+			LOG_ERR_OUT << "not found : Qt";
+			return  false;
+		}
+
+		cameraMatrix = Eigen::Matrix4f::Identity();
+		cameraMatrix(0, 0) = newRoot["fx"].asFloat();
+		cameraMatrix(0, 2) = newRoot["cx"].asFloat();
+		cameraMatrix(1, 1) = newRoot["fy"].asFloat();
+		cameraMatrix(1, 2) = newRoot["cy"].asFloat();
+
+
+		auto QtArray = newRoot["Qt"];
+		if (QtArray.isArray() && QtArray.size() == 7)
+		{
+			double 
+		}
+
+ 		return true;
+	}
 	int writeLabelMeLinestripJson(const std::filesystem::path& imgPath, const std::map<std::string, Eigen::Vector2d>& sortedPtsBaseLabel)
 	{
 		std::filesystem::path root = imgPath.parent_path();

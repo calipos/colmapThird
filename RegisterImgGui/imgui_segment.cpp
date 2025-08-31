@@ -700,7 +700,7 @@ bool segmentFrame(bool* show_regist_window)
 					}					
 				}
 				ImGui::SameLine();
-				if (ImGui::Button("save"))
+				if (ImGui::Button("saveAll"))
 				{
 					progress.denominator.store(segmentMgr->imgPaths.size());
 					progress.numerator.store(0);
@@ -713,9 +713,32 @@ bool segmentFrame(bool* show_regist_window)
 								if (!mask.empty())
 								{
 									auto dirPath = segmentMgr->imgPaths[i].parent_path();
-									auto maskPath = dirPath / ("mask_" + segmentMgr->imgName[i]+".dat");							
+									auto maskPath = dirPath / ("mask_" + segmentMgr->imgName[i] + ".dat");
 									tools::saveMask(maskPath.string(), mask);
-								}							
+								}
+								progress.numerator.fetch_add(1);
+							}
+							progress.procRunning.store(0);
+							progress.denominator.store(-1);
+							progress.numerator.store(-1);
+						}
+					);
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				}
+				if (ImGui::Button("sdf"))
+				{
+					progress.denominator.store(segmentMgr->imgPaths.size());
+					progress.numerator.store(0);
+					progress.procRunning.fetch_add(1);
+					progress.proc = new std::thread(
+						[&]() {
+							for (size_t i = 0; i < segmentMgr->imgPaths.size(); i++)
+							{
+								const cv::Mat& mask = segmentControlPtr->ptsData.masks[i];
+								if (!mask.empty())
+								{
+									//jjjjjjjjjjjjjjjjjjjjjjjj
+								}
 								progress.numerator.fetch_add(1);
 							}
 							progress.procRunning.store(0);

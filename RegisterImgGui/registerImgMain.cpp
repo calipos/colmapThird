@@ -13,8 +13,6 @@
 #include "registerFrame.h"
 #include "segmentFrame.h"
 #include "imgui_annotation.h"
-#include "labelme.h"
-#include "log.h"
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif 
@@ -33,10 +31,10 @@ extern int test_incremental();
 extern int test_pips2();
 extern ImU32 getImguiColor();
 extern int test_writelabel();
-
+extern int test_sdf();
 int main(int, char**)
 {
-
+    return test_sdf();
     //return test_pips2();
     //return test_sam2();
     //return test_incremental();

@@ -184,8 +184,8 @@ class SpaceMap:
             pickedGridFlag[imgRectFlag] = pickedGridFlag2
             self.gridFlag[validPos] = pickedGridFlag
             # self.getCloud(picIdx)
-        vertices, triangles =mcubes.marching_cubes(self.gridFlag.reshape(self.resolutionX,self.resolutionY,self.resolutionZ), 0)
-        mcubes.export_obj(vertices, triangles, 'sphere.obj')
+        # vertices, triangles =mcubes.marching_cubes(self.gridFlag.reshape(self.resolutionX,self.resolutionY,self.resolutionZ), 0)
+        # mcubes.export_obj(vertices, triangles, 'sphere.obj')
         
     def inputData(self, data_dir, cam_file=None):
         self.instance_dir = data_dir
