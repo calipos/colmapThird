@@ -11,6 +11,7 @@ namespace labelme
 	int writeLabelMeLinestripJson(const std::filesystem::path& imgPath, const std::map<std::string, Eigen::Vector2d>& sortedPtsBaseLabel);
 
 
+	bool readCmaeraFromRegisterJson(const std::filesystem::path& imgJsonPath, Eigen::Matrix4d& cameraMatrix, Eigen::Matrix4d& Rt);
 	Eigen::MatrixX2d readPtsFromRegisterJson(const std::filesystem::path& imgJsonPath);
 }
 

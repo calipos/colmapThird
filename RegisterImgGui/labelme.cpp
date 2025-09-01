@@ -123,7 +123,7 @@ namespace labelme
 		
 	}
 
-	bool readCmaeraFromRegisterJson(const std::filesystem::path& imgJsonPath, Eigen::Matrix4f& cameraMatrix, Eigen::Matrix4f& Rt)
+	bool readCmaeraFromRegisterJson(const std::filesystem::path& imgJsonPath, Eigen::Matrix4d& cameraMatrix, Eigen::Matrix4d& Rt)
 	{
 		std::stringstream ss;
 		std::string aline;
@@ -170,19 +170,25 @@ namespace labelme
 			return  false;
 		}
 
-		cameraMatrix = Eigen::Matrix4f::Identity();
+		cameraMatrix = Eigen::Matrix4d::Identity();
 		cameraMatrix(0, 0) = newRoot["fx"].asFloat();
 		cameraMatrix(0, 2) = newRoot["cx"].asFloat();
 		cameraMatrix(1, 1) = newRoot["fy"].asFloat();
 		cameraMatrix(1, 2) = newRoot["cy"].asFloat();
-
-
+		Rt = Eigen::Matrix4d::Identity();
 		auto QtArray = newRoot["Qt"];
 		if (QtArray.isArray() && QtArray.size() == 7)
 		{
-			double 
+			double w = QtArray[0].asDouble();
+			double x = QtArray[1].asDouble();
+			double y = QtArray[2].asDouble();
+			double z = QtArray[3].asDouble();
+			Eigen::Quaterniond q(w, x, y, z);
+			Rt.block(0, 0, 3, 3) = q.matrix();
+			Rt(0, 3) = QtArray[4].asDouble();
+			Rt(1, 3) = QtArray[5].asDouble();
+			Rt(2, 3) = QtArray[6].asDouble();
 		}
-
  		return true;
 	}
 	int writeLabelMeLinestripJson(const std::filesystem::path& imgPath, const std::map<std::string, Eigen::Vector2d>& sortedPtsBaseLabel)

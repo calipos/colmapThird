@@ -8,9 +8,11 @@
 #include "log.h"
 namespace sdf
 {
+	Eigen::MatrixX3d readPoint3d(const std::filesystem::path& path);
 	struct VolumeDat
 	{
 		VolumeDat(const std::uint64_t& indexMax, const double& startX, const double& startY, const double& startZ, const double& endX, const double& endY, const double& endZ);
+		bool getCloud(const std::filesystem::path& path,const int&thre = 1);
 		std::uint64_t maxIndex;
 		double unit;
 		double resolution;
@@ -23,8 +25,8 @@ namespace sdf
 		std::uint64_t x_size;
 		std::uint64_t y_size;
 		std::uint64_t z_size; 
-		std::vector<bool>gridFlag;
-		Eigen::Matrix4Xf gridCenter;
+		std::vector<float>gridCenterHitValue;
+		Eigen::Matrix4Xf grid;
 	};
 }
 #endif // _MASK_SYNTHESIS_H_

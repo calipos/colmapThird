@@ -150,6 +150,9 @@
     <ClCompile Include="maskSynthesis.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="MarchCube.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">
@@ -273,6 +276,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="maskSynthesis.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="marchCube.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

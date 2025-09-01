@@ -14,6 +14,8 @@
 #include "sam2.h"
 #include "labelme.h"
 #include "opencvTools.h"
+#include "maskSynthesis.h"
+#include "marchCube.h"
 static bool showImgDirBrowser = false;
 static std::filesystem::path imgDirPath;
 static std::filesystem::path modelDirPath;
@@ -130,24 +132,22 @@ public:
 				image_embeds.emplace_back(sam2Ins->image_embed);
 				oringalSizes.emplace_back(sam2Ins->oringalSize);
 			}
-
-
-			auto jsonPath = parentDir / (shortName + ".json");
-			Eigen::MatrixX2d pts = labelme::readPtsFromRegisterJson(jsonPath);
-			if (pts.rows() != 0)
+			auto maskPath = parentDir / ("mask_" + shortName + ".dat");
+			if (!std::filesystem::exists(maskPath))
 			{
-				int hintx = pts.col(0).mean();
-				int hinty = pts.col(1).mean();
-				std::vector < std::pair<int, cv::Point2i> > hint={ {1,{hintx,hinty}} };
-				cv::Mat mask;
-				sam2Ins->inputHint(hint,mask);
-				LOG_OUT << shortName<<" "<< hintx<<", "<< hinty;
-				auto maskPath = parentDir / ("mask_" + shortName + ".dat");
-				tools::saveMask(maskPath.string(), mask);
+				auto jsonPath = parentDir / (shortName + ".json");
+				Eigen::MatrixX2d pts = labelme::readPtsFromRegisterJson(jsonPath);
+				if (pts.rows() != 0)
+				{
+					int hintx = pts.col(0).mean();
+					int hinty = pts.col(1).mean();
+					std::vector < std::pair<int, cv::Point2i> > hint = { {1,{hintx,hinty}} };
+					cv::Mat mask;
+					sam2Ins->inputHint(hint, mask);
+					LOG_OUT << shortName << " " << hintx << ", " << hinty;
+					tools::saveMask(maskPath.string(), mask);
+				}
 			}
-			
-
-
 
 			progress.numerator.fetch_add(1);			
 		}
@@ -399,6 +399,10 @@ float SegmentGui::resizeFactor = 1;
 char SegmentGui::segmentNameStr[segmentNameStrLengthMax] = "\0";
 
 
+
+static float x_start_end[2] = { 0.0f, 0.0f }; //for volume reconstruction %
+static float y_start_end[2] = { 0.0f, 0.0f }; //for volume reconstruction %
+static float z_start_end[2] = { 0.0f, 0.0f }; //for volume reconstruction %
 bool segmentFrame(bool* show_regist_window)
 {
 
@@ -725,22 +729,80 @@ bool segmentFrame(bool* show_regist_window)
 					);
 					std::this_thread::sleep_for(std::chrono::milliseconds(100));
 				}
-				if (ImGui::Button("sdf"))
+
+				ImGui::DragFloat2("xstart xend", x_start_end, 0.02f, -1.0f, 1.0f);
+				ImGui::DragFloat2("ystart yend", y_start_end, 0.02f, -1.0f, 1.0f);
+				ImGui::DragFloat2("zstart zend", z_start_end, 0.02f, -1.0f, 1.0f);
+				if (ImGui::Button("volmueReconstruct"))
 				{
 					progress.denominator.store(segmentMgr->imgPaths.size());
 					progress.numerator.store(0);
 					progress.procRunning.fetch_add(1);
 					progress.proc = new std::thread(
 						[&]() {
+							if (!std::filesystem::exists(imgDirPath / "pts.txt"))
+							{
+								return;
+							}
+							Eigen::MatrixX3d pts = sdf::readPoint3d(imgDirPath /"pts.txt");
+							double x_strat = pts.col(0).minCoeff();
+							double y_strat = pts.col(1).minCoeff();
+							double z_strat = pts.col(2).minCoeff();
+							double x_end = pts.col(0).maxCoeff();
+							double y_end = pts.col(1).maxCoeff();
+							double z_end = pts.col(2).maxCoeff();
+							double x_length = abs(x_end - x_strat);
+							double y_length = abs(y_end - y_strat);
+							double z_length = abs(z_end - z_strat);
+							x_strat -= abs(x_start_end[0]) * x_length;
+							y_strat -= abs(y_start_end[0]) * y_length;
+							z_strat -= abs(z_start_end[0]) * z_length;
+							x_end += abs(x_start_end[1]) * x_length;
+							y_end += abs(y_start_end[1]) * y_length;
+							z_end += abs(z_start_end[1]) * z_length;
+							sdf::VolumeDat volumeInstance(static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()), x_strat, y_strat, z_strat, x_end, y_end, z_end);
 							for (size_t i = 0; i < segmentMgr->imgPaths.size(); i++)
 							{
-								const cv::Mat& mask = segmentControlPtr->ptsData.masks[i];
-								if (!mask.empty())
 								{
-									//jjjjjjjjjjjjjjjjjjjjjjjj
+									std::string stem = segmentMgr->imgPaths[i].filename().stem().string();
+									auto jsonPath = segmentMgr->imgPaths[i].parent_path() / (stem + ".json");
+									auto maskPath = segmentMgr->imgPaths[i].parent_path() / ("mask_" + stem + ".dat");
+									if (std::filesystem::exists(jsonPath)&& std::filesystem::exists(maskPath))
+									{
+										cv::Mat mask = tools::loadMask(maskPath.string());
+										Eigen::Matrix4d cameraMatrix, Rt;
+										bool readRet = labelme::readCmaeraFromRegisterJson(jsonPath, cameraMatrix, Rt);
+										if (!readRet || mask.empty())
+										{
+											LOG_WARN_OUT << "read fail : " << jsonPath;
+											continue;
+										}
+										Eigen::Matrix4d  p = cameraMatrix * Rt;
+										Eigen::Matrix4Xf gridInCamera = p.cast<float>() * volumeInstance.grid;
+										int gridCnt = gridInCamera.cols();
+										for (size_t i = 0; i < gridCnt; i++)
+										{
+											int u = static_cast<int>(gridInCamera(0, i) / gridInCamera(2, i));
+											int v = static_cast<int>(gridInCamera(1, i) / gridInCamera(2, i));
+											if (u >= 0 && v >= 0 && u < mask.cols && v < mask.rows)
+											{
+												if (mask.ptr<uchar>(v)[u] == 0)
+												{
+													volumeInstance.gridCenterHitValue[i] = -1;
+												}
+												else
+												{
+													volumeInstance.gridCenterHitValue[i] *= 1;
+												}
+											}
+										}
+									}
 								}
 								progress.numerator.fetch_add(1);
 							}
+							//volumeInstance.getCloud(imgDirPath/"dense.ply", 1);
+							mc::Mesh mesh = mc::marchcube(volumeInstance.grid, volumeInstance.gridCenterHitValue, volumeInstance.x_size, volumeInstance.y_size, volumeInstance.z_size, volumeInstance.unit, 0);
+							mesh.saveMesh(imgDirPath / "dense.obj");
 							progress.procRunning.store(0);
 							progress.denominator.store(-1);
 							progress.numerator.store(-1);
