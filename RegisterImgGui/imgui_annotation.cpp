@@ -20,6 +20,28 @@ static browser::Browser* modelDirPicker = nullptr;
 static ProgressThread progress;
 namespace label
 {
+	std::string getfullShortName(const std::filesystem::path& path_, const std::filesystem::path& baseDir_)
+	{
+		std::string shortName = path_.filename().stem().string();
+		std::filesystem::path path = std::filesystem::canonical(path_);
+		std::filesystem::path baseDir = std::filesystem::canonical(baseDir_);
+		std::list<std::string>parentNames;
+		std::filesystem::path parent = std::filesystem::canonical(path.parent_path());
+		while (parent.compare(baseDir)!=0)
+		{
+			parentNames.emplace_back(parent.filename().stem().string());
+			path = path.parent_path(); 
+			parent = std::filesystem::canonical(path.parent_path());
+		}
+		std::string fullShortName;
+		for (const auto&d: parentNames)
+		{
+			fullShortName = "_" + fullShortName;
+			fullShortName = d + fullShortName;
+		}
+		fullShortName = fullShortName + shortName;
+		return fullShortName;
+	}
 	struct ControlLogic
 	{
 		std::vector<std::string>picShortName;
@@ -430,7 +452,8 @@ public:
 					if (!img.empty())
 					{
 						imgPaths.emplace_back(thisFilename);
-						std::string stem = "   " + thisFilename.filename().stem().string();
+						std::string fullShortName = label::getfullShortName(thisFilename, imgDirPath_);
+						std::string stem = "   " + fullShortName;
 						imgName.emplace_back(stem);
 					}
 
