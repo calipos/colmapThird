@@ -44,7 +44,7 @@ namespace label
 	}
 	struct ControlLogic
 	{
-		std::vector<std::string>picShortName;
+		std::vector<std::string>picShortNameForlist;
 		std::vector< std::map<std::string, ImVec2>>controlPtsAndTag;
 		ImVec2 tempPt{ -1,-1 };  // for first track ,the temp point wil be showed on canvas
 		ImVec2 tempPt2{ -1,-1 }; // for re-track only,  the temp2 point  = the re-new controlPtsAndTag
@@ -88,8 +88,8 @@ namespace label
 			for (const auto& d : colors)
 			{
 				auto& tagAndShortName = hasTagFlags[d.first];
-				tagAndShortName.insert(tagAndShortName.end(), picShortName.begin(), picShortName.end());
-				for (int j = 0; j < picShortName.size(); j++)
+				tagAndShortName.insert(tagAndShortName.end(), picShortNameForlist.begin(), picShortNameForlist.end());
+				for (int j = 0; j < picShortNameForlist.size(); j++)
 				{
 					if (controlPtsAndTag[j].count(d.first) > 0)
 					{
@@ -100,7 +100,7 @@ namespace label
 		}
 		bool save(const std::vector<std::filesystem::path>& picPath)const
 		{
-			if (picShortName.size()!= picPath.size())
+			if (picShortNameForlist.size()!= picPath.size())
 			{
 				return false;
 			}
@@ -126,7 +126,7 @@ namespace label
 				const auto& imgPath = picPath[i];
 				std::string shortName = imgPath.filename().stem().string();
 				std::filesystem::path parentDir = imgPath.parent_path();
-				std::string tempShort = picShortName[i].substr(picShortName[i].length()- shortName.length(), shortName.length());
+				std::string tempShort = picShortNameForlist[i].substr(picShortNameForlist[i].length()- shortName.length(), shortName.length());
 				if (tempShort.compare(shortName)!=0)
 				{
 					LOG_ERR_OUT << "name err! jump.";
@@ -190,13 +190,13 @@ namespace label
 			float y = y_inRatio * canvas_size.y + canvas_location.y + ImGui::GetWindowPos().y;
 			return ImVec2(x, y);
 		}
-		static ImageLabel* getImageLabel(const ImVec2& draw_pos_, const int& canvasMaxSide_, const std::vector<std::string>& picShortName, const std::vector<std::filesystem::path>& picPaths)
+		static ImageLabel* getImageLabel(const ImVec2& draw_pos_, const int& canvasMaxSide_, const std::vector<std::string>& picShortNameForlist, const std::vector<std::filesystem::path>& picPaths)
 		{
 			if (ImageLabel::instance == nullptr)
 			{
 				ImageLabel::instance = new ImageLabel();
-				instance->ptsData.picShortName.insert(instance->ptsData.picShortName.end(), picShortName.begin(), picShortName.end());
-				instance->ptsData.controlPtsAndTag.resize(picShortName.size());
+				instance->ptsData.picShortNameForlist.insert(instance->ptsData.picShortNameForlist.end(), picShortNameForlist.begin(), picShortNameForlist.end());
+				instance->ptsData.controlPtsAndTag.resize(picShortNameForlist.size());
 
 				instance->ptsData.loadOnlyOnce(picPaths);
 			}
@@ -438,7 +438,7 @@ public:
 
 
 		imgPaths.clear();
-		imgName.clear();
+		imgNameForlist.clear();
 		imgDirPath_ = dirPath;
 		for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ imgDirPath_ })
 		{
@@ -454,19 +454,19 @@ public:
 						imgPaths.emplace_back(thisFilename);
 						std::string fullShortName = label::getfullShortName(thisFilename, imgDirPath_);
 						std::string stem = "   " + fullShortName;
-						imgName.emplace_back(stem);
+						imgNameForlist.emplace_back(stem);
 					}
 
 				}
 			}
 		}
-		if (imgName.size() < 1)
+		if (imgNameForlist.size() < 1)
 		{
 			progress.procRunning.store(0);
-			LOG_ERR_OUT << "imgName.size()<1";
+			LOG_ERR_OUT << "imgNameForlist.size()<1";
 			return;
 		}
-		progress.denominator.store(imgName.size());
+		progress.denominator.store(imgNameForlist.size());
 		progress.numerator.store(-1);
 		progress.procRunning.fetch_add(1);
 		pips2Ins = new pips2::Pips2(encoderParamPath, encoderBinPath, deltaParamPath, deltaBinPath);
@@ -479,7 +479,7 @@ public:
 	std::vector<std::filesystem::path>tempTrackImgPaths;//for other thread do track,keep the temporary variable
 	std::vector<cv::Point2f> tempHint;//for other thread do track,keep the temporary variable
 	std::vector<std::filesystem::path>imgPaths;
-	std::vector<std::string>imgName;
+	std::vector<std::string>imgNameForlist;
 	std::filesystem::path imgDirPath_;
 	std::filesystem::path modelDirPath_;
 	static GLuint image_texture;
@@ -589,47 +589,47 @@ bool annotationFrame(bool* show_regist_window)
 			);
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
-		if (annotationManger != nullptr && annotationManger->imgName.size() < 1)
+		if (annotationManger != nullptr && annotationManger->imgNameForlist.size() < 1)
 		{
 			delete annotationManger;
 			annotationManger = nullptr;
 			imgDirPath = "";
 			modelDirPath = "";
 		}
-		if (annotationManger != nullptr && annotationManger->imgName.size() > 0)
+		if (annotationManger != nullptr && annotationManger->imgNameForlist.size() > 0)
 		{
 			auto imgListLocation = ImGui::GetCursorPos();
 			bool pickedChanged = false;
 			ImVec2 listPicSize(100, 500);
-			listComponent("picPick", listPicSize, annotationManger->imgName, AnnotationManger::imgPickIdx, pickedChanged);
+			listComponent("picPick", listPicSize, annotationManger->imgNameForlist, AnnotationManger::imgPickIdx, pickedChanged);
 			//ImGui::Text("Mouse pos: (%d, %d)", AnnotationManger::imgPickIdx, pickedChanged);
 			ImVec2 canvas_location = imgListLocation;
 			canvas_location.x += listPicSize.x;
-			label::ImageLabel* labelControlPtr = label::ImageLabel::getImageLabel(canvas_location, 720, annotationManger->imgName, annotationManger->imgPaths);
+			label::ImageLabel* labelControlPtr = label::ImageLabel::getImageLabel(canvas_location, 720, annotationManger->imgNameForlist, annotationManger->imgPaths);
 			if (AnnotationManger::imgPickIdx >= 0 && (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) || ImGui::IsKeyPressed(ImGuiKey_UpArrow)))
 			{
 				pickedChanged = true;
-				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = ' ';
+				annotationManger->imgNameForlist[AnnotationManger::imgPickIdx][0] = ' ';
 				AnnotationManger::imgPickIdx--;
 				if (AnnotationManger::imgPickIdx < 0)
 				{
 					AnnotationManger::imgPickIdx = 0;
 					pickedChanged = false;
 				}
-				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = '-';
+				annotationManger->imgNameForlist[AnnotationManger::imgPickIdx][0] = '-';
 				//continue;
 			}
 			if (AnnotationManger::imgPickIdx >= 0 && (ImGui::IsKeyPressed(ImGuiKey_RightArrow)|| ImGui::IsKeyPressed(ImGuiKey_DownArrow)))
 			{
 				pickedChanged = true;
-				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = ' ';
+				annotationManger->imgNameForlist[AnnotationManger::imgPickIdx][0] = ' ';
 				AnnotationManger::imgPickIdx++;
 				if (AnnotationManger::imgPickIdx >= annotationManger->imgPaths.size())
 				{
 					AnnotationManger::imgPickIdx = annotationManger->imgPaths.size() - 1;
 					pickedChanged = false;
 				}
-				annotationManger->imgName[AnnotationManger::imgPickIdx][0] = '-';
+				annotationManger->imgNameForlist[AnnotationManger::imgPickIdx][0] = '-';
 				//continue;
 			}
 			if (AnnotationManger::imgPickIdx >=0 && pickedChanged)
@@ -659,9 +659,9 @@ bool annotationFrame(bool* show_regist_window)
 				labelControlPtr->ptsData.tempPt.y = -1;
 				labelControlPtr->ptsData.tempPt2.x = -1;
 				labelControlPtr->ptsData.tempPt2.y = -1;
-				annotationManger->imgName.clear();
-				const auto& newPicName = labelControlPtr->ptsData.hasTagFlags[labelControlPtr->ptsData.tagsName[labelControlPtr->ptsData.tagPickIdx]];
-				annotationManger->imgName.insert(annotationManger->imgName.end(), newPicName.begin(), newPicName.end());
+				annotationManger->imgNameForlist.clear();
+				const auto& newPicNameForList = labelControlPtr->ptsData.hasTagFlags[labelControlPtr->ptsData.tagsName[labelControlPtr->ptsData.tagPickIdx]];
+				annotationManger->imgNameForlist.insert(annotationManger->imgNameForlist.end(), newPicNameForList.begin(), newPicNameForList.end());
 			}
 			if (labelControlPtr->hasImageContext)
 			{
@@ -690,9 +690,9 @@ bool annotationFrame(bool* show_regist_window)
 						labelControlPtr->ptsData.tempPt2 = maybeClik; // may re-track base the fixed point.
 						labelControlPtr->ptsData.hasTagFlags[pickedTag][AnnotationManger::imgPickIdx][1] = '*';
 
-						annotationManger->imgName.clear();
-						const auto& newPicName = labelControlPtr->ptsData.hasTagFlags[pickedTag];
-						annotationManger->imgName.insert(annotationManger->imgName.end(), newPicName.begin(), newPicName.end());
+						annotationManger->imgNameForlist.clear();
+						const auto& newPicNameForList = labelControlPtr->ptsData.hasTagFlags[pickedTag];
+						annotationManger->imgNameForlist.insert(annotationManger->imgNameForlist.end(), newPicNameForList.begin(), newPicNameForList.end());
 					}
 				}				
 			}
@@ -755,7 +755,7 @@ bool annotationFrame(bool* show_regist_window)
 					{
 						d[0] = ' ';
 					}
-					for (auto&d: annotationManger->imgName)
+					for (auto&d: annotationManger->imgNameForlist)
 					{
 						d[0] = ' ';
 					}
@@ -785,9 +785,9 @@ bool annotationFrame(bool* show_regist_window)
 						labelControlPtr->ptsData.updata();
 						labelControlPtr->ptsData.hasTagFlags[tagName][AnnotationManger::imgPickIdx][1] = ' ';
 
-						annotationManger->imgName.clear();
-						const auto& newPicName = labelControlPtr->ptsData.hasTagFlags[tagName];
-						annotationManger->imgName.insert(annotationManger->imgName.end(), newPicName.begin(), newPicName.end());
+						annotationManger->imgNameForlist.clear();
+						const auto& newPicNameForList = labelControlPtr->ptsData.hasTagFlags[tagName];
+						annotationManger->imgNameForlist.insert(annotationManger->imgNameForlist.end(), newPicNameForList.begin(), newPicNameForList.end());
 					}
 				}
 				ImGui::SameLine();
@@ -807,9 +807,9 @@ bool annotationFrame(bool* show_regist_window)
 							}
 						}
 					} 
-					annotationManger->imgName.clear();
-					const auto& newPicName = labelControlPtr->ptsData.hasTagFlags[tagName];
-					annotationManger->imgName.insert(annotationManger->imgName.end(), newPicName.begin(), newPicName.end());
+					annotationManger->imgNameForlist.clear();
+					const auto& newPicNameForList = labelControlPtr->ptsData.hasTagFlags[tagName];
+					annotationManger->imgNameForlist.insert(annotationManger->imgNameForlist.end(), newPicNameForList.begin(), newPicNameForList.end());
 					labelControlPtr->ptsData.updata();
 				}
 				if (labelControlPtr->ptsData.tagPickIdx < 0 || AnnotationManger::imgPickIdx < 0)
@@ -826,7 +826,7 @@ bool annotationFrame(bool* show_regist_window)
 			if (AnnotationManger::trajs.size()>0)
 			{
 				std::string tagStr = std::string(label::ImageLabel::tarStr);
-				for (int i = AnnotationManger::imgPickIdx; i < labelControlPtr->ptsData.picShortName.size(); i++)
+				for (int i = AnnotationManger::imgPickIdx; i < labelControlPtr->ptsData.picShortNameForlist.size(); i++)
 				{
 					const cv::Point2f pt = AnnotationManger::trajs[i - AnnotationManger::imgPickIdx][0];
 					labelControlPtr->ptsData.controlPtsAndTag[i][tagStr].x = pt.x;
@@ -854,8 +854,8 @@ bool annotationFrame(bool* show_regist_window)
 					labelControlPtr->ptsData.tagsListName.emplace_back("  "+d.first);
 					labelControlPtr->ptsData.tagsName.emplace_back(d.first);
 					auto&tagAndShortName = labelControlPtr->ptsData.hasTagFlags[d.first];
-					tagAndShortName.insert(tagAndShortName.end(), labelControlPtr->ptsData.picShortName.begin(), labelControlPtr->ptsData.picShortName.end());
-					for (int j = 0; j < labelControlPtr->ptsData.picShortName.size(); j++)
+					tagAndShortName.insert(tagAndShortName.end(), labelControlPtr->ptsData.picShortNameForlist.begin(), labelControlPtr->ptsData.picShortNameForlist.end());
+					for (int j = 0; j < labelControlPtr->ptsData.picShortNameForlist.size(); j++)
 					{
 						if (labelControlPtr->ptsData.controlPtsAndTag[j].count(d.first)>0)
 						{
