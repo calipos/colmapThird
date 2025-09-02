@@ -70,7 +70,24 @@ namespace sdf
 			int numY_1 = y_size - 1;
 			int numZ_1 = z_size - 1;
 			const int yx_size = x_size * y_size;
-			std::vector<int>idxShift = { -1 - x_size ,-x_size ,+1 - x_size , -1  ,0 ,+1  , -1 + x_size ,x_size ,1 + x_size };
+			
+			std::vector<int>idxShift = { -1 - static_cast<int>(x_size) ,-static_cast<int>(x_size) ,1 - static_cast<int>(x_size) , -1  ,0 ,1  , -1 + static_cast<int>(x_size) , static_cast<int>(x_size) ,1 + static_cast<int>(x_size) };
+			std::vector<int>idxShift2(27);
+			for (int i = 0; i < 27; i++)
+			{
+				if (i<9)
+				{
+					idxShift2[i] = idxShift[i % 9] - yx_size;
+				}
+				else if (i<18)
+				{
+					idxShift2[i] = idxShift[i % 9];
+				}
+				else
+				{
+					idxShift2[i] = idxShift[i % 9] + yx_size;
+				}
+			}
 			std::fstream fout(path, std::ios::app | std::ios::binary);
 			for (int i = 0; i < gridCnt; i++)
 			{
@@ -82,35 +99,16 @@ namespace sdf
 				{
 					continue;
 				}
-				int idx0 = i - 1 - x_size;
-				int idx1 = i - x_size;
-				int idx2 = i + 1 - x_size;
-				int idx3 = i - 1;
-				int idx4 = i;
-				int idx5 = i + 1;
-				int idx6 = i - 1 + x_size;
-				int idx7 = i + x_size;
-				int idx8 = i + 1 + x_size;
-
-				int idx0a = idx0 - yx_size;
-				int idx1a = idx1 - yx_size;
-				int idx2a = idx2 - yx_size;
-				int idx3a = idx3 - yx_size;
-				int idx4a = idx4 - yx_size;
-				int idx5a = idx5 - yx_size;
-				int idx6a = idx6 - yx_size;
-				int idx7a = idx7 - yx_size;
-				int idx8a = idx8 - yx_size;
-				int idx0b = idx0 + yx_size;
-				int idx1b = idx1 + yx_size;
-				int idx2b = idx2 + yx_size;
-				int idx3b = idx3 + yx_size;
-				int idx4b = idx4 + yx_size;
-				int idx5b = idx5 + yx_size;
-				int idx6b = idx6 + yx_size;
-				int idx7b = idx7 + yx_size;
-				int idx8b = idx8 + yx_size;
-				if (gridCenterHitValue[i] > thre)
+				bool needJump = true;
+				for (int j = 0; j < 27; j++)
+				{
+					if (gridCenterHitValue[idxShift2[j] + i] <= thre)
+					{
+						needJump = false;
+						break;
+					}
+				}
+				if (!needJump && gridCenterHitValue[i] > thre)
 				{
 					ptsCnt++;
 					fout.write((const char*)&(this->grid(0, i)), sizeof(float));
