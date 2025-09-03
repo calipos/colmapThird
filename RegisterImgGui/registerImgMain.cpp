@@ -34,7 +34,7 @@ extern int test_writelabel();
 extern int test_sdf();
 int main(int, char**)
 {
-    //return test_sdf();
+    return test_sdf();
     //return test_pips2();
     //return test_sam2();
     //return test_incremental();

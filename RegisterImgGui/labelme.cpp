@@ -231,6 +231,44 @@ namespace labelme
 		fout.close();
 		return 0;
 	}
+	bool readJsonStringElement(const std::filesystem::path& jsonPath, const std::string& key, std::string& data)
+	{
+		std::stringstream ss;
+		std::string aline;
+		std::fstream fin(jsonPath, std::ios::in);
+		while (std::getline(fin, aline))
+		{
+			ss << aline;
+		}
+		fin.close();
+		aline = ss.str();
+		JSONCPP_STRING err;
+		Json::Value newRoot;
+		const auto rawJsonLength = static_cast<int>(aline.length());
+		Json::CharReaderBuilder newBuilder;
+		const std::unique_ptr<Json::CharReader> newReader(newBuilder.newCharReader());
+		if (!newReader->parse(aline.c_str(), aline.c_str() + rawJsonLength, &newRoot,
+			&err)) {
+			return  false;
+		}
+		auto newMemberNames = newRoot.getMemberNames();
+		if (newMemberNames.end() == std::find(newMemberNames.begin(), newMemberNames.end(), key))
+		{
+			LOG_ERR_OUT << "not found : "<< key;
+			return  false;
+		} 
+		 
+		auto d = newRoot[key];
+		if (d.type()== Json::ValueType::stringValue)
+		{
+			data = d.asString();
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
 }
 
 int test_writelabel()

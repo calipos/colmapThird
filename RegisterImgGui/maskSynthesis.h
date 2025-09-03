@@ -12,7 +12,8 @@ namespace sdf
 	struct VolumeDat
 	{
 		VolumeDat(const std::uint64_t& indexMax, const double& startX, const double& startY, const double& startZ, const double& endX, const double& endY, const double& endZ);
-		bool getCloud(const std::filesystem::path& path,const int&thre = 1);
+		Eigen::Matrix3Xf getCloud(const int& thre)const;
+		bool emptyShellPts(const int& thre = 1);
 		std::uint64_t maxIndex;
 		double unit;
 		double resolution;

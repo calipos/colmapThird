@@ -800,9 +800,9 @@ bool segmentFrame(bool* show_regist_window)
 								}
 								progress.numerator.fetch_add(1);
 							}
-							volumeInstance.getCloud(imgDirPath/"dense.ply", 0);
-							mc::Mesh mesh = mc::marchcube(volumeInstance.grid, volumeInstance.gridCenterHitValue, volumeInstance.x_size, volumeInstance.y_size, volumeInstance.z_size, volumeInstance.unit, 0);
-							mesh.saveMesh(imgDirPath / "dense.obj");
+							//volumeInstance.getCloud(imgDirPath/"dense.ply", 0);
+							//mc::Mesh mesh = mc::marchcube(volumeInstance.grid, volumeInstance.gridCenterHitValue, volumeInstance.x_size, volumeInstance.y_size, volumeInstance.z_size, volumeInstance.unit, 0);
+							//mesh.saveMesh(imgDirPath / "dense.obj");
 							progress.procRunning.store(0);
 							progress.denominator.store(-1);
 							progress.numerator.store(-1);
