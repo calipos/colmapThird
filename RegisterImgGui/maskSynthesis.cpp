@@ -9,7 +9,8 @@
 #include "opencvTools.h"
 #include "labelme.h"
 #include "marchCube.h"
-#include "bitmap.h"
+#include "camera.h"
+#include "warp.h"
 namespace sdf
 {
 	VolumeDat::VolumeDat(const std::uint64_t& indexMax, const double& startX, const double& startY, const double& startZ, const double& endX, const double& endY, const double& endZ)
@@ -55,7 +56,7 @@ namespace sdf
 			fout << "element vertex " << pts.cols() << std::endl;//可以容纳32位数
 			fout << "property float x" << std::endl;
 			fout << "property float y" << std::endl;
-			fout << "property float z" << std::endl;
+			fout << "property float z" << std::endl;	
 			fout << "end_header" << std::endl;
 			fout.close();
 		}
@@ -67,6 +68,46 @@ namespace sdf
 				fout.write((const char*)&(pts(1, i)), sizeof(float));
 				fout.write((const char*)&(pts(2, i)), sizeof(float));
 
+			}
+			fout.close();
+		}
+		return true;
+	}
+	bool saveCloud(const std::filesystem::path& path, const Eigen::MatrixXf& pts,const std::vector<std::uint8_t>&colors)
+	{
+		if (colors.size()!=3*pts.cols())
+		{
+			LOG_ERR_OUT << "colors.size()!=3*pts.cols()";
+			return false;
+		}
+		{
+			std::fstream fout(path, std::ios::out);
+			fout << "ply" << std::endl;
+			fout << "format binary_little_endian 1.0" << std::endl;
+			fout << "element vertex " << pts.cols() << std::endl;//可以容纳32位数
+			fout << "property float x" << std::endl;
+			fout << "property float y" << std::endl;
+			fout << "property float z" << std::endl;
+			fout << "property uchar red" << std::endl;
+			fout << "property uchar green" << std::endl;
+			fout << "property uchar blue" << std::endl;
+			fout << "end_header" << std::endl;
+			fout.close();
+		}
+		{
+			std::fstream fout(path, std::ios::app | std::ios::binary);
+			for (int i = 0; i < pts.cols(); i++)
+			{
+				int i3 = 3 * i;
+				fout.write((const char*)&(pts(0, i)), sizeof(float));
+				fout.write((const char*)&(pts(1, i)), sizeof(float));
+				fout.write((const char*)&(pts(2, i)), sizeof(float));
+				const char* r = (const char*)&colors[i3];
+				const char* g = (const char*)&colors[i3 + 1];
+				const char* b = (const char*)&colors[i3+2];
+				fout.write(r, sizeof(char));
+				fout.write(g, sizeof(char));
+				fout.write(b, sizeof(char));
 			}
 			fout.close();
 		}
@@ -213,76 +254,53 @@ namespace sdf
 		}
 		return pts;
 	}
-	template <typename T>
-	T Median(std::vector<T>* elems) {
-		if (!elems->empty())
-			return 0;
-		const size_t mid_idx = elems->size() / 2;
-		std::nth_element(elems->begin(), elems->begin() + mid_idx, elems->end());
-		return static_cast<T>((*elems)[mid_idx]);
-		//if (elems->size() % 2 == 0) {
-		//	const float mid_element1 = static_cast<float>((*elems)[mid_idx]);
-		//	const float mid_element2 = static_cast<float>(
-		//		*std::max_element(elems->begin(), elems->begin() + mid_idx));
-		//	return static_cast<T>((mid_element1 + mid_element2) / 2.0f);
-		//}
-		//else {
-		//	return static_cast<T>((*elems)[mid_idx]);
-		//}
-	}
 
-	template < typename DerivedV>
-	Eigen::Matrix3Xi fuseColor(const Eigen::PlainObjectBase<DerivedV>&pts, std::vector<std::filesystem::path>& imgPaths, std::vector<Eigen::Matrix4d>& cameraPs)
-	{
-		Eigen::MatrixXf cameraP2(cameraPs.size()*4,4);
-		for (size_t i = 0; i < cameraPs.size(); i++)
-		{
-			cameraP2.block(i*4,0,4,4) = cameraPs[i].cast<float>();
-		}
-		std::vector<Bitmap>imgs(imgPaths.size());
-		for (size_t i = 0; i < imgPaths.size(); i++)
-		{
-			imgs[i].Read(imgPaths[i].string(), true);
-		}
-		Eigen::Matrix3Xi ret(3, pts.size());
-		for (int p = 0; p < pts.size(); p++)
-		{
-			Eigen::Vector4f pt;
-			pt[0] = pts(0, p);
-			pt[1] = pts(1, p);
-			pt[2] = pts(2, p);
-			pt[3] = 1.f;
-			Eigen::VectorXf uvs = cameraP2 *pt;
-			std::vector<uint8_t>rgbs_r;
-			std::vector<uint8_t>rgbs_g;
-			std::vector<uint8_t>rgbs_b;
-			rgbs_r.reserve(cameraPs.size());
-			rgbs_g.reserve(cameraPs.size());
-			rgbs_b.reserve(cameraPs.size());
-			for (size_t i = 0; i < cameraPs.size(); i++)
-			{
-				uvs[4 * i] /= uvs[4 * i + 2];
-				uvs[4 * i+1] /= uvs[4 * i + 2];
-				int x = static_cast<int>(std::round(uvs[4 * i]));
-				int y = static_cast<int>(std::round(uvs[4 * i+1]));
-				if (x>=0 &&y>=0 && x < imgs[i].Width() && y < imgs[i].Height())
-				{
-					BitmapColor<uint8_t>thisColor;
-					imgs[i].GetPixel(x,y,&thisColor);
-					rgbs_r.emplace_back(thisColor.r);
-					rgbs_g.emplace_back(thisColor.g);
-					rgbs_b.emplace_back(thisColor.b);
-				}
-			}
-			ret(0, p) = Median(rgbs_r);
-			ret(1, p) = Median(rgbs_g);
-			ret(2, p) = Median(rgbs_b);
-		}
-		return Eigen::Matrix3Xf();
-	}
+
+
 }
+
+
+int test_undistortFoxImg()
+{
+	Bitmap distorted_bitmap;
+	distorted_bitmap.Read("D:/repo/Instant-NGP-for-GTX-1000/data/nerf/fox/images/0001.jpg");
+	Bitmap  undistorted_bitmap;
+	Camera distorted_camera;
+	distorted_camera.camera_id = 0;
+	distorted_camera.model_id = CameraModelId::kOpenCV;
+	distorted_camera.width = 1080;
+	distorted_camera.height= 1920;
+	distorted_camera.params.resize(8);
+	distorted_camera.params[0] = 1375.52;//f1
+	distorted_camera.params[1] = 1374.49;//f2
+	distorted_camera.params[2] = 554.558;//c1
+	distorted_camera.params[3] = 965.268;//c2
+	distorted_camera.params[4] = 0.0578421 ;//k1
+	distorted_camera.params[5] = -0.0805099 ;//k2
+	distorted_camera.params[6] = -0.000980296 ;//p1
+	distorted_camera.params[7] = 0.00015575 ;//p2
+
+	Camera undistorted_camera;
+	undistorted_camera.camera_id = 0;
+	undistorted_camera.model_id = CameraModelId::kOpenCV;
+	undistorted_camera.width = 1080;
+	undistorted_camera.height = 1920;
+	undistorted_camera.params.resize(8,0);
+	undistorted_camera.params[0] = 1375.52;//f1
+	undistorted_camera.params[1] = 1374.49;//f2
+	undistorted_camera.params[2] = 554.558;//c1
+	undistorted_camera.params[3] = 965.268;//c2
+	WarpImageBetweenCameras(distorted_camera,
+		undistorted_camera,
+		distorted_bitmap,
+		&undistorted_bitmap);
+	undistorted_bitmap.Write("D:/repo/Instant-NGP-for-GTX-1000/data/nerf/fox/images/0001a.jpg");
+	return 0;
+}
+
 int test_sdf()
 {
+	return test_undistortFoxImg();
 	Eigen::MatrixX3d landmarkPts = sdf::readPoint3d("../data/a/result/pts.txt");
 	double x_strat = landmarkPts.col(0).minCoeff();
 	double y_strat = landmarkPts.col(1).minCoeff();
@@ -335,6 +353,8 @@ int test_sdf()
 						jsonPaths.emplace_back(thisFilename);
 						Eigen::Matrix4d  p = cameraMatrix * Rt;
 						cameraPs.emplace_back(p);
+						LOG_OUT << imgPath;
+						LOG_OUT << Rt;
 						Eigen::Matrix4Xf gridInCamera = p.cast<float>() * a.grid;
 						int gridCnt = gridInCamera.cols();
 						for (size_t i = 0; i < gridCnt; i++)
@@ -362,8 +382,8 @@ int test_sdf()
 
 	a.emptyShellPts(0);
 	Eigen::Matrix3Xf pts = a.getCloud(0);
-	sdf::fuseColor(pts, imgPaths, cameraPs);
-		
+	std::vector<std::uint8_t> colors = sdf::fuseColor(pts, imgPaths, cameraPs);
+	sdf::saveCloud("c.ply", pts, colors);
 	//mc::marchcube(a.grid, a.gridCenterHitValue, a.x_size, a.y_size, a.z_size, a.unit, 0);
 	return 0;
 }

@@ -760,6 +760,10 @@ bool segmentFrame(bool* show_regist_window)
 							x_end += abs(x_start_end[1]) * x_length;
 							y_end += abs(y_start_end[1]) * y_length;
 							z_end += abs(z_start_end[1]) * z_length;
+							std::vector<std::filesystem::path> maskPaths;
+							std::vector<std::filesystem::path> imgPaths;
+							std::vector<std::filesystem::path> jsonPaths;
+							std::vector<Eigen::Matrix4d> cameraPs;
 							sdf::VolumeDat volumeInstance(static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()), x_strat, y_strat, z_strat, x_end, y_end, z_end);
 							for (size_t i = 0; i < segmentMgr->imgPaths.size(); i++)
 							{
@@ -777,7 +781,21 @@ bool segmentFrame(bool* show_regist_window)
 											LOG_WARN_OUT << "read fail : " << jsonPath;
 											continue;
 										}
+										std::string imgPath;
+										if (!labelme::readJsonStringElement(jsonPath, "imagePath", imgPath))
+										{
+											LOG_WARN_OUT << "not found : " << imgPath;
+											continue;
+										};
+										if (!std::filesystem::exists(imgPath))
+										{
+											LOG_WARN_OUT << "not found : " << imgPath;
+										}
+										maskPaths.emplace_back(maskPath);
+										imgPaths.emplace_back(imgPath);
+										jsonPaths.emplace_back(jsonPath);
 										Eigen::Matrix4d  p = cameraMatrix * Rt;
+										cameraPs.emplace_back(p);
 										Eigen::Matrix4Xf gridInCamera = p.cast<float>() * volumeInstance.grid;
 										int gridCnt = gridInCamera.cols();
 										for (size_t i = 0; i < gridCnt; i++)
@@ -800,9 +818,12 @@ bool segmentFrame(bool* show_regist_window)
 								}
 								progress.numerator.fetch_add(1);
 							}
-							//volumeInstance.getCloud(imgDirPath/"dense.ply", 0);
-							//mc::Mesh mesh = mc::marchcube(volumeInstance.grid, volumeInstance.gridCenterHitValue, volumeInstance.x_size, volumeInstance.y_size, volumeInstance.z_size, volumeInstance.unit, 0);
-							//mesh.saveMesh(imgDirPath / "dense.obj");
+							mc::Mesh mesh = mc::marchcube(volumeInstance.grid, volumeInstance.gridCenterHitValue, volumeInstance.x_size, volumeInstance.y_size, volumeInstance.z_size, volumeInstance.unit, 0);
+							mesh.saveMesh(imgDirPath / "dense.obj");
+							volumeInstance.emptyShellPts(0);
+							Eigen::Matrix3Xf shellPts = volumeInstance.getCloud(0);
+							std::vector<std::uint8_t> colors = sdf::fuseColor(shellPts, imgPaths, cameraPs);
+							sdf::saveCloud(imgDirPath / "dense.ply", shellPts, colors);
 							progress.procRunning.store(0);
 							progress.denominator.store(-1);
 							progress.numerator.store(-1);

@@ -13,8 +13,8 @@
     X(kSimplePinhole,          0  ) \
     X(kPinhole,                1  ) \
     X(kSimpleRadial,           2  ) \
-    X(kRadial,                 3  ) 
-    //X(kOpenCV,                 4  ) \
+    X(kRadial,                 3  ) \
+    X(kOpenCV,                 4  ) 
     //X(kOpenCVFisheye,          5  ) \
     //X(kFullOpenCV,             6  ) \
     //X(kFOV,                    7  ) \
@@ -30,7 +30,8 @@
   CAMERA_MODEL_CASE(SimplePinholeCameraModel)       \
   CAMERA_MODEL_CASE(PinholeCameraModel)             \
   CAMERA_MODEL_CASE(SimpleRadialCameraModel)        \
-  CAMERA_MODEL_CASE(RadialCameraModel)              
+  CAMERA_MODEL_CASE(RadialCameraModel)              \
+  CAMERA_MODEL_CASE(OpenCVCameraModel)
 #endif
 
 
@@ -258,6 +259,25 @@ struct SimpleRadialCameraModel
 struct RadialCameraModel : public BaseCameraModel<RadialCameraModel> {
     CAMERA_MODEL_DEFINITIONS(CameraModelId::kRadial, "RADIAL", 1, 2, 2)
 };
+
+// OpenCV camera model.
+//
+// Based on the pinhole camera model. Additionally models radial and
+// tangential distortion (up to 2nd degree of coefficients). Not suitable for
+// large radial distortions of fish-eye cameras.
+//
+// Parameter list is expected in the following order:
+//
+//    fx, fy, cx, cy, k1, k2, p1, p2
+//
+// See
+// http://docs.opencv.org/modules/calib3d/doc/camera_calibration_and_3d_reconstruction.html
+struct OpenCVCameraModel : public BaseCameraModel<OpenCVCameraModel> {
+    CAMERA_MODEL_DEFINITIONS(CameraModelId::kOpenCV, "OPENCV", 2, 2, 4)
+};
+
+
+
 std::vector<double> CameraModelInitializeParams(CameraModelId model_id,
     double focal_length,
     size_t width,
@@ -795,6 +815,80 @@ void RadialCameraModel::Distortion(
     const T radial = k1 * r2 + k2 * r2 * r2;
     *du = u * radial;
     *dv = v * radial;
+}
+
+std::string OpenCVCameraModel::InitializeParamsInfo() {
+    return "fx, fy, cx, cy, k1, k2, p1, p2";
+}
+
+std::array<size_t, 2> OpenCVCameraModel::InitializeFocalLengthIdxs() {
+    return { 0, 1 };
+}
+
+std::array<size_t, 2> OpenCVCameraModel::InitializePrincipalPointIdxs() {
+    return { 2, 3 };
+}
+
+std::array<size_t, 4> OpenCVCameraModel::InitializeExtraParamsIdxs() {
+    return { 4, 5, 6, 7 };
+}
+
+std::vector<double> OpenCVCameraModel::InitializeParams(
+    const double focal_length, const size_t width, const size_t height) {
+    return { focal_length, focal_length, width / 2.0, height / 2.0, 0, 0, 0, 0 };
+}
+
+template <typename T>
+void OpenCVCameraModel::ImgFromCam(const T* params, T u, T v, T w, T* x, T* y) {
+    const T f1 = params[0];
+    const T f2 = params[1];
+    const T c1 = params[2];
+    const T c2 = params[3];
+
+    u /= w;
+    v /= w;
+
+    // Distortion
+    T du, dv;
+    Distortion(&params[4], u, v, &du, &dv);
+    *x = u + du;
+    *y = v + dv;
+
+    // Transform to image coordinates
+    *x = f1 * *x + c1;
+    *y = f2 * *y + c2;
+}
+
+void OpenCVCameraModel::CamFromImg(
+    const double* params, double x, double y, double* u, double* v, double* w) {
+    const double f1 = params[0];
+    const double f2 = params[1];
+    const double c1 = params[2];
+    const double c2 = params[3];
+
+    // Lift points to normalized plane
+    *u = (x - c1) / f1;
+    *v = (y - c2) / f2;
+    *w = 1;
+
+    IterativeUndistortion(&params[4], u, v);
+}
+
+template <typename T>
+void OpenCVCameraModel::Distortion(
+    const T* extra_params, const T u, const T v, T* du, T* dv) {
+    const T k1 = extra_params[0];
+    const T k2 = extra_params[1];
+    const T p1 = extra_params[2];
+    const T p2 = extra_params[3];
+
+    const T u2 = u * u;
+    const T uv = u * v;
+    const T v2 = v * v;
+    const T r2 = u2 + v2;
+    const T radial = k1 * r2 + k2 * r2 * r2;
+    *du = u * radial + T(2) * p1 * uv + p2 * (r2 + T(2) * u2);
+    *dv = v * radial + T(2) * p2 * uv + p1 * (r2 + T(2) * v2);
 }
 
 Eigen::Vector2d CameraModelImgFromCam(const CameraModelId model_id,
