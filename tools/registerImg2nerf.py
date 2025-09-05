@@ -24,7 +24,19 @@ def convertToNerf(path):
     cameras = {}
     files = os.listdir(path)
     camera = {}
-    frames =[] 
+    frames = []
+    shift = np.array([0,0,0])
+    lanmarkPath = os.path.realpath(os.path.join(path, 'pts.txt'))
+    if os.path.exists(lanmarkPath):
+        with open(lanmarkPath,  "r") as fileHandler:
+            lines = fileHandler.readlines()
+            lanmarks = np.zeros([len(lines), 3])
+            for i in range(len(lines)):
+                strs = lines[i].split()
+                lanmarks[i, 0] = float(strs[0])
+                lanmarks[i, 1] = float(strs[1])
+                lanmarks[i, 2] = float(strs[2])
+        shift=np.mean(lanmarks,axis=0)
     outPath = os.path.realpath(os.path.join(path, 'transforms.json'))
     for file in files:
         if file.endswith('.json'):
@@ -61,13 +73,13 @@ def convertToNerf(path):
                             camera["fl_y"] = float(data['fy'])
                             camera["k1"] = 0
                             camera["k2"] = 0
-                            camera["k3"] = 0
-                            camera["k4"] = 0
+                            # camera["k3"] = 0
+                            # camera["k4"] = 0
                             camera["p1"] = 0
                             camera["p2"] = 0
                             camera["cx"] = float(data["cx"])
                             camera["cy"]=float(data["cy"])
-                            camera["is_fisheye"] = False
+                            # camera["is_fisheye"] = False
                             camera["camera_angle_x"] = math.atan(
                             	camera["w"] / (camera["fl_x"] * 2)) * 2
                             camera["camera_angle_y"] = math.atan(
@@ -77,23 +89,23 @@ def convertToNerf(path):
                                 180 / math.pi
                             camera["aabb_scale"]= 4
 
-                        frame={}
-                        frame['file_path'] = data['imagePath']
-                        frame['sharpness'] = sharpness(data['imagePath'])
                         Qt = data['Qt']
                         t = Qt[4:7]
                         Q = Qt[0:4]
                         R = Rotation.from_quat(Q, scalar_first=True).as_matrix()
-                        Rt = np.eye(4)
-                        Rt[0:3, 0:3] = R.T
-                        Rt[0:3, 3] = t
-                        c2w = Rt
-                        c2w = np.linalg.inv(c2w)
-                        c2w = c2w.T
-                        # c2w[0:3, 2] *= -1  # flip the y and z axis
-                        # c2w[0:3,1] *= -1
-                        # c2w = c2w[[1,0,2,3],:]
-                        # c2w[2,:] *= -1 # flip whole world upside down
+                        # R=R.T
+                        t = np.array(t).reshape([3, 1])*0.2
+                        # t*=-1
+                        bottom = np.array([0.0, 0.0, 0.0, 1.0]).reshape([1, 4])
+                        m = np.concatenate([np.concatenate([R, t], 1), bottom], 0)
+                        c2w = np.linalg.inv(m)
+                        if not False:
+                            c2w[0:3, 2] *= -1  # flip the y and z axis
+                            c2w[0:3, 1] *= -1
+                            c2w = c2w[[1, 0, 2, 3], :]
+                            c2w[2, :] *= -1  # flip whole world upside down
+                        frame = {
+                            "file_path": data['imagePath'], "sharpness": sharpness(data['imagePath']), "transform_matrix": c2w}
                         frame['transform_matrix'] = c2w.tolist()
                         frames.append(frame)
                 except:
@@ -122,56 +134,16 @@ def readTXT(path):
     print(pts[min_index])
     return
 def test():
-    # readTXT('D:/repo/Instant-NGP-for-GTX-1000/data/nerf/fox/vertices - Cloud.txt')
-    pt=np.array([-1.25966,-0.16637,2.52225,1]).reshape(4,1)
-    pt = np.array([0, 0, 0, 1]).reshape(4, 1)
-    Rt2 = np.array([[0.8919526257584003, 0.08782115052710009, 0.44351774741451677, 3.10241135906331], [0.4476030653989872, -0.03306799514380148, -
-                  0.8936207456066606, -5.5301731439147535], [-0.06381255888968038, 0.9955872404475701, -0.06880409907698369, -0.9857969864289505], [0.0, 0.0, 0.0, 1.0]])
-    Rt12 = np.array([[0.651784451676041, 0.03055962929199482, 0.7577880163041875, 4.9333343331970925], [0.7569316652237976, 0.03601747772893646, -
-             0.6525003771469722, -3.6736372477065413], [-0.04723373390239877, 0.9988837992795324, 0.0003440644566529451, -0.692646279501112], [0.0, 0.0, 0.0, 1.0]])
-    Rt0 = Rt2
-    cameraP = np.array([[1375.52,0,554.558,0],[0,1374.49,965.268,0],[0,0,1,0],[0,0,0,1]])
-    print(cameraP)
-    R = Rt0[0:3, 0:3]
-    t = Rt0[0:3, 3]
-
-    flags = [True, True, True, True, True, True, True, True]
-    for i in range(2**len(flags)):
-        binary = '{:08b}'.format(i)
-        for j in range(len(flags)):
-            flags[j] = binary[7-j] == '1'
-        if flags[0]:
-            pt = pt[[1, 0, 2, 3], :]
-        if flags[1]:
-            pt = pt[[0, 2, 1, 3], :]
-        if flags[2]:
-            pt = pt[[2, 1, 0, 3], :]
-        if flags[3]:
-            R = R.T
-        if flags[4]:
-            t *= -1
-        Rt = mergeRt(R,t)
-        if flags[5]:
-            a = cameraP@np.linalg.inv(Rt)@pt
-        else:
-            a = cameraP@Rt@pt
-        if flags[6]:
-            x = a[0, :]/a[2, :]
-            y = a[1, :]/a[2, :]
-        else:
-            x = a[0, :]/a[1, :]
-            y = a[2, :]/a[1, :]
-        if flags[7]:
-            x *=-1
-        else:
-            y *= -1
-        if x<0 or x>1080 or y<0 or y>1920:
-            continue
-        print(x, y, flags)  # 2:[985,777]   12:[651,758]
-
+    with open('D:/repo/Instant-NGP-for-GTX-1000/data/nerf/fox/transforms.json', 'r') as file:
+        data = json.load(file)
+        for frame in data['frames']:
+            Rt = np.array(frame['transform_matrix'])
+            t = Rt[0:3, 3]
+            print(t)
+    
 if __name__ == '__main__':
-    test()
-    exit(0)
+    # test()
+    # exit(0)
     print('every image comes from the same camera!')
     registerResultDir = 'D:/repo/colmapThird/data/a/result'
     convertToNerf(registerResultDir)
