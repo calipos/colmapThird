@@ -300,7 +300,7 @@ int test_undistortFoxImg()
 
 int test_sdf()
 {
-	return test_undistortFoxImg();
+	//return test_undistortFoxImg();
 	Eigen::MatrixX3d landmarkPts = sdf::readPoint3d("../data/a/result/pts.txt");
 	double x_strat = landmarkPts.col(0).minCoeff();
 	double y_strat = landmarkPts.col(1).minCoeff();
