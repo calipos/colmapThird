@@ -6,6 +6,7 @@ import numpy as np
 from plyfile import PlyData
 import cv2
 import pickle
+import time
 from scipy.spatial.transform import Rotation
 def xyzToGridXYZ(x, y, z, unit, xStart, yStart, zStart):
     x_ = np.int32((x-xStart)/unit)
@@ -33,7 +34,7 @@ def decodePosition(posId, unit, xStart, yStart, zStart, sampleXcnt, sampleXYcnt)
 
 def writeGridPts(path, gridFlag, unit, xStart, yStart, zStart):
     with open(path, 'w') as f:
-        for (x_, y_, z_), flag in np.ndenumerate(gridFlag):
+        for (z_, y_, x_), flag in np.ndenumerate(gridFlag):
             if flag > 0:
                 x, y, z = gridXYZToxyz(
                     x_, y_, z_, unit, xStart, yStart, zStart)
@@ -69,15 +70,17 @@ def sampleGridPts2(plyPath,unit):
     sampleYcnt = np.int64((yEnd-yStart)/unit+1)
     sampleZcnt = np.int64((zEnd-zStart)/unit+1)
     gridDimZYX = [sampleZcnt, sampleYcnt, sampleXcnt]
+    print('grid shape [ZYX] = ', gridDimZYX)
     totalCnt = sampleXcnt*sampleYcnt*sampleZcnt
     assert totalCnt<np.iinfo(np.int32).max,'reset the sample unit!'
     sampleXYcnt = sampleXcnt*sampleYcnt
     gridFlag = np.zeros(gridDimZYX,dtype=np.uint8)
     for i in range(len(x)):
-        x_, y_, z_ = xyzToGridXYZ(
+        xInt, yInt, zInt = xyzToGridXYZ(
             x[i], y[i], z[i], unit, xStart, yStart, zStart)
-        gridFlag[z_, y_, x_] = 1
+        gridFlag[zInt, yInt, xInt] = 1
     # writeGridPts('surf/a.txt', gridFlag, unit, xStart, yStart, zStart)
+    gridFlag = gridPtsDiltae(gridFlag)
     gridFlag = gridPtsDiltae(gridFlag)
     # writeGridPts('surf/b.txt', gridFlag, unit, xStart, yStart, zStart)
     return gridFlag, xStart, yStart, zStart
@@ -90,7 +93,7 @@ def loadMaskDat(path):
         data = binfile.read(4)
         total = struct.unpack('i', data)[0]
         data = binfile.read(total)
-        data = list(struct.unpack(str(total)+'b', data))
+        data = list(struct.unpack(str(total)+'B', data))
         mask = np.array(data,dtype=np.uint8)
         return mask.reshape([height, width])
 def sampleGridPts(pts,unit):
@@ -107,6 +110,33 @@ def sampleGridPts(pts,unit):
     pts = np.array([i for i in zip(x.flat, y.flat, z.flat)]).T
     pts = np.vstack([pts, np.ones([1, pts.shape[1]]).astype(np.float32)])
     return pts
+class Camera:
+    def __init__(self,fx,fy,cx,cy,height,width):
+        self.fx = fx
+        self.fy = fy
+        self.cx = cx
+        self.cy = cy
+        self.height = height
+        self.width = width
+        self.generImgDir()
+        self.sn = Camera.cameraSN(fx, fy, cx, cy, height, width)
+        self.intr = np.eye(4, dtype=np.float32)
+        self.intr[0,0]=self.fx
+        self.intr[1,1]=self.fy
+        self.intr[0,2]=self.cx
+        self.intr[1,2]=self.cy
+    @staticmethod
+    def cameraSN(fx, fy, cx, cy, height, width):
+        return hash(fx+fy+cx+cy+height+ width)
+    def generImgDir(self):
+        self.imgDir = np.ones([self.height*self.width, 3])
+        for i in range(self.height*self.width):
+            r = i//self.width+0.5-self.cy
+            c = i%self.width+0.5-self.cx
+            self.imgDir[i, 0] = c/self.fx
+            self.imgDir[i, 1] = r/self.fy
+        self.imgDir = self.imgDir/np.linalg.norm(self.imgDir, axis=1).reshape(-1, 1)
+        self.imgDir = self.imgDir.T
 class DenseData:
     def __init__(self, dataDir, gridFlags=None, sampleUnit=None, xStart=None, yStart=None, zStart=None):
         self.dataDir = dataDir
@@ -117,7 +147,8 @@ class DenseData:
         self.zStart = zStart
         self.spaceEncodeLayerCnt = 4
         filenames = os.listdir(dataDir)
-        self.cameras=[]
+        self.cameras ={}
+        self.views = []
         if gridFlags is not None:
             gridDimZYX = gridFlags.shape
             self.gridDimZ = gridDimZYX[0]
@@ -130,13 +161,17 @@ class DenseData:
                 with open(file_path, 'r') as file:
                     data = json.load(file)
                     try:
-                        if 'imagePath' in data.keys() and 'fx' in data.keys() and 'fy' in data.keys() and 'cx' in data.keys() and 'cy' in data.keys() :
+                        if 'imagePath' in data.keys() \
+                            and 'fx' in data.keys() \
+                            and 'fy' in data.keys() \
+                            and 'cx' in data.keys() \
+                            and 'cy' in data.keys() \
+                            and 'height' in data.keys() \
+                            and 'width' in data.keys() :
                             imgPath = data['imagePath']
                             path = Path(imgPath)
                             shortName = path.stem
                             maskPath = os.path.join(dataDir, 'mask_'+shortName+'.dat')
-                            mask = loadMaskDat(maskPath)
-                            assert mask.shape[0] == data['height'] and mask.shape[1] == data['width'] 
                             if os.path.exists(imgPath) and os.path.exists(maskPath):
                                 Qt = data['Qt']
                                 t = Qt[4:7]
@@ -149,11 +184,19 @@ class DenseData:
                                 fy = data['fy']
                                 cx = data['cx']
                                 cy = data['cy']
-                                camera = {'Rt': Rt, 'fx':fx,'fy':fy,'cx':cx,'cy':cy}
-                                self.cameras.append(camera)
+                                height = data['height']
+                                width = data['width']
+                                cameraSN = Camera.cameraSN(
+                                    fx, fy, cx, cy, height, width)
+                                if cameraSN not in self.cameras:
+                                    self.cameras[cameraSN] = Camera(
+                                        fx, fy, cx, cy, height, width)
+                                view = {'Rt': Rt, 'cameraSN': cameraSN, 'fx': fx, 'fy': fy,
+                                        'cx': cx, 'cy': cy, 'height': height, 'width': width, 'imgPath': imgPath, 'maskPath': maskPath}
+                                self.views.append(view)
                     except:
                         continue
-        print(len(self.cameras))
+        print('camera cnt = ',len(self.cameras))
 
     @staticmethod
     def writeGridPtsWithFeat(Dir, xyzs, positionFeatId):
@@ -165,20 +208,23 @@ class DenseData:
                     f.write(str(xyzs[j3])+' ' +
                             str(xyzs[j3+1])+' ' + str(xyzs[j3+2])+' '+str(positionFeatId[i][j])+'\n')
     def generTrainData(self):
-        print(self.gridFlags.shape)
         self.positionFeatId = []
         positionFeatSet = []
         for i in range(self.spaceEncodeLayerCnt):
             self.positionFeatId.append([])
-            positionFeatSet.append({})
-        xyzs=[]
-        for (x_, y_, z_), flag in np.ndenumerate(self.gridFlags):
+            positionFeatSet.append({})        
+        #xyzs = [None] *3*self.gridDimX*self.gridDimY*self.gridDimZ
+        gridPtsCnt=0
+        self.gridPts = np.ones((4, self.gridDimX*self.gridDimY*self.gridDimZ),dtype=np.float32)
+        start_time = time.time()
+        for (z_, y_, x_), flag in np.ndenumerate(self.gridFlags):
             if flag>0:
                 x, y, z = gridXYZToxyz(
-                    x_, y_, z_, unit, self.xStart, self.yStart, self.zStart)
-                xyzs.append(x)
-                xyzs.append(y)
-                xyzs.append(z)
+                    x_, y_, z_, self.sampleUnit, self.xStart, self.yStart, self.zStart)
+                self.gridPts[0, gridPtsCnt] =x
+                self.gridPts[1, gridPtsCnt] =y
+                self.gridPts[2, gridPtsCnt] =z
+                gridPtsCnt+=1
                 for i in range(self.spaceEncodeLayerCnt):
                     layerFactor = 2**i
                     postionEncode = encodePosition2(x_//layerFactor, y_ //
@@ -190,12 +236,68 @@ class DenseData:
                         newId = len(positionFeatSet[i])
                         positionFeatSet[i][postionEncode] = newId
                         self.positionFeatId[i].append(newId)
+        end_time = time.time()
+        print("gener grid pts (s)", end_time - start_time)
+        # np.savetxt('surf/test-2.txt', np.array(xyzs).astype(np.float32).reshape(-1, 3), fmt='%f', delimiter=' ')
         # DenseData.writeGridPtsWithFeat(self.dataDir, xyzs, self.positionFeatId)
-        self.gridPts = np.array(xyzs).astype(np.float32).reshape(-1, 3).T
-        self.gridPts = np.vstack(
-            [self.gridPts, np.ones([1, self.gridPts.shape[1]]).astype(np.float32)])
-        del xyzs
+        # self.gridPts = np.array(xyzs).astype(np.float32).reshape(-1, 3).T
+        # self.gridPts = np.vstack(
+        #     [self.gridPts, np.ones([1, self.gridPts.shape[1]]).astype(np.float32)])
+        self.gridPts.resize(4, gridPtsCnt)
         del positionFeatSet
+        print('grid points cnt = ', self.gridPts.shape[1])
+        for view in self.views:
+            camera = self.cameras[view['cameraSN']]
+            img = cv2.imread(view['imgPath'])
+            mask = loadMaskDat(view['maskPath'])
+            assert mask.shape[0] == img.shape[0] and mask.shape[1] == img.shape[1], "error"
+            height = view['height']
+            width = view['width']
+            Rt = view['Rt']
+            Rinv = Rt[0:3, 0:3].T
+            currImgDir = Rinv@camera.imgDir
+            KR = camera.intr@Rt
+            gridPtsInView = KR@self.gridPts
+            gridPtsInView = (gridPtsInView/gridPtsInView[2, :]+0.5).astype(np.int32)
+            viewData={}
+            for gridPtIdx in range(gridPtsInView.shape[1]):
+                if gridPtsInView[0, gridPtIdx] >= 0 \
+                        and gridPtsInView[1, gridPtIdx] >= 0\
+                        and gridPtsInView[0, gridPtIdx] < width\
+                        and gridPtsInView[1, gridPtIdx] < height:
+                    r = gridPtsInView[1, gridPtIdx]
+                    c = gridPtsInView[0, gridPtIdx]
+                    # if mask[r, c] > 0:
+                    pixelIdx = r*width+c
+                    if pixelIdx not in viewData:
+                        viewData[pixelIdx]=[]
+                    viewData[pixelIdx].append(gridPtIdx)
+
+                    # if mask[r, c] > 0:
+                        # dir = currImgDir[r*width+c]
+                        # blue = img[r, c, 0]
+                        # green = img[r, c, 1]
+                    # red = img[r, c, 2]
+            showCase=False
+            if showCase:
+                proj = np.zeros([height, width], dtype=np.uint8)
+                for pixel in viewData:
+                    r = pixel//width
+                    c = pixel%width
+                    proj[r,c]=250
+                cv2.imwrite('surf/a.bmp', proj)
+                alone=[]
+                for pixel in viewData:
+                    if len(viewData[pixel]) == 1:
+                        alone.append(viewData[pixel])
+                with open('surf/a.txt', 'w') as f:
+                    for a in alone:
+                        f.write(str(self.gridPts[0, a][0])+' ' +
+                                str(self.gridPts[1, a][0])+' ' + str(self.gridPts[2, a][0])+'\n')
+                
+            print(2)
+            exit(0)
+
         print(1)
     def save(self, path):
         d = dict(sampleUnit=self.sampleUnit, gridFlags=self.gridFlags,
@@ -218,15 +320,16 @@ class DenseData:
         self.gridDimY = gridDimZYX[1]
         self.gridDimX = gridDimZYX[2]
         self.gridDimXY = self.gridDimY*self.gridDimX
-        writeGridPts('surf/b.txt', self.gridFlags, self.sampleUnit,
-                     self.xStart, self.yStart, self.zStart)
+        # writeGridPts('surf/b.txt', self.gridFlags, self.sampleUnit,
+        #              self.xStart, self.yStart, self.zStart)
 
 if __name__=='__main__':
-    unit = 0.03
+    unit = 0.01
     dataDir = 'D:/repo/colmapThird/data/a/result'
     # gridFlag, xStart, yStart, zStart = sampleGridPts2('D:/repo/colmapThird/data/a/result/dense.ply', unit)
     # scene = DenseData(dataDir,gridFlag, unit, xStart, yStart, zStart)
     # scene.save('surf/s.pkl')
+    # exit(0)
     scene2 = DenseData(dataDir)
     scene2.load('surf/s.pkl')
     scene2.generTrainData()
