@@ -7,6 +7,7 @@ from plyfile import PlyData
 import cv2
 import pickle
 import time
+import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation
 def xyzToGridXYZ(x, y, z, unit, xStart, yStart, zStart):
     x_ = np.int32((x-xStart)/unit)
@@ -30,7 +31,23 @@ def decodePosition(posId, unit, xStart, yStart, zStart, sampleXcnt, sampleXYcnt)
     x_ = y_ % sampleXcnt
     y_ = y_ // sampleXcnt
     return x_*unit+xStart, y_*unit+yStart, z_*unit+zStart
-
+def readObj(path):
+    vertex=[]
+    face=[]
+    with open(path, 'r') as f:
+        lines = f.readlines()
+        for l in lines:
+            if l.startswith('v '):
+                cxyz = l.split()
+                vertex.append([np.float32(cxyz[1]), np.float32(
+                    cxyz[2]), np.float32(cxyz[3])])
+            if l.startswith('f '):
+                cxyz = l.split()
+                face.append(
+                    [np.int32(cxyz[1])-1, np.int32(cxyz[2])-1, np.int32(cxyz[3])-1])
+    vertex = np.array(vertex,dtype=np.float32).T
+    face = np.array(face, dtype=np.int32)
+    return vertex, face
 
 def writeGridPts(path, gridFlag, unit, xStart, yStart, zStart):
     with open(path, 'w') as f:
@@ -53,7 +70,8 @@ def gridPtsDiltae(gridFlag):
         gridFlag[:, :, x] = dilated_img
     return gridFlag
     
-
+def getRect(pt0,pt1,pt2):
+    return np.min(pt2, np.min(pt0, pt1)), np.max(pt2, np.min(pt0, pt1))
 def sampleGridPts2(plyPath,unit):
     plydata = PlyData.read(plyPath)
     vertex = plydata['vertex']
@@ -118,25 +136,29 @@ class Camera:
         self.cy = cy
         self.height = height
         self.width = width
-        self.generImgDir()
         self.sn = Camera.cameraSN(fx, fy, cx, cy, height, width)
         self.intr = np.eye(4, dtype=np.float32)
         self.intr[0,0]=self.fx
         self.intr[1,1]=self.fy
         self.intr[0,2]=self.cx
         self.intr[1,2]=self.cy
+        self.imgDir = None
+        self.getImgDir()
     @staticmethod
     def cameraSN(fx, fy, cx, cy, height, width):
         return hash(fx+fy+cx+cy+height+ width)
-    def generImgDir(self):
-        self.imgDir = np.ones([self.height*self.width, 3])
-        for i in range(self.height*self.width):
-            r = i//self.width+0.5-self.cy
-            c = i%self.width+0.5-self.cx
-            self.imgDir[i, 0] = c/self.fx
-            self.imgDir[i, 1] = r/self.fy
-        self.imgDir = self.imgDir/np.linalg.norm(self.imgDir, axis=1).reshape(-1, 1)
-        self.imgDir = self.imgDir.T
+    def getImgDir(self):
+        if self.imgDir is None:
+            self.imgDir = np.ones([self.height*self.width, 3])
+            for i in range(self.height*self.width):
+                r = i//self.width+0.5-self.cy
+                c = i%self.width+0.5-self.cx
+                self.imgDir[i, 0] = c/self.fx
+                self.imgDir[i, 1] = r/self.fy
+            self.imgDir = self.imgDir/np.linalg.norm(self.imgDir, axis=1).reshape(-1, 1)
+            self.imgDir = self.imgDir.reshape(self.height, self.width, 3)
+        return self.imgDir
+
 class DenseData:
     def __init__(self, dataDir, gridFlags=None, sampleUnit=None, xStart=None, yStart=None, zStart=None):
         self.dataDir = dataDir
@@ -195,6 +217,7 @@ class DenseData:
                                         'cx': cx, 'cy': cy, 'height': height, 'width': width, 'imgPath': imgPath, 'maskPath': maskPath}
                                 self.views.append(view)
                     except:
+                        print('except')
                         continue
         print('camera cnt = ',len(self.cameras))
 
@@ -322,8 +345,74 @@ class DenseData:
         self.gridDimXY = self.gridDimY*self.gridDimX
         # writeGridPts('surf/b.txt', self.gridFlags, self.sampleUnit,
         #              self.xStart, self.yStart, self.zStart)
+class Msh:
+    def __init__(self, path=None):
+        self.path=path
+        if path is not None:
+            self.vertex, self.face = readObj(path)
+
+    def generImgDir(self,camera,view):
+            imgDir = camera.getImgDir()
+            img = cv2.imread(view['imgPath'])
+            mask = loadMaskDat(view['maskPath'])
+            assert mask.shape[0] == img.shape[0] and mask.shape[1] == img.shape[1], "error"
+            height = view['height']
+            width = view['width']
+            Rt = view['Rt']
+            R = Rt[0:3,0:3]
+            KR = camera.intr[0:3, 0:3]@R
+            vertexInView = KR@self.vertex
+            vertexUvInView = (vertexInView/vertexInView[2, :]+0.5).astype(np.int32)
+            distanceMat = np.ones(mask.shape,dtype=np.float32)*-1
+            distanceMatShow = np.zeros(mask.shape, dtype=np.uint8)
+            for face in self.face:
+                pt0Idx = face[0]
+                pt1Idx = face[1]
+                pt2Idx = face[2]
+                print(face)
+                vector1 = vertexInView[:, pt1Idx] - vertexInView[:, pt0Idx]
+                vector2 = vertexInView[:, pt2Idx] - vertexInView[:, pt0Idx]
+                N = np.cross(vector1, vector2)
+                uv0 = vertexUvInView[0:2, pt0Idx]
+                uv1 = vertexUvInView[0:2, pt1Idx]
+                uv2 = vertexUvInView[0:2, pt2Idx]
+                rectPt0,rectPt2 = getRect(uv0,uv1,uv2)
+                
+
+
+
+            for ptIdx in range(vertexInView.shape[1]):
+                if vertexInView[0, ptIdx] >= 0 \
+                        and vertexInView[1, ptIdx] >= 0\
+                        and vertexInView[0, ptIdx] < width\
+                        and vertexInView[1, ptIdx] < height:
+                    r = vertexInView[1, ptIdx]
+                    c = vertexInView[0, ptIdx]
+                    dist = np.linalg.norm(self.vertex[0:3, ptIdx])
+                    if distanceMat[r, c] < 0 or distanceMat[r, c] > dist:
+                        distanceMat[r, c] = dist
+                        distanceMatShow[r, c] =250
+
+            # 使用imshow绘制灰度图像
+            plt.imshow(distanceMatShow, cmap='gray')
+            plt.show()
+
+    def save(self, path):
+        d = dict(path=self.path, vertex=self.vertex,face=self.face)
+        f = open(path, 'wb')
+        pickle.dump(d, f)
+        f.close()
+    def load(self, path):
+        f = open(path, 'rb')
+        d = pickle.load(f)
+        f.close() 
+        self.path = d['path']
+        self.vertex = d['vertex']
+        self.face = d['face']
 
 if __name__=='__main__':
+
+
     unit = 0.01
     dataDir = 'D:/repo/colmapThird/data/a/result'
     # gridFlag, xStart, yStart, zStart = sampleGridPts2('D:/repo/colmapThird/data/a/result/dense.ply', unit)
@@ -332,5 +421,13 @@ if __name__=='__main__':
     # exit(0)
     scene2 = DenseData(dataDir)
     scene2.load('surf/s.pkl')
-    scene2.generTrainData()
+    # scene2.generTrainData()
 
+    # mesh = Msh('D:/repo/colmapThird/data/a/result/dense.obj')
+    # mesh.save('D:/repo/colmapThird/data/a/result/dense.msh')
+    mesh = Msh()
+    mesh.load('D:/repo/colmapThird/data/a/result/dense.msh')
+
+    for view in scene2.views:
+        camera = scene2.cameras[view['cameraSN']]
+        mesh.generImgDir(camera, view)
