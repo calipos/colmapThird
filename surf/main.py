@@ -40,7 +40,7 @@ def readObj(path):
             if l.startswith('v '):
                 cxyz = l.split()
                 vertex.append([np.float32(cxyz[1]), np.float32(
-                    cxyz[2]), np.float32(cxyz[3])])
+                    cxyz[2]), np.float32(cxyz[3]), np.float32(1)])
             if l.startswith('f '):
                 cxyz = l.split()
                 face.append(
@@ -48,6 +48,23 @@ def readObj(path):
     vertex = np.array(vertex,dtype=np.float32).T
     face = np.array(face, dtype=np.int32)
     return vertex, face
+def intersect(N,p0,o,d):
+    return o-((np.dot(N, o)-np.dot(N, p0))/(np.dot(N, d)))*d
+def triangleInterpolate(v1,v2,v3,x,y):
+    yv2_yv3 = v2[1]-v3[1]
+    px_xv3 = x-v3[0]
+    xv3_xv2 = v3[0]-v2[0]
+    py_yv3 = y-v3[1]
+    xv1_xv3 = v1[0]-v3[0]
+    yv1_yv3 = v1[1]-v3[1]
+    yv3_yv1 = v3[1]-v1[1]
+    denominator = (yv2_yv3*xv1_xv3+xv3_xv2*yv1_yv3)+1e-7
+    w1 = (yv2_yv3*px_xv3+xv3_xv2*py_yv3)/denominator
+    w2 = (yv3_yv1*px_xv3+xv1_xv3*py_yv3)/denominator
+    w3=1-w1-w2
+    return w1,w2,w3
+
+
 
 def writeGridPts(path, gridFlag, unit, xStart, yStart, zStart):
     with open(path, 'w') as f:
@@ -58,6 +75,14 @@ def writeGridPts(path, gridFlag, unit, xStart, yStart, zStart):
                 f.write(str(x)+' ' + str(y)+' ' + str(z)+'\n')
 
 
+def writeGridPtsWithFeat(Dir, xyzs, positionFeatId):
+    for i in range(len(positionFeatId)):
+        path = os.path.join(Dir, 'gridPtsWithFeat'+str(i)+'.pts')
+        with open(path, 'w') as f:
+            for j in range(len(xyzs)//3):
+                j3 = 3*j
+                f.write(str(xyzs[j3])+' ' +
+                        str(xyzs[j3+1])+' ' + str(xyzs[j3+2])+' '+str(positionFeatId[i][j])+'\n')
 
 def gridPtsDiltae(gridFlag):
     kernel = np.ones((3, 3), np.uint8)
@@ -70,8 +95,19 @@ def gridPtsDiltae(gridFlag):
         gridFlag[:, :, x] = dilated_img
     return gridFlag
     
-def getRect(pt0,pt1,pt2):
-    return np.min(pt2, np.min(pt0, pt1)), np.max(pt2, np.min(pt0, pt1))
+def getRect(pt0,pt1,pt2,height,width):
+    a = np.vstack([pt0, pt1, pt2])
+    minPt = np.min(a, axis=0)
+    maxPt = np.max(a, axis=0)
+    if minPt[0] < 0:
+        minPt[0] = 0
+    if minPt[1] < 0:
+        minPt[1] = 0
+    if maxPt[0] >= width:
+        maxPt[0] = width-1
+    if maxPt[1] >= height:
+        maxPt[1] = height-1
+    return minPt, maxPt
 def sampleGridPts2(plyPath,unit):
     plydata = PlyData.read(plyPath)
     vertex = plydata['vertex']
@@ -159,46 +195,42 @@ class Camera:
             self.imgDir = self.imgDir.reshape(self.height, self.width, 3)
         return self.imgDir
 
+
 class DenseData:
-    def __init__(self, dataDir, gridFlags=None, sampleUnit=None, xStart=None, yStart=None, zStart=None):
+    def __init__(self, dataDir, objPath):
         self.dataDir = dataDir
-        self.sampleUnit = sampleUnit
-        self.gridFlags = gridFlags
-        self.xStart = xStart
-        self.yStart = yStart
-        self.zStart = zStart
-        self.spaceEncodeLayerCnt = 4
+        self.objPath = objPath
+        self.vertex, self.face = readObj(objPath)
         filenames = os.listdir(dataDir)
-        self.cameras ={}
+        self.cameras = {}
         self.views = []
-        if gridFlags is not None:
-            gridDimZYX = gridFlags.shape
-            self.gridDimZ = gridDimZYX[0]
-            self.gridDimY = gridDimZYX[1]
-            self.gridDimX = gridDimZYX[2]
-            self.gridDimXY = self.gridDimY*self.gridDimX
-        for filename in filenames:
+        for fileIdx, filename in enumerate(filenames):
+            print(fileIdx, '/', len(filenames))
             if filename.endswith('.json'):
                 file_path = os.path.join(dataDir, filename)
                 with open(file_path, 'r') as file:
                     data = json.load(file)
                     try:
                         if 'imagePath' in data.keys() \
-                            and 'fx' in data.keys() \
-                            and 'fy' in data.keys() \
-                            and 'cx' in data.keys() \
-                            and 'cy' in data.keys() \
-                            and 'height' in data.keys() \
-                            and 'width' in data.keys() :
+                                and 'fx' in data.keys() \
+                                and 'fy' in data.keys() \
+                                and 'cx' in data.keys() \
+                                and 'cy' in data.keys() \
+                                and 'height' in data.keys() \
+                                and 'width' in data.keys():
                             imgPath = data['imagePath']
                             path = Path(imgPath)
                             shortName = path.stem
                             maskPath = os.path.join(dataDir, 'mask_'+shortName+'.dat')
+                            img = cv2.imread(imgPath)
+                            mask = loadMaskDat(maskPath)
+                            assert mask.shape[0] == img.shape[0] and mask.shape[1] == img.shape[1], "error"
                             if os.path.exists(imgPath) and os.path.exists(maskPath):
                                 Qt = data['Qt']
                                 t = Qt[4:7]
                                 Q = Qt[0:4]
-                                R = Rotation.from_quat(Q, scalar_first=True).as_matrix()
+                                R = Rotation.from_quat(
+                                    Q, scalar_first=True).as_matrix()
                                 Rt = np.eye(4)
                                 Rt[0:3, 0:3] = R
                                 Rt[0:3, 3] = t
@@ -213,145 +245,72 @@ class DenseData:
                                 if cameraSN not in self.cameras:
                                     self.cameras[cameraSN] = Camera(
                                         fx, fy, cx, cy, height, width)
+
+                                KR = self.cameras[cameraSN].intr@Rt
+                                vertexInView = KR@self.vertex
+                                vertexUvInView = (
+                                    vertexInView/vertexInView[2, :]+0.5).astype(np.int32)
+                                distanceMat = np.ones(mask.shape, dtype=np.float32)*-1
+                                distanceMatShow = np.zeros(mask.shape, dtype=np.uint8)
+                                for ptIdx in range(vertexInView.shape[1]):
+                                    if vertexUvInView[0, ptIdx] >= 0 \
+                                            and vertexUvInView[1, ptIdx] >= 0\
+                                            and vertexUvInView[0, ptIdx] < width\
+                                            and vertexUvInView[1, ptIdx] < height:
+                                        r = vertexUvInView[1, ptIdx]
+                                        c = vertexUvInView[0, ptIdx]
+                                        dist = np.linalg.norm(self.vertex[0:3, ptIdx])
+                                        if distanceMat[r, c] < 0 or distanceMat[r, c] > dist:
+                                            distanceMat[r, c] = dist
+                                            distanceMatShow[r, c] = 250
+                                for face in self.face:
+                                    pt0Idx = face[0]
+                                    pt1Idx = face[1]
+                                    pt2Idx = face[2]
+                                    uv0 = vertexUvInView[0:2, pt0Idx]
+                                    uv1 = vertexUvInView[0:2, pt1Idx]
+                                    uv2 = vertexUvInView[0:2, pt2Idx]
+                                    rectPt0, rectPt2 = getRect(uv0, uv1, uv2, height, width)
+                                    dist0 = distanceMat[uv0[1], uv0[0]]
+                                    dist1 = distanceMat[uv1[1], uv1[0]]
+                                    dist2 = distanceMat[uv2[1], uv2[0]]
+                                    yv1_yv2 = uv1[1]-uv2[1]
+                                    xv2_xv1 = uv2[0]-uv1[0]
+                                    xv0_xv2 = uv0[0]-uv2[0]
+                                    yv0_yv2 = uv0[1]-uv2[1]
+                                    yv2_yv0 = uv2[1]-uv0[1]
+                                    denominator = (yv1_yv2*xv0_xv2+xv2_xv1*yv0_yv2)+1e-7
+                                    for r in range(rectPt0[1], rectPt2[1]+1):
+                                        for c in range(rectPt0[0], rectPt2[0]+1):
+                                            if distanceMatShow[r, c] == 0:
+                                                py_yv2 = r-uv1[1]
+                                                px_xv2 = c-uv1[0]
+                                                w0 = (yv1_yv2*px_xv2 +xv2_xv1*py_yv2)/denominator
+                                                w1 = (yv2_yv0*px_xv2+xv0_xv2*py_yv2)/denominator
+                                                w2 = 1-w1-w0
+                                                if w0 >= 0 and w1 >= 0 and w2 >= 0:
+                                                    ptIntersectDistance = (dist0 + dist1+dist2)/3
+                                                    if distanceMat[r, c] > ptIntersectDistance or distanceMat[r, c]<0 :
+                                                        distanceMat[r, c] = ptIntersectDistance
                                 view = {'Rt': Rt, 'cameraSN': cameraSN, 'fx': fx, 'fy': fy,
-                                        'cx': cx, 'cy': cy, 'height': height, 'width': width, 'imgPath': imgPath, 'maskPath': maskPath}
+                                        'cx': cx, 'cy': cy, 'height': height, 'width': width, 'imgPath': imgPath, 'maskPath': maskPath, 'rayDistanceMat': distanceMat}
                                 self.views.append(view)
                     except:
                         print('except')
                         continue
-        print('camera cnt = ',len(self.cameras))
-
-    @staticmethod
-    def writeGridPtsWithFeat(Dir, xyzs, positionFeatId):
-        for i in range(len(positionFeatId)):
-            path = os.path.join(Dir, 'gridPtsWithFeat'+str(i)+'.pts')
-            with open(path, 'w') as f:
-                for j in range(len(xyzs)//3):
-                    j3=3*j
-                    f.write(str(xyzs[j3])+' ' +
-                            str(xyzs[j3+1])+' ' + str(xyzs[j3+2])+' '+str(positionFeatId[i][j])+'\n')
-    def generTrainData(self):
-        self.positionFeatId = []
-        positionFeatSet = []
-        for i in range(self.spaceEncodeLayerCnt):
-            self.positionFeatId.append([])
-            positionFeatSet.append({})        
-        #xyzs = [None] *3*self.gridDimX*self.gridDimY*self.gridDimZ
-        gridPtsCnt=0
-        self.gridPts = np.ones((4, self.gridDimX*self.gridDimY*self.gridDimZ),dtype=np.float32)
-        start_time = time.time()
-        for (z_, y_, x_), flag in np.ndenumerate(self.gridFlags):
-            if flag>0:
-                x, y, z = gridXYZToxyz(
-                    x_, y_, z_, self.sampleUnit, self.xStart, self.yStart, self.zStart)
-                self.gridPts[0, gridPtsCnt] =x
-                self.gridPts[1, gridPtsCnt] =y
-                self.gridPts[2, gridPtsCnt] =z
-                gridPtsCnt+=1
-                for i in range(self.spaceEncodeLayerCnt):
-                    layerFactor = 2**i
-                    postionEncode = encodePosition2(x_//layerFactor, y_ //
-                                    layerFactor, z_//layerFactor,self.gridDimX,self.gridDimXY)
-                    if postionEncode in positionFeatSet[i]:
-                        self.positionFeatId[i].append(
-                            positionFeatSet[i][postionEncode])
-                    else :
-                        newId = len(positionFeatSet[i])
-                        positionFeatSet[i][postionEncode] = newId
-                        self.positionFeatId[i].append(newId)
-        end_time = time.time()
-        print("gener grid pts (s)", end_time - start_time)
-        # np.savetxt('surf/test-2.txt', np.array(xyzs).astype(np.float32).reshape(-1, 3), fmt='%f', delimiter=' ')
-        # DenseData.writeGridPtsWithFeat(self.dataDir, xyzs, self.positionFeatId)
-        # self.gridPts = np.array(xyzs).astype(np.float32).reshape(-1, 3).T
-        # self.gridPts = np.vstack(
-        #     [self.gridPts, np.ones([1, self.gridPts.shape[1]]).astype(np.float32)])
-        self.gridPts.resize(4, gridPtsCnt)
-        del positionFeatSet
-        print('grid points cnt = ', self.gridPts.shape[1])
-        for view in self.views:
-            camera = self.cameras[view['cameraSN']]
-            img = cv2.imread(view['imgPath'])
-            mask = loadMaskDat(view['maskPath'])
-            assert mask.shape[0] == img.shape[0] and mask.shape[1] == img.shape[1], "error"
-            height = view['height']
-            width = view['width']
-            Rt = view['Rt']
-            Rinv = Rt[0:3, 0:3].T
-            currImgDir = Rinv@camera.imgDir
-            KR = camera.intr@Rt
-            gridPtsInView = KR@self.gridPts
-            gridPtsInView = (gridPtsInView/gridPtsInView[2, :]+0.5).astype(np.int32)
-            viewData={}
-            for gridPtIdx in range(gridPtsInView.shape[1]):
-                if gridPtsInView[0, gridPtIdx] >= 0 \
-                        and gridPtsInView[1, gridPtIdx] >= 0\
-                        and gridPtsInView[0, gridPtIdx] < width\
-                        and gridPtsInView[1, gridPtIdx] < height:
-                    r = gridPtsInView[1, gridPtIdx]
-                    c = gridPtsInView[0, gridPtIdx]
-                    # if mask[r, c] > 0:
-                    pixelIdx = r*width+c
-                    if pixelIdx not in viewData:
-                        viewData[pixelIdx]=[]
-                    viewData[pixelIdx].append(gridPtIdx)
-
-                    # if mask[r, c] > 0:
-                        # dir = currImgDir[r*width+c]
-                        # blue = img[r, c, 0]
-                        # green = img[r, c, 1]
-                    # red = img[r, c, 2]
-            showCase=False
-            if showCase:
-                proj = np.zeros([height, width], dtype=np.uint8)
-                for pixel in viewData:
-                    r = pixel//width
-                    c = pixel%width
-                    proj[r,c]=250
-                cv2.imwrite('surf/a.bmp', proj)
-                alone=[]
-                for pixel in viewData:
-                    if len(viewData[pixel]) == 1:
-                        alone.append(viewData[pixel])
-                with open('surf/a.txt', 'w') as f:
-                    for a in alone:
-                        f.write(str(self.gridPts[0, a][0])+' ' +
-                                str(self.gridPts[1, a][0])+' ' + str(self.gridPts[2, a][0])+'\n')
-                
-            print(2)
-            exit(0)
-
-        print(1)
-    def save(self, path):
-        d = dict(sampleUnit=self.sampleUnit, gridFlags=self.gridFlags,
-                 xStart=self.xStart, yStart=self.yStart, zStart=self.zStart)
-        f = open(path, 'wb')
-        pickle.dump(d, f)
-        f.close()
-
-    def load(self, path):
-        f = open(path, 'rb')
-        d = pickle.load(f)
-        f.close()
-        self.sampleUnit = d['sampleUnit']
-        self.gridFlags = d['gridFlags']
-        self.xStart = d['xStart']
-        self.yStart = d['yStart']
-        self.zStart = d['zStart']
-        gridDimZYX = self.gridFlags.shape
-        self.gridDimZ = gridDimZYX[0]
-        self.gridDimY = gridDimZYX[1]
-        self.gridDimX = gridDimZYX[2]
-        self.gridDimXY = self.gridDimY*self.gridDimX
-        # writeGridPts('surf/b.txt', self.gridFlags, self.sampleUnit,
-        #              self.xStart, self.yStart, self.zStart)
-class Msh:
-    def __init__(self, path=None):
-        self.path=path
-        if path is not None:
-            self.vertex, self.face = readObj(path)
-
-    def generImgDir(self,camera,view):
+        print('camera cnt = ', len(self.cameras))
+    def showDepthMat(self,path,distanceMat,imgDir):
+        cnt = np.sum(distanceMat > 0.01)
+        out = np.zeros([cnt,3],dtype=np.float32)
+        cnt=0
+        height, width = distanceMat.shape
+        for r in range(height):
+            for c in range(width):
+                if distanceMat[r,c]>0.01:
+                    out[cnt] = imgDir[r, c]*distanceMat[r, c]
+                    cnt+=1
+        np.savetxt(path, out,delimiter=' ')
+    def generImgRayDepthmat(self,camera,view):
             imgDir = camera.getImgDir()
             img = cv2.imread(view['imgPath'])
             mask = loadMaskDat(view['maskPath'])
@@ -360,45 +319,51 @@ class Msh:
             width = view['width']
             Rt = view['Rt']
             R = Rt[0:3,0:3]
-            KR = camera.intr[0:3, 0:3]@R
+            cameraT = Rt[0:3, 3]
+            KR = camera.intr@Rt
             vertexInView = KR@self.vertex
             vertexUvInView = (vertexInView/vertexInView[2, :]+0.5).astype(np.int32)
             distanceMat = np.ones(mask.shape,dtype=np.float32)*-1
             distanceMatShow = np.zeros(mask.shape, dtype=np.uint8)
-            for face in self.face:
-                pt0Idx = face[0]
-                pt1Idx = face[1]
-                pt2Idx = face[2]
-                print(face)
-                vector1 = vertexInView[:, pt1Idx] - vertexInView[:, pt0Idx]
-                vector2 = vertexInView[:, pt2Idx] - vertexInView[:, pt0Idx]
-                N = np.cross(vector1, vector2)
-                uv0 = vertexUvInView[0:2, pt0Idx]
-                uv1 = vertexUvInView[0:2, pt1Idx]
-                uv2 = vertexUvInView[0:2, pt2Idx]
-                rectPt0,rectPt2 = getRect(uv0,uv1,uv2)
-                
-
-
-
             for ptIdx in range(vertexInView.shape[1]):
-                if vertexInView[0, ptIdx] >= 0 \
-                        and vertexInView[1, ptIdx] >= 0\
-                        and vertexInView[0, ptIdx] < width\
-                        and vertexInView[1, ptIdx] < height:
-                    r = vertexInView[1, ptIdx]
-                    c = vertexInView[0, ptIdx]
+                if vertexUvInView[0, ptIdx] >= 0 \
+                        and vertexUvInView[1, ptIdx] >= 0\
+                        and vertexUvInView[0, ptIdx] < width\
+                        and vertexUvInView[1, ptIdx] < height:
+                    r = vertexUvInView[1, ptIdx]
+                    c = vertexUvInView[0, ptIdx]
                     dist = np.linalg.norm(self.vertex[0:3, ptIdx])
                     if distanceMat[r, c] < 0 or distanceMat[r, c] > dist:
                         distanceMat[r, c] = dist
                         distanceMatShow[r, c] =250
-
-            # 使用imshow绘制灰度图像
-            plt.imshow(distanceMatShow, cmap='gray')
-            plt.show()
+            for face in self.face:
+                pt0Idx = face[0]
+                pt1Idx = face[1]
+                pt2Idx = face[2] 
+                uv0 = vertexUvInView[0:2, pt0Idx]
+                uv1 = vertexUvInView[0:2, pt1Idx]
+                uv2 = vertexUvInView[0:2, pt2Idx]
+                rectPt0, rectPt2 = getRect(uv0, uv1, uv2, height,width)
+                dist0 = distanceMat[uv0[1], uv0[0]]
+                dist1 = distanceMat[uv1[1], uv1[0]]
+                dist2 = distanceMat[uv2[1], uv2[0]]
+                for r in range(rectPt0[1], rectPt2[1]+1):
+                    for c in range(rectPt0[0], rectPt2[0]+1):
+                        if distanceMatShow[r, c] == 0:
+                            w0,w1,w2 = triangleInterpolate(uv0,uv1,uv2,c,r)
+                            if w0>=0 and w1>=0 and w2>=0:
+                                ptIntersectDistance = (dist0+ dist1+dist2)/3
+                                if distanceMat[r, c] < ptIntersectDistance:
+                                    distanceMat[r, c] = ptIntersectDistance
+            # self.showDepthMat('a.pts', distanceMat, imgDir)
+            # cv2.imwrite('a1.bmp', distanceMatShow)
+            distanceMatShow = (distanceMat > 0.01).astype(np.uint8)*250
+            # cv2.imwrite('a2.bmp', distanceMatShow)
+            return distanceMat
 
     def save(self, path):
-        d = dict(path=self.path, vertex=self.vertex,face=self.face)
+        d = dict(objPath=self.objPath, dataDir=self.dataDir, vertex=self.vertex,
+                 face=self.face, cameras=self.cameras, views=self.views)
         f = open(path, 'wb')
         pickle.dump(d, f)
         f.close()
@@ -412,22 +377,12 @@ class Msh:
 
 if __name__=='__main__':
 
-
     unit = 0.01
     dataDir = 'D:/repo/colmapThird/data/a/result'
-    # gridFlag, xStart, yStart, zStart = sampleGridPts2('D:/repo/colmapThird/data/a/result/dense.ply', unit)
-    # scene = DenseData(dataDir,gridFlag, unit, xStart, yStart, zStart)
-    # scene.save('surf/s.pkl')
-    # exit(0)
+    scene = DenseData(dataDir, 'D:/repo/colmapThird/data/a/result/dense.obj')
+    scene.save('surf/s.pkl')
+    exit(0)
     scene2 = DenseData(dataDir)
     scene2.load('surf/s.pkl')
     # scene2.generTrainData()
 
-    # mesh = Msh('D:/repo/colmapThird/data/a/result/dense.obj')
-    # mesh.save('D:/repo/colmapThird/data/a/result/dense.msh')
-    mesh = Msh()
-    mesh.load('D:/repo/colmapThird/data/a/result/dense.msh')
-
-    for view in scene2.views:
-        camera = scene2.cameras[view['cameraSN']]
-        mesh.generImgDir(camera, view)

@@ -201,6 +201,7 @@
     <ClCompile Include="sam2.cpp" />
     <ClCompile Include="scene.cpp" />
     <ClCompile Include="sim3.cpp" />
+    <ClCompile Include="surfData.cpp" />
     <ClCompile Include="threading.cpp" />
     <ClCompile Include="timer.cpp" />
     <ClCompile Include="triangulation.cpp" />

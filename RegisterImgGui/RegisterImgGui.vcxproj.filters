@@ -153,6 +153,9 @@
     <ClCompile Include="MarchCube.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="surfData.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">
