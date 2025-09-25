@@ -121,7 +121,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>GLOG_USE_GLOG_EXPORT;GLOG_NO_ABBREVIATED_SEVERITIES;NOMINMAX;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\glfw-3.3.10.bin.WIN64\include;$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\install\eigen-3.4.0\include\eigen3;$(SolutionDir)..\install\ceres-solver-2.2.0\include;$(SolutionDir)..\install\glog-0.7.1\include;$(SolutionDir)..\install\jsoncpp-1.9.6\$(Configuration)\include;$(SolutionDir)..\install\opencv480\include;$(SolutionDir)..\install\ncnn-20250503\include\ncnn;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\glfw-3.3.10.bin.WIN64\include;$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\install\eigen-3.4.0\include\eigen3;$(SolutionDir)..\install\ceres-solver-2.2.0\include;$(SolutionDir)..\install\glog-0.7.1\include;$(SolutionDir)..\install\jsoncpp-1.9.6\$(Configuration)\include;$(SolutionDir)..\install\opencv480\include;$(SolutionDir)..\install\ncnn-20250503\include\ncnn;$(SolutionDir)..\install\libigl-2.5.0\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard_C>Default</LanguageStandard_C>
@@ -145,7 +145,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>GLOG_USE_GLOG_EXPORT;GLOG_NO_ABBREVIATED_SEVERITIES;NOMINMAX;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\glfw-3.3.10.bin.WIN64\include;$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\install\eigen-3.4.0\include\eigen3;$(SolutionDir)..\install\ceres-solver-2.2.0\include;$(SolutionDir)..\install\glog-0.7.1\include;$(SolutionDir)..\install\jsoncpp-1.9.6\$(Configuration)\include;$(SolutionDir)..\install\opencv480\include;$(SolutionDir)..\install\ncnn-20250503\include\ncnn;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\glfw-3.3.10.bin.WIN64\include;$(SolutionDir)..\FreeImage3180Win32Win64\x64;$(SolutionDir)..\install\eigen-3.4.0\include\eigen3;$(SolutionDir)..\install\ceres-solver-2.2.0\include;$(SolutionDir)..\install\glog-0.7.1\include;$(SolutionDir)..\install\jsoncpp-1.9.6\$(Configuration)\include;$(SolutionDir)..\install\opencv480\include;$(SolutionDir)..\install\ncnn-20250503\include\ncnn;$(SolutionDir)..\install\libigl-2.5.0\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard_C>Default</LanguageStandard_C>

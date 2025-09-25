@@ -1,3 +1,4 @@
+#include <numeric>
 #include <fstream>
 #include <filesystem>
 #include <vector>
@@ -11,10 +12,12 @@
 #include "json/json.h"
 #include "opencv2/opencv.hpp"
 #include "opencvTools.h"
+#include "igl/per_vertex_normals.h"
+#include "igl/per_face_normals.h"
 #include "log.h"
 namespace surf
 {
-	bool readObj(const std::filesystem::path&objPath, Eigen::Matrix4Xf& vertex, Eigen::Matrix3Xi& faces)
+	bool readObj(const std::filesystem::path&objPath, Eigen::MatrixXf& vertex, Eigen::MatrixXi& faces, Eigen::MatrixXf& vertex_normal, Eigen::MatrixXf& face_normal)
 	{
 		if (!std::filesystem::exists(objPath))
 		{
@@ -44,26 +47,105 @@ namespace surf
 				f.emplace_back(x-1, y - 1, z - 1);
 			}
 		}
-		vertex = Eigen::Matrix4Xf(4, v.size());
-		faces = Eigen::Matrix3Xi(3, f.size());
+		vertex = Eigen::MatrixXf( v.size(),3);
+		faces = Eigen::MatrixXi( f.size(),3);
 		int i = 0;
 		for (const auto&d:v)
 		{
-			vertex(0, i) = d.x();
-			vertex(1, i) = d.y();
-			vertex(2, i) = d.z();
-			vertex(3, i) = 1;
+			vertex(i, 0) = d.x();
+			vertex(i, 1) = d.y();
+			vertex(i, 2) = d.z();
 			i += 1;
 		}
 		i = 0;
 		for (const auto& d : f)
 		{
-			faces(0, i) = d.x();
-			faces(1, i) = d.y();
-			faces(2, i) = d.z();
+			faces(i, 0) = d.x();
+			faces(i, 1) = d.y();
+			faces(i, 2) = d.z();
 			i += 1;
 		}
+		igl::per_vertex_normals(vertex, faces, vertex_normal);
+		igl::per_face_normals(vertex, faces, face_normal);
+//		if (cameraT != nullptr)
+//		{
+//			std::vector<float>distFromT(f.size());
+//#pragma omp parallel for
+//			for (int i = 0; i < f.size(); i++)
+//			{
+//				const int& v = faces(i, 0);//choose the first vertex idx
+//				float a = vertex(v, 0) - cameraT->x();
+//				float b = vertex(v, 1) - cameraT->y();
+//				float c = vertex(v, 2) - cameraT->z();
+//				distFromT[i] = a * a + b * b + c * c;
+//			}
+//			int neareatFaceIdx = std::min_element(distFromT.begin(), distFromT.end()) - distFromT.begin();
+//			int neareatVertexIdx = faces(neareatFaceIdx, 0);
+//			Eigen::Vector3f vertexNormal(vertex_normal(neareatVertexIdx, 0), vertex_normal(neareatVertexIdx, 1), vertex_normal(neareatVertexIdx, 2));
+//			Eigen::Vector3f cameraTDir(vertex(neareatVertexIdx, 0) - cameraT->x(), vertex(neareatVertexIdx, 1) - cameraT->y(), vertex(neareatVertexIdx, 2) - cameraT->z());
+//			Eigen::Vector3f faceNormal(face_normal(neareatFaceIdx, 0), face_normal(neareatFaceIdx, 1), face_normal(neareatFaceIdx, 2));
+//			cameraTDir.normalize();
+//			if (vertexNormal.dot(cameraTDir) < 0)
+//			{
+//				LOG_OUT << "swtich normals.";
+//				vertex_normal *= -1;
+//			}
+//			if (faceNormal.dot(cameraTDir) < 0)
+//			{
+//				LOG_OUT << "swtich normals.";
+//				face_normal *= -1;
+//			}
+//		}
+		vertex = Eigen::Matrix4Xf(4,v.size()); 
+		i = 0;
+		for (const auto& d : v)
+		{
+			vertex(0,i) = d.x();
+			vertex(1,i) = d.y();
+			vertex(2,i) = d.z();
+			vertex(3,i) = 1;
+			i += 1;
+		}
+		faces.transposeInPlace();
+		vertex_normal.transposeInPlace();
+		face_normal.transposeInPlace();
 		return true;
+	}
+	std::list<cv::Vec2i> triangle(const cv::Vec2i& p0, const cv::Vec2i& p1, const cv::Vec2i& p2) {
+		std::list<cv::Vec2i> ret;
+		//triangle area = 0
+		if (p0[1] == p1[1] && p0[1] == p2[1])
+		{
+			int xmin = (std::min)((std::min)(p0[0], p1[0]), p1[2]);
+			int xmax = (std::max)((std::max)(p0[0], p1[0]), p1[2]);
+			for (int i = xmin; i <= xmax; i++)
+			{
+				ret.emplace_back(i, p0[1]);
+			}
+			return ret;
+		}
+		//sort base on Y
+		cv::Vec2i t0 = p0;
+		cv::Vec2i t1 = p1;
+		cv::Vec2i t2 = p2;
+		if (t0[1] > t1[1]) std::swap(t0, t1);
+		if (t0[1] > t2[1]) std::swap(t0, t2);
+		if (t1[1] > t2[1]) std::swap(t1, t2);
+		int total_height = t2[1] - t0[1];
+		for (int i = 0; i < total_height; i++) {
+			//separate
+			bool second_half = i > t1[1] - t0[1] || t1[1] == t0[1];
+			int segment_height = second_half ? t2[1] - t1[1] : t1[1] - t0[1];
+			float alpha = (float)i / total_height;
+			float beta = (float)(i - (second_half ? t1[1] - t0[1] : 0)) / segment_height;
+
+			cv::Vec2i A = t0 + (t2 - t0) * alpha;
+			cv::Vec2i B = second_half ? t1 + (t2 - t1) * beta : t0 + (t1 - t0) * beta;
+			if (A[0] > B[0]) std::swap(A, B);
+			for (int j = A[0]; j <= B[0]; j++) {
+				ret.emplace_back(j, t0[1] + i);
+			}
+		}
 	}
 	struct Camera
 	{
@@ -105,7 +187,7 @@ namespace surf
 		{
 			dataDir = dataDir_;
 			objPath = objPath_;
-			bool loadObj = surf::readObj("D:/repo/colmapThird/data/a/result/dense.obj", this->vertex, this->faces);
+			this->vertex.resize(0, 0);
 			for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ dataDir_ })
 			{
 				const auto& thisFilename = dir_entry.path();
@@ -198,6 +280,14 @@ namespace surf
 							Rt(0, 3) = QtArray[4].asFloat();
 							Rt(1, 3) = QtArray[5].asFloat();
 							Rt(2, 3) = QtArray[6].asFloat();
+							if (this->vertex.rows()==0)
+							{
+								bool loadObj = surf::readObj(objPath, this->vertex, this->faces, this->vertex_normal, this->face_normal);
+								if (!loadObj)
+								{
+									LOG_ERR_OUT << "read obj fail : " << objPath;
+								}
+							}
 						}
 						catch (...)
 						{
@@ -231,7 +321,37 @@ namespace surf
 						}
 
 						cv::Mat rayDistance = cv::Mat::ones(mask.size(), CV_32FC1) * -1;
-						Eigen::Matrix4f KRt = thisCamera.intr* Rt;
+						const Eigen::Matrix3f R = Rt.block(0,0,3,3);
+						const Eigen::Matrix4f KRt = thisCamera.intr * Rt;
+						std::vector<bool> visualFace(this->faces.cols(),false);
+						Eigen::Vector3f cameraT(Rt(0, 3), Rt(1, 3), Rt(2, 3));
+						{
+							Eigen::MatrixXf faceToCameraT(3, this->faces.cols());
+							std::vector<float>distFromT(this->faces.cols());
+							
+#pragma omp parallel for
+							for (int i = 0; i < this->faces.cols(); i++)
+							{
+								const int& v = faces(i, 0);//choose the first vertex idx
+								const float a = this->vertex(0,v) - Rt(0, 3);
+								const float b = this->vertex(1,v) - Rt(1, 3);
+								const float c = this->vertex(2,v) - Rt(2, 3);
+								faceToCameraT(0, i) = a;
+								faceToCameraT(1, i) = b;
+								faceToCameraT(2, i) = c;
+								distFromT[i] = a * a + b * b + c * c;
+							}
+							int neareatFaceIdx = std::min_element(distFromT.begin(), distFromT.end()) - distFromT.begin();
+							Eigen::Vector3f nearestFaceToCameraT(faceToCameraT(0, neareatFaceIdx), faceToCameraT(1, neareatFaceIdx), faceToCameraT(2, neareatFaceIdx));
+							Eigen::Vector3f nearestFaceNormal(this->face_normal(0, neareatFaceIdx), this->face_normal(1, neareatFaceIdx), this->face_normal(2, neareatFaceIdx));
+							nearestFaceToCameraT.normalize();
+							if (nearestFaceToCameraT.dot(nearestFaceNormal) > 0)
+							{
+								LOG_OUT << "swtich normals.";
+								face_normal *= -1;
+							}
+							this->faces.mul(faceToCameraT;
+						}
 						std::vector<cv::Vec2i>vertexInImg(this->vertex.cols());
 						std::vector<float>vertexDist(this->vertex.cols());
 						struct FaceTriangle
@@ -245,15 +365,7 @@ namespace surf
 								y0_y2 = xy0[1] - xy2[1];
 								y2_y0 = xy2[1] - xy0[1]; 
 								denominatorInv = 1/((y1_y2 * x0_x2 + x2_x1 * y0_y2) + 1e-7);
-								startX = (std::min)((std::min)(xy0[0], xy1[0]), xy2[0]);
-								startY = (std::min)((std::min)(xy0[1], xy1[1]), xy2[1]);
-								endX = (std::max)((std::max)(xy0[0], xy1[0]), xy2[0]);
-								endY = (std::max)((std::max)(xy0[1], xy1[1]), xy2[1]);
 							}
-							int startX;
-							int startY;
-							int endX;
-							int endY;
 							float y1_y2;
 							float x2_x1;
 							float x0_x2;
@@ -282,18 +394,16 @@ namespace surf
 		}
 		std::filesystem::path dataDir;
 		std::filesystem::path objPath;
-		Eigen::Matrix4Xf vertex;
-		Eigen::Matrix3Xi faces;
+		Eigen::MatrixXf vertex;
+		Eigen::MatrixXi faces;
+		Eigen::MatrixXf vertex_normal;
+		Eigen::MatrixXf face_normal;
 		std::unordered_map<size_t, Camera>cameras;
 	};
-}
-
+} 
 int test_surf()
 {
-	//Eigen::Matrix4Xf vertex; 
-	//Eigen::Matrix3Xi faces;
-	//bool loadObj = surf::readObj("D:/repo/colmapThird/data/a/result/dense.obj", vertex, faces);
-
+ 
 	surf::SurfData asd("D:/repo/colmapThird/data/a/result", "D:/repo/colmapThird/data/a/result/dense.obj");
 
 
