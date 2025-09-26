@@ -59,4 +59,29 @@ namespace tools
 			return cv::Mat();
 		}
 	}
+	bool saveColMajorPts3d(const std::string& path, const Eigen::MatrixXf& pts)
+	{
+		{
+			std::fstream fout(path, std::ios::out);
+			fout << "ply" << std::endl;
+			fout << "format binary_little_endian 1.0" << std::endl;
+			fout << "element vertex " << pts.cols() << std::endl;//可以容纳32位数
+			fout << "property float x" << std::endl;
+			fout << "property float y" << std::endl;
+			fout << "property float z" << std::endl;
+			fout << "end_header" << std::endl;
+			fout.close();
+		}
+		{
+			std::fstream fout(path, std::ios::app | std::ios::binary);
+			for (int i = 0; i < pts.cols(); i++)
+			{
+				fout.write((const char*)&(pts(0, i)), sizeof(float));
+				fout.write((const char*)&(pts(1, i)), sizeof(float));
+				fout.write((const char*)&(pts(2, i)), sizeof(float));
+			}
+			fout.close();
+		}
+		return true;
+	}
 }

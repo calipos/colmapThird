@@ -116,8 +116,8 @@ namespace surf
 		//triangle area = 0
 		if (p0[1] == p1[1] && p0[1] == p2[1])
 		{
-			int xmin = (std::min)((std::min)(p0[0], p1[0]), p1[2]);
-			int xmax = (std::max)((std::max)(p0[0], p1[0]), p1[2]);
+			int xmin = (std::min)((std::min)(p0[0], p1[0]), p2[0]);
+			int xmax = (std::max)((std::max)(p0[0], p1[0]), p2[0]);
 			for (int i = xmin; i <= xmax; i++)
 			{
 				ret.emplace_back(i, p0[1]);
@@ -146,7 +146,14 @@ namespace surf
 				ret.emplace_back(j, t0[1] + i);
 			}
 		}
+		return ret;
 	}
+	struct GridConfig
+	{
+		float amplitude;
+		float gridUnit;
+		int gridLevelCnt;
+	};
 	struct Camera
 	{
 		Camera() {}
@@ -176,17 +183,46 @@ namespace surf
 			std::hash<std::string> hash_fn;
 			return hash_fn(ss.str());
 		}
+		cv::Mat getImgDirs()
+		{
+			if (imgDirs.empty())
+			{
+				float fxInv = 1. / fx;
+				float fyInv = 1. / fy;
+				imgDirs = cv::Mat::zeros(height, width, CV_32FC3);
+				for (int r = 0; r < height; r++)
+				{
+					for (int c = 0; c < width; c++)
+					{
+						Eigen::Vector3f dir((c + 0.5 - cx) * fxInv, (r + 0.5 - cy) * fyInv,1);
+						dir.normalize();
+						imgDirs.at<cv::Vec3f>(r, c)[0] = dir.x();
+						imgDirs.at<cv::Vec3f>(r, c)[1] = dir.y();
+						imgDirs.at<cv::Vec3f>(r, c)[2] = dir.z();
+					}
+				}
+			}
+			return imgDirs;
+		}
 		double fx, fy, cx, cy;
 		int height, width;
 		Eigen::Matrix4f intr;
+		cv::Mat imgDirs;
+	};
+	struct View
+	{
+		Eigen::Matrix4f Rt;
+		std::filesystem::path imgPath;
+		std::filesystem::path maskPath;
 	};
 	struct SurfData
 	{
 		SurfData() {}
-		SurfData(const std::filesystem::path&dataDir_, const std::filesystem::path& objPath_) 
+		SurfData(const std::filesystem::path&dataDir_, const std::filesystem::path& objPath_, const GridConfig& gridConfig_)
 		{
 			dataDir = dataDir_;
 			objPath = objPath_;
+			gridConfig = gridConfig_;
 			this->vertex.resize(0, 0);
 			for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ dataDir_ })
 			{
@@ -319,77 +355,125 @@ namespace surf
 							LOG_ERR_OUT << "img.rows != mask.rows || img.cols != mask.cols";
 							continue;
 						}
-
+						View thisView = { Rt ,imgPath ,maskPath };
+						views.emplace_back(thisView);
 						cv::Mat rayDistance = cv::Mat::ones(mask.size(), CV_32FC1) * -1;
 						const Eigen::Matrix3f R = Rt.block(0,0,3,3);
 						const Eigen::Matrix4f KRt = thisCamera.intr * Rt;
-						std::vector<bool> visualFace(this->faces.cols(),false);
+						std::vector<std::int8_t> visualFace(this->faces.cols(),0);
 						Eigen::Vector3f cameraT(Rt(0, 3), Rt(1, 3), Rt(2, 3));
 						{
-							Eigen::MatrixXf faceToCameraT(3, this->faces.cols());
-							std::vector<float>distFromT(this->faces.cols());
-							
+							std::vector<float>distFromT(this->faces.cols());							
 #pragma omp parallel for
 							for (int i = 0; i < this->faces.cols(); i++)
 							{
-								const int& v = faces(i, 0);//choose the first vertex idx
-								const float a = this->vertex(0,v) - Rt(0, 3);
-								const float b = this->vertex(1,v) - Rt(1, 3);
-								const float c = this->vertex(2,v) - Rt(2, 3);
-								faceToCameraT(0, i) = a;
-								faceToCameraT(1, i) = b;
-								faceToCameraT(2, i) = c;
+								const int& v = faces(0, i);//choose the first vertex idx
+								const float a = Rt(0, 3) - this->vertex(0, v);
+								const float b = Rt(1, 3) - this->vertex(1, v);
+								const float c = Rt(2, 3) - this->vertex(2, v);
+								float dirSign = a * this->face_normal(0, i) + b * this->face_normal(1, i) + c * this->face_normal(2, i);
+								if (dirSign>0)
+								{
+									visualFace[i] = 1;
+								}
+								else if (dirSign < 0)
+								{
+									visualFace[i] = -1;
+								}
 								distFromT[i] = a * a + b * b + c * c;
 							}
 							int neareatFaceIdx = std::min_element(distFromT.begin(), distFromT.end()) - distFromT.begin();
-							Eigen::Vector3f nearestFaceToCameraT(faceToCameraT(0, neareatFaceIdx), faceToCameraT(1, neareatFaceIdx), faceToCameraT(2, neareatFaceIdx));
-							Eigen::Vector3f nearestFaceNormal(this->face_normal(0, neareatFaceIdx), this->face_normal(1, neareatFaceIdx), this->face_normal(2, neareatFaceIdx));
-							nearestFaceToCameraT.normalize();
-							if (nearestFaceToCameraT.dot(nearestFaceNormal) > 0)
+							std::int8_t nearestFaceNormalSigned = visualFace[neareatFaceIdx];
+#pragma omp parallel for
+							for (int i = 0; i < visualFace.size(); i++)
 							{
-								LOG_OUT << "swtich normals.";
-								face_normal *= -1;
+								visualFace[i] *= nearestFaceNormalSigned;
 							}
-							this->faces.mul(faceToCameraT;
 						}
 						std::vector<cv::Vec2i>vertexInImg(this->vertex.cols());
 						std::vector<float>vertexDist(this->vertex.cols());
-						struct FaceTriangle
 						{
-							FaceTriangle() {}
-							FaceTriangle(const cv::Vec2i& xy0, const cv::Vec2i& xy1, const cv::Vec2i& xy2)
-							{
-								y1_y2 = xy1[1] - xy2[1];
-								x2_x1 = xy2[0] - xy1[0];
-								x0_x2 = xy0[0] - xy2[0];
-								y0_y2 = xy0[1] - xy2[1];
-								y2_y0 = xy2[1] - xy0[1]; 
-								denominatorInv = 1/((y1_y2 * x0_x2 + x2_x1 * y0_y2) + 1e-7);
-							}
-							float y1_y2;
-							float x2_x1;
-							float x0_x2;
-							float y0_y2;
-							float y2_y0;
-							float denominatorInv;
-						};
-						{
-							Eigen::Matrix4Xf vertexInView = KRt* this->vertex;
+							Eigen::Matrix4Xf vertexInView = Rt* this->vertex;
+							std::vector<bool> vertexInViewInCanvas(this->vertex.cols(), false);
+							float fxInv = 1. / cameras[thisCameraSn].fx;
+							float fyInv = 1. / cameras[thisCameraSn].fy;
 #pragma omp parallel for
 							for (int i = 0; i < this->vertex.cols(); i++)
 							{
-								vertexInImg[i][0] = vertexInView(0, i) / vertexInView(2, i) + 0.5;
-								vertexInImg[i][1] = vertexInView(1, i) / vertexInView(2, i) + 0.5;
 								vertexDist[i] = sqrt(vertexInView(0, i) * vertexInView(0, i) + vertexInView(1, i) * vertexInView(1, i) + vertexInView(2, i) * vertexInView(2, i));
+								vertexInImg[i][0] = vertexInView(0, i) / vertexInView(2, i) * cameras[thisCameraSn].fx + cameras[thisCameraSn].cx + 0.5;
+								vertexInImg[i][1] = vertexInView(1, i) / vertexInView(2, i) * cameras[thisCameraSn].fy + cameras[thisCameraSn].cy + 0.5;
+								if (vertexInImg[i][0] >= 0 && vertexInImg[i][1] >= 0 && vertexInImg[i][0] < width && vertexInImg[i][1] < height)
+								{
+									vertexInViewInCanvas[i] = true;
+								}
+							}
+							for (int i = 0; i < this->faces.cols(); i++)
+							{
+								if (visualFace[i] > 0)
+								{
+									const auto& a = this->faces(0, i);
+									const auto& b = this->faces(1, i);
+									const auto& c = this->faces(2, i);
+									if (vertexInViewInCanvas[a] && vertexInViewInCanvas[b] && vertexInViewInCanvas[c])
+									{
+										const cv::Vec2i& uv0 = vertexInImg[a];
+										const cv::Vec2i& uv1 = vertexInImg[b];
+										const cv::Vec2i& uv2 = vertexInImg[c];
+										std::list<cv::Vec2i> trianglePixel = triangle(uv0, uv1, uv2);
+										for (const auto& d : trianglePixel)
+										{
+											float& dist = rayDistance.ptr<float>(d[1])[d[0]];
+											if (dist<0 || dist>vertexDist[a])
+											{
+												dist = vertexDist[a];
+											}
+										}
+									}
+								}
 							}
 						}
-						LOG_OUT;
-						this->vertex, this->faces;
-
-
+						//Eigen::MatrixXf pts = rayDistantMapToPts(rayDistance, cameras[thisCameraSn], Rt);
+						//tools::saveColMajorPts3d("../surf/a.ply", pts);
+						//LOG_OUT;
 					}
 				}
 			}
+
+		}
+		static Eigen::MatrixXf rayDistantMapToPts(const cv::Mat& rayDistantMap, Camera& camera, const Eigen::Matrix4f& viewRt)
+		{
+			Eigen::MatrixXf ret;
+			cv::Mat imgDirs = camera.getImgDirs();
+			{
+				std::list<Eigen::Vector3f>listRet;
+				for (int r = 0; r < camera.height; r++)
+				{
+					for (int c = 0; c < camera.width; c++)
+					{
+						const float& rayDist = rayDistantMap.ptr<float>(r)[c];
+						if (1e-3 < rayDist)
+						{
+							listRet.emplace_back(rayDist * Eigen::Vector3f(imgDirs.at<cv::Vec3f>(r, c)[0], imgDirs.at<cv::Vec3f>(r, c)[1], imgDirs.at<cv::Vec3f>(r, c)[2]));
+						}
+					}
+				}
+				ret.resize(4, listRet.size());
+				int i = 0;
+				for (const auto&d: listRet)
+				{
+					ret(0, i) = d.x();
+					ret(1, i) = d.y();
+					ret(2, i) = d.z();
+					ret(3, i) = 1;
+					i += 1;
+				}
+			}
+			const Eigen::Matrix4f Rtinv = viewRt.inverse();
+			return Rtinv* ret;
+		}
+		int encodeData(const cv::Mat& rayDistantMap,const float& amplitude,const int&sampledPtsCnt,const float&minGridUnit, const int& gridLevelCnt)
+		{
 
 		}
 		std::filesystem::path dataDir;
@@ -399,12 +483,16 @@ namespace surf
 		Eigen::MatrixXf vertex_normal;
 		Eigen::MatrixXf face_normal;
 		std::unordered_map<size_t, Camera>cameras;
+		std::vector<View>views;
+		GridConfig gridConfig;
 	};
 } 
 int test_surf()
 {
- 
-	surf::SurfData asd("D:/repo/colmapThird/data/a/result", "D:/repo/colmapThird/data/a/result/dense.obj");
+	float totalAmplitude = 0.3;
+	float gridUnit = totalAmplitude / 10;
+	surf::GridConfig gridConfig = { totalAmplitude /2,gridUnit ,4};
+	surf::SurfData asd("D:/repo/colmapThird/data/a/result", "D:/repo/colmapThird/data/a/result/dense.obj", gridConfig);
 
 
 	return 0;
