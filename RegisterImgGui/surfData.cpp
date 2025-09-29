@@ -224,6 +224,30 @@ namespace surf
 			objPath = objPath_;
 			gridConfig = gridConfig_;
 			this->vertex.resize(0, 0);
+			{
+				bool loadObj = surf::readObj(objPath, this->vertex, this->faces, this->vertex_normal, this->face_normal);
+				if (!loadObj)
+				{
+					LOG_ERR_OUT << "read obj fail : " << objPath;
+				}
+				float objMinX = this->vertex.row(0).minCoeff();
+				float objMinY = this->vertex.row(1).minCoeff();
+				float objMinZ = this->vertex.row(2).minCoeff();
+				float objMaxX = this->vertex.row(0).maxCoeff();
+				float objMaxY = this->vertex.row(1).maxCoeff();
+				float objMaxZ = this->vertex.row(2).maxCoeff();
+				this->targetMinBorder[0] = objMinX - 0.06 * (objMaxX - objMinX);
+				this->targetMinBorder[1] = objMinY - 0.06 * (objMaxY - objMinY);
+				this->targetMinBorder[2] = objMinZ - 0.06 * (objMaxZ - objMinZ);
+				this->targetMaxBorder[0] = objMaxX + 0.06 * (objMaxX - objMinX);
+				this->targetMaxBorder[1] = objMaxY + 0.06 * (objMaxY - objMinY);
+				this->targetMaxBorder[2] = objMaxZ + 0.06 * (objMaxZ - objMinZ);
+
+				this->resolutionX = (this->targetMaxBorder[0] - this->targetMinBorder[0]) / gridConfig.gridUnit + 1;
+				this->resolutionY = (this->targetMaxBorder[1] - this->targetMinBorder[1]) / gridConfig.gridUnit + 1;
+				this->resolutionZ = (this->targetMaxBorder[2] - this->targetMinBorder[2]) / gridConfig.gridUnit + 1;
+
+			}
 			for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ dataDir_ })
 			{
 				const auto& thisFilename = dir_entry.path();
@@ -294,7 +318,7 @@ namespace surf
 						Eigen::Matrix4f Rt = Eigen::Matrix4f::Identity();
 						try
 						{
-							imgPath = std::filesystem::path(newRoot["imagePath"].asString()); 
+							imgPath = std::filesystem::path(newRoot["imagePath"].asString());
 							imgPath = std::filesystem::canonical(imgPath);
 							fx = newRoot["fx"].asDouble();
 							fy = newRoot["fy"].asDouble();
@@ -302,7 +326,7 @@ namespace surf
 							cy = newRoot["cy"].asDouble();
 							height = newRoot["height"].asInt();
 							width = newRoot["width"].asInt();
-							if (7!= newRoot["Qt"].size())
+							if (7 != newRoot["Qt"].size())
 							{
 								throw std::exception();
 							}
@@ -316,14 +340,6 @@ namespace surf
 							Rt(0, 3) = QtArray[4].asFloat();
 							Rt(1, 3) = QtArray[5].asFloat();
 							Rt(2, 3) = QtArray[6].asFloat();
-							if (this->vertex.rows()==0)
-							{
-								bool loadObj = surf::readObj(objPath, this->vertex, this->faces, this->vertex_normal, this->face_normal);
-								if (!loadObj)
-								{
-									LOG_ERR_OUT << "read obj fail : " << objPath;
-								}
-							}
 						}
 						catch (...)
 						{
@@ -332,7 +348,7 @@ namespace surf
 						}
 						Camera thisCamera(fx, fy, cx, cy, height, width);
 						size_t thisCameraSn = Camera::figureCameraHash(thisCamera);
-						if (cameras.count(thisCameraSn)==0)
+						if (cameras.count(thisCameraSn) == 0)
 						{
 							cameras[thisCameraSn] = thisCamera;
 						}
@@ -342,7 +358,7 @@ namespace surf
 							continue;
 						}
 						auto shortName = imgPath.filename().stem().string();
-						std::filesystem::path maskPath = imgPath.parent_path() / ("mask_"+ shortName+".dat");
+						std::filesystem::path maskPath = imgPath.parent_path() / ("mask_" + shortName + ".dat");
 						if (!std::filesystem::exists(maskPath))
 						{
 							LOG_ERR_OUT << "not found : " << maskPath;
@@ -350,7 +366,7 @@ namespace surf
 						}
 						cv::Mat img = cv::imread(imgPath.string());
 						cv::Mat mask = tools::loadMask(maskPath.string());
-						if (img.rows != mask.rows || img.cols != mask.cols )
+						if (img.rows != mask.rows || img.cols != mask.cols)
 						{
 							LOG_ERR_OUT << "img.rows != mask.rows || img.cols != mask.cols";
 							continue;
@@ -358,12 +374,12 @@ namespace surf
 						View thisView = { Rt ,imgPath ,maskPath };
 						views.emplace_back(thisView);
 						cv::Mat rayDistance = cv::Mat::ones(mask.size(), CV_32FC1) * -1;
-						const Eigen::Matrix3f R = Rt.block(0,0,3,3);
+						const Eigen::Matrix3f R = Rt.block(0, 0, 3, 3);
 						const Eigen::Matrix4f KRt = thisCamera.intr * Rt;
-						std::vector<std::int8_t> visualFace(this->faces.cols(),0);
+						std::vector<std::int8_t> visualFace(this->faces.cols(), 0);
 						Eigen::Vector3f cameraT(Rt(0, 3), Rt(1, 3), Rt(2, 3));
 						{
-							std::vector<float>distFromT(this->faces.cols());							
+							std::vector<float>distFromT(this->faces.cols());
 #pragma omp parallel for
 							for (int i = 0; i < this->faces.cols(); i++)
 							{
@@ -372,7 +388,7 @@ namespace surf
 								const float b = Rt(1, 3) - this->vertex(1, v);
 								const float c = Rt(2, 3) - this->vertex(2, v);
 								float dirSign = a * this->face_normal(0, i) + b * this->face_normal(1, i) + c * this->face_normal(2, i);
-								if (dirSign>0)
+								if (dirSign > 0)
 								{
 									visualFace[i] = 1;
 								}
@@ -393,7 +409,7 @@ namespace surf
 						std::vector<cv::Vec2i>vertexInImg(this->vertex.cols());
 						std::vector<float>vertexDist(this->vertex.cols());
 						{
-							Eigen::Matrix4Xf vertexInView = Rt* this->vertex;
+							Eigen::Matrix4Xf vertexInView = Rt * this->vertex;
 							std::vector<bool> vertexInViewInCanvas(this->vertex.cols(), false);
 							float fxInv = 1. / cameras[thisCameraSn].fx;
 							float fyInv = 1. / cameras[thisCameraSn].fy;
@@ -433,13 +449,21 @@ namespace surf
 								}
 							}
 						}
-						//Eigen::MatrixXf pts = rayDistantMapToPts(rayDistance, cameras[thisCameraSn], Rt);
-						//tools::saveColMajorPts3d("../surf/a.ply", pts);
-						//LOG_OUT;
+						if (false)
+						{//show rayDistant
+							Eigen::MatrixXf pts = rayDistantMapToPts(rayDistance, cameras[thisCameraSn], Rt);
+							tools::saveColMajorPts3d("../surf/a.ply", pts);
+						}
+						this->registerRayDistanceMap(rayDistance, cameras[thisCameraSn], Rt);
 					}
 				}
 			}
 
+		}
+		bool registerRayDistanceMap(const cv::Mat& rayDistantMap, Camera& camera, const Eigen::Matrix4f& viewRt)
+		{
+
+			return true;
 		}
 		static Eigen::MatrixXf rayDistantMapToPts(const cv::Mat& rayDistantMap, Camera& camera, const Eigen::Matrix4f& viewRt)
 		{
@@ -482,6 +506,11 @@ namespace surf
 		Eigen::MatrixXi faces;
 		Eigen::MatrixXf vertex_normal;
 		Eigen::MatrixXf face_normal;
+		Eigen::Vector3f targetMinBorder;
+		Eigen::Vector3f targetMaxBorder;
+		int resolutionX;
+		int resolutionY;
+		int resolutionZ;
 		std::unordered_map<size_t, Camera>cameras;
 		std::vector<View>views;
 		GridConfig gridConfig;
@@ -489,8 +518,8 @@ namespace surf
 } 
 int test_surf()
 {
-	float totalAmplitude = 0.3;
-	float gridUnit = totalAmplitude / 10;
+	float totalAmplitude = 0.3;//measured from obj data manually
+	float gridUnit = totalAmplitude / 10;// the Amplitude, i wang to separet it into 10 picecs
 	surf::GridConfig gridConfig = { totalAmplitude /2,gridUnit ,4};
 	surf::SurfData asd("D:/repo/colmapThird/data/a/result", "D:/repo/colmapThird/data/a/result/dense.obj", gridConfig);
 
