@@ -292,34 +292,34 @@ namespace surf
 			intr(1, 2) = cy;
 			return 6 * sizeof(float);
 		}
-		static std::vector<char>serialization(const std::unordered_map<size_t, Camera>& cameras)
+		static std::vector<char>serialization(const std::unordered_map<int, Camera>& cameras)
 		{
 			std::vector<char>ret(sizeof(int));;
 			*(int*)&ret[0] = cameras.size();
 			for (const auto&d : cameras)
 			{
-				std::vector<char>ret0(sizeof(size_t));
-				*(size_t*)&ret0[0] = d.first;
+				std::vector<char>ret0(sizeof(int));
+				*(int*)&ret0[0] = d.first;
 				std::vector<char>ret1 = d.second.serialization();
 				ret.insert(ret.end(), ret0.begin(), ret0.end());
 				ret.insert(ret.end(), ret1.begin(), ret1.end());
 			}
 			return ret;
 		}
-		static int deserialization(const char* data, std::unordered_map<size_t, Camera>& dataOut)
+		static int deserialization(const char* data, std::unordered_map<int, Camera>& dataOut)
 		{
 			dataOut.clear();
 			int elemCnt = *(int*)data;
 			int pos = sizeof(int);
 			for (int i = 0; i < elemCnt; i++)
 			{
-				size_t cameraId = *(size_t*)&data[pos]; pos += sizeof(size_t);
+				int cameraId = *(int*)&data[pos]; pos += sizeof(int);
 				dataOut[cameraId] = Camera();
 				int deserialLength = dataOut[cameraId].deserialization(&data[pos]); pos += deserialLength;
 			}
 			return pos;
 		}
-		static size_t figureCameraHash(const Camera& c)
+		static int figureCameraHash(const Camera& c)
 		{
 			std::stringstream ss;
 			ss << static_cast<int>(c.fx * 10000)
@@ -359,12 +359,15 @@ namespace surf
 	};
 	struct View
 	{
+		int cameraId;
 		Eigen::Matrix4f Rt;
 		std::filesystem::path imgPath;
 		std::filesystem::path maskPath;
 		std::unordered_map<std::uint32_t, std::unordered_set<std::uint32_t>>pixelGridBelong;
 		std::vector<char>serialization()const
 		{
+			std::vector<char>sndata(sizeof(int));
+			*(int*)&sndata[0]= cameraId;
 			std::vector<char>Rtdata(16*sizeof(float));
 			float* Rtdata_ = (float*)&Rtdata[0];
 			for (int i = 0; i < 16; i++)
@@ -392,15 +395,18 @@ namespace surf
 				*data = d;
 				data++;
 			}
-			Rtdata.insert(Rtdata.end(), imgPathData.begin(), imgPathData.end());
-			Rtdata.insert(Rtdata.end(), maskPathData.begin(), maskPathData.end());
-			Rtdata.insert(Rtdata.end(), pixelGridBelongData_.begin(), pixelGridBelongData_.end());
-			return Rtdata;
+			sndata.insert(sndata.end(), Rtdata.begin(), Rtdata.end());
+			sndata.insert(sndata.end(), imgPathData.begin(), imgPathData.end());
+			sndata.insert(sndata.end(), maskPathData.begin(), maskPathData.end());
+			sndata.insert(sndata.end(), pixelGridBelongData_.begin(), pixelGridBelongData_.end());
+			return sndata;
 		}
 		int deserialization(const char*data)
 		{
 			int pos = 0;
-			const float* Rtdata_ = (float*)data;
+			cameraId = *(int*)data;
+			pos += sizeof(int);
+			const float* Rtdata_ = (float*)&data[pos];
 			for (int i = 0; i < 16; i++)
 			{
 				Rt(i / 4, i % 4) = Rtdata_[i];
@@ -426,34 +432,28 @@ namespace surf
 			}
 			return pos+sizeof(std::uint32_t)*i;
 		}
-		static std::vector<char>serialization(const std::unordered_map<size_t, View>& views)
+		static std::vector<char>serialization(const std::unordered_map<int, View>& views)
 		{
 			std::vector<char>ret(sizeof(int));;
 			*(int*)&ret[0] = views.size();
 			for (const auto&d: views)
 			{
-				std::vector<char>ret0(sizeof(size_t));
-				*(size_t*)&ret0[0] = d.first;
+				std::vector<char>ret0(sizeof(int));
+				*(int*)&ret0[0] = d.first;
 				std::vector<char>ret1 = d.second.serialization();
 				ret.insert(ret.end(), ret0.begin(), ret0.end());
 				ret.insert(ret.end(), ret1.begin(), ret1.end());
 			}
-
-
-			//std::unordered_map<size_t, View>tt;
-			//deserialization(&ret[0], tt);
-
-
 			return ret;
 		}
-		static int deserialization(const char*data, std::unordered_map<size_t, View>&dataOut)
+		static int deserialization(const char*data, std::unordered_map<int, View>&dataOut)
 		{
 			dataOut.clear();
 			int elemCnt = *(int*)data;
 			int pos = sizeof(int);
 			for (int i = 0; i < elemCnt; i++)
 			{
-				size_t viewId = *(size_t*)&data[pos]; pos += sizeof(size_t);
+				int viewId = *(int*)&data[pos]; pos += sizeof(int);
 				dataOut[viewId] = View();
 				int deserialLength = dataOut[viewId].deserialization(&data[pos]); pos += deserialLength;				
 			}
@@ -617,7 +617,7 @@ namespace surf
 							continue;
 						}
 						Camera thisCamera(fx, fy, cx, cy, height, width);
-						size_t thisCameraSn = Camera::figureCameraHash(thisCamera);
+						int thisCameraSn = Camera::figureCameraHash(thisCamera);
 						if (this->cameras.count(thisCameraSn) == 0)
 						{
 							this->cameras[thisCameraSn] = thisCamera;
@@ -641,8 +641,8 @@ namespace surf
 							LOG_ERR_OUT << "img.rows != mask.rows || img.cols != mask.cols";
 							continue;
 						}
-						View thisView = { Rt ,imgPath ,maskPath };
-						size_t viewIdx = this->views.size();
+						View thisView = { thisCameraSn, Rt ,imgPath ,maskPath };
+						int viewIdx = this->views.size();
 						this->views[viewIdx]=thisView;
 						cv::Mat rayDistance = cv::Mat::ones(mask.size(), CV_32FC1) * -1;
 						const Eigen::Matrix3f R = Rt.block(0, 0, 3, 3);
@@ -916,8 +916,8 @@ namespace surf
 		int resolutionY;
 		int resolutionZ;
 		int resolutionXY;
-		std::unordered_map<size_t, Camera>cameras;
-		std::unordered_map < size_t, View>views;
+		std::unordered_map<int, Camera>cameras;
+		std::unordered_map<int, View>views;
 		GridConfig gridConfig;
 		
 	};
@@ -929,7 +929,7 @@ int test_surf()
 	surf::GridConfig gridConfig = { totalAmplitude /2,gridUnit ,4};
 	surf::SurfData asd("D:/repo/colmapThird/data/a/result", "D:/repo/colmapThird/data/a/result/dense.obj", gridConfig);
 
-	//surf::SurfData asd2;
-	//asd2.reload("../surf/d.dat");
+	surf::SurfData asd2;
+	asd2.reload("../surf/d.dat");
 	return 0;
 }
