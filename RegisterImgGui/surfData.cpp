@@ -276,7 +276,7 @@ namespace surf
 			data[5] = width;
 			return ret;
 		}
-		bool deserialization(const char*data)
+		int deserialization(const char*data)
 		{
 			const float* floatData = (float*)&data[0];
 			fx = floatData[0];
@@ -296,7 +296,7 @@ namespace surf
 		{
 			std::vector<char>ret(sizeof(int));;
 			*(int*)&ret[0] = cameras.size();
-			for (const auto d : cameras)
+			for (const auto&d : cameras)
 			{
 				std::vector<char>ret0(sizeof(size_t));
 				*(size_t*)&ret0[0] = d.first;
@@ -317,7 +317,7 @@ namespace surf
 				dataOut[cameraId] = Camera();
 				int deserialLength = dataOut[cameraId].deserialization(&data[pos]); pos += deserialLength;
 			}
-			return 0;
+			return pos;
 		}
 		static size_t figureCameraHash(const Camera& c)
 		{
@@ -362,7 +362,7 @@ namespace surf
 		Eigen::Matrix4f Rt;
 		std::filesystem::path imgPath;
 		std::filesystem::path maskPath;
-		std::unordered_map<int, std::unordered_set<int>>pixelGridBelong;
+		std::unordered_map<std::uint32_t, std::unordered_set<std::uint32_t>>pixelGridBelong;
 		std::vector<char>serialization()const
 		{
 			std::vector<char>Rtdata(16*sizeof(float));
@@ -374,7 +374,7 @@ namespace surf
 			std::vector<char>imgPathData, maskPathData;
 			transform(imgPath.string(), imgPathData);
 			transform(maskPath.string(), maskPathData);
-			std::list<int>pixelGridBelongData;//total:[key:size:element]
+			std::list<std::uint32_t>pixelGridBelongData;//total:[key:size:element]
 			pixelGridBelongData.emplace_back(pixelGridBelong.size());
 			for (const auto&d: pixelGridBelong)
 			{
@@ -385,8 +385,8 @@ namespace surf
 					pixelGridBelongData.emplace_back(d2);
 				}
 			}
-			std::vector<char>pixelGridBelongData_(pixelGridBelongData.size()*sizeof(int));
-			int* data = (int*)&pixelGridBelongData_[0];
+			std::vector<char>pixelGridBelongData_(pixelGridBelongData.size()*sizeof(std::uint32_t));
+			std::uint32_t* data = (std::uint32_t*)&pixelGridBelongData_[0];
 			for (const auto&d: pixelGridBelongData)
 			{
 				*data = d;
@@ -394,42 +394,43 @@ namespace surf
 			}
 			Rtdata.insert(Rtdata.end(), imgPathData.begin(), imgPathData.end());
 			Rtdata.insert(Rtdata.end(), maskPathData.begin(), maskPathData.end());
-			Rtdata.insert(Rtdata.end(), maskPathData.begin(), maskPathData.end());
 			Rtdata.insert(Rtdata.end(), pixelGridBelongData_.begin(), pixelGridBelongData_.end());
 			return Rtdata;
 		}
 		int deserialization(const char*data)
 		{
+			int pos = 0;
 			const float* Rtdata_ = (float*)data;
 			for (int i = 0; i < 16; i++)
 			{
 				Rt(i / 4, i % 4) = Rtdata_[i];
+				pos += sizeof(float);
 			}
-			std::string line1, line2;
-			transform(&data[16 * sizeof(float)], line1);
-			imgPath = std::filesystem::path(line1);
-			transform(&data[16 * sizeof(float)+sizeof(int)+ line1.length()], line2);
-			maskPath = std::filesystem::path(line2);
-			const int* intData = (const int*)&data[16 * sizeof(float) + 2 * sizeof(int) + line1.length() + line2.length()];
-			int i = 0;
-			int mapSize = intData[i]; i++;
+			std::string line;
+			pos += transform(&data[pos], line);
+			imgPath = std::filesystem::path(line);
+			pos += transform(&data[pos], line);
+			maskPath = std::filesystem::path(line);
+			const std::uint32_t* intData = (const std::uint32_t*)&data[pos];
+			std::uint32_t i = 0;
+			std::uint32_t mapSize = intData[i]; i++;
 			pixelGridBelong.clear();
 			for (int pixel = 0; pixel < mapSize; pixel++)
 			{
-				int key_ = intData[i]; i++;
-				int memberSize_ = intData[i]; i++;
-				for (int j = 0; j < memberSize_; j++)
+				std::uint32_t key_ = intData[i]; i++;
+				std::uint32_t memberSize_ = intData[i]; i++;
+				for (std::uint32_t j = 0; j < memberSize_; j++)
 				{
 					pixelGridBelong[key_].insert(intData[i]); i++;
 				}
 			}
-			return 16 * sizeof(float) + 2 * sizeof(int) + line1.length() + line2.length() + i * sizeof(int);
+			return pos+sizeof(std::uint32_t)*i;
 		}
 		static std::vector<char>serialization(const std::unordered_map<size_t, View>& views)
 		{
 			std::vector<char>ret(sizeof(int));;
 			*(int*)&ret[0] = views.size();
-			for (const auto d: views)
+			for (const auto&d: views)
 			{
 				std::vector<char>ret0(sizeof(size_t));
 				*(size_t*)&ret0[0] = d.first;
@@ -437,6 +438,12 @@ namespace surf
 				ret.insert(ret.end(), ret0.begin(), ret0.end());
 				ret.insert(ret.end(), ret1.begin(), ret1.end());
 			}
+
+
+			//std::unordered_map<size_t, View>tt;
+			//deserialization(&ret[0], tt);
+
+
 			return ret;
 		}
 		static int deserialization(const char*data, std::unordered_map<size_t, View>&dataOut)
@@ -460,7 +467,7 @@ namespace surf
 		int gridY = (y-yStart)*gridUnitInv;  \
 		int gridZ = (z-zStart)*gridUnitInv;  
 #define GridXyzToPosEncode(gridX,gridY,gridZ,resolutionX,resolutionXY,posEncode) \
-		int posEncode = gridX+gridY*resolutionX+gridZ*resolutionXY;
+		std::uint32_t posEncode = gridX+gridY*resolutionX+gridZ*resolutionXY;
 #define ImgXyToPosEncode(x,y,imgWidth)  (imgWidth*y+x)
 
 		SurfData() {}
@@ -719,7 +726,6 @@ namespace surf
 							tools::saveColMajorPts3d("../surf/a.ply", pts);
 						}
 						this->registerRayDistanceMap(rayDistance, this->cameras[thisCameraSn], this->views[viewIdx]);
-						break;
 					}
 				}
 			}
@@ -766,7 +772,7 @@ namespace surf
 						const float& rayDist = rayDistantMap.ptr<float>(r)[c];
 						if (1e-3 < rayDist)
 						{
-							int imgPixelPos = ImgXyToPosEncode(c, r, camera.width);
+							std::uint32_t imgPixelPos = ImgXyToPosEncode(c, r, camera.width);
 							for (int i = 0; i < amplitudeCnt; i++)
 							{
 								Eigen::Vector3f p = (rayDist + -this->gridConfig.amplitudeHalf + i * this->gridConfig.gridUnit) * Eigen::Vector3f(imgDirs.at<cv::Vec3f>(r, c)[0], imgDirs.at<cv::Vec3f>(r, c)[1], imgDirs.at<cv::Vec3f>(r, c)[2]);
@@ -854,9 +860,9 @@ namespace surf
 			}
 			std::vector<char>configDat = gridConfig.serialization();
 			ret.insert(ret.end(), configDat.begin(), configDat.end());
-			std::vector<char>camerasData = Camera::serialization(cameras);
+			std::vector<char>camerasData = Camera::serialization(this->cameras);
 			ret.insert(ret.end(), camerasData.begin(), camerasData.end());
-			std::vector<char>viewData = View::serialization(views);
+			std::vector<char>viewData = View::serialization(this->views);
 			ret.insert(ret.end(), viewData.begin(), viewData.end());
 			return ret;
 		}
@@ -921,9 +927,9 @@ int test_surf()
 	float totalAmplitude = 0.3;//measured from obj data manually
 	float gridUnit = totalAmplitude / 10;// the Amplitude, i wang to separet it into 10 picecs
 	surf::GridConfig gridConfig = { totalAmplitude /2,gridUnit ,4};
-	//surf::SurfData asd("D:/repo/colmapThird/data/a/result", "D:/repo/colmapThird/data/a/result/dense.obj", gridConfig);
+	surf::SurfData asd("D:/repo/colmapThird/data/a/result", "D:/repo/colmapThird/data/a/result/dense.obj", gridConfig);
 
-	surf::SurfData asd2;
-	asd2.reload("../surf/d.dat");
+	//surf::SurfData asd2;
+	//asd2.reload("../surf/d.dat");
 	return 0;
 }
