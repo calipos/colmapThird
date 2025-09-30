@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <functional>
 #include <sstream>
@@ -17,6 +18,83 @@
 #include "log.h"
 namespace surf
 {
+	bool transform(const Eigen::MatrixXf& dataIn, std::vector<char>&dataOut)
+	{
+		int r = dataIn.rows();
+		int c = dataIn.cols();
+		dataOut.resize(2 * sizeof(int) + r * c * sizeof(float));
+		*(int*)&dataOut[0] = r;
+		*(int*)&dataOut[sizeof(int)] = c;
+		int size = r * c;
+		float* data_ = (float*)&dataOut[2 * sizeof(int)];
+		for (int i = 0; i < size; i++)
+		{
+			data_[i] = dataIn(i / c, i % c);
+		}
+		return true;
+	}
+	bool transform(const Eigen::MatrixXi& dataIn, std::vector<char>&dataOut)
+	{
+		int r = dataIn.rows();
+		int c = dataIn.cols();
+		dataOut.resize(2 * sizeof(int) + r * c * sizeof(int));
+		*(int*)&dataOut[0] = r;
+		*(int*)&dataOut[sizeof(int)] = c;
+		int size = r * c;
+		int* data_ = (int*)&dataOut[2 * sizeof(int)];
+		for (int i = 0; i < size; i++)
+		{
+			data_[i] = dataIn(i / c, i % c);
+		}
+		return true;
+	}
+	int transform(const char* dataIn, Eigen::MatrixXf& dataOut)
+	{
+		const int& r = *(int*)&dataIn[0];
+		const int& c = *(int*)&dataIn[sizeof(int)];
+		dataOut.resize(r, c);
+		const float* data_ = (float*)&dataIn[2 * sizeof(int)];
+		int size = r * c;
+		for (int i = 0; i < size; i++)
+		{
+			dataOut(i / c, i % c) = data_[i];
+		}
+		return 2 * sizeof(int)+ size * sizeof(float);
+	}
+	int transform(const char* dataIn, Eigen::MatrixXi& dataOut)
+	{
+		const int& r = *(int*)&dataIn[0];
+		const int& c = *(int*)&dataIn[sizeof(int)];
+		dataOut.resize(r, c);
+		const int* data_ = (int*)&dataIn[2 * sizeof(int)];
+		int size = r * c;
+		for (int i = 0; i < size; i++)
+		{
+			dataOut(i / c, i % c) = data_[i];
+		}
+		return 2 * sizeof(int) + size * sizeof(float);
+	}
+	bool transform(const std::string&line,std::vector<char>&data)
+	{
+		data.resize(sizeof(int)+ line.length());
+		int& length = *(int*)&data[0];
+		length = line.length();
+		for (int i = 0; i < length; i++)
+		{
+			data[sizeof(int)+i]= line[i];
+		}
+		return true;
+	}
+	int transform(const char* data,std::string& line)
+	{
+		const int& strLength = *(int*)&data[0];
+		line.resize(strLength);
+		for (int i = 0; i < strLength; i++)
+		{
+			 line[i]= data[sizeof(int) + i];
+		}
+		return strLength+sizeof(int);
+	}
 	bool readObj(const std::filesystem::path&objPath, Eigen::MatrixXf& vertex, Eigen::MatrixXi& faces, Eigen::MatrixXf& vertex_normal, Eigen::MatrixXf& face_normal)
 	{
 		if (!std::filesystem::exists(objPath))
@@ -150,9 +228,24 @@ namespace surf
 	}
 	struct GridConfig
 	{
-		float amplitude;
+		float amplitudeHalf;
 		float gridUnit;
-		int gridLevelCnt;
+		int gridLevelCnt;		
+		std::vector<char>serialization()const
+		{
+			std::vector<char> ret(sizeof(float) * 2 + sizeof(int));
+			*(float*)&ret[0] = amplitudeHalf;
+			*(float*)&ret[sizeof(float)] = gridUnit;
+			*(int*)&ret[sizeof(float)*2] = gridLevelCnt;
+			return ret;
+		}
+		int deserialization(const char*data)
+		{
+			amplitudeHalf = *(float*)&data[0];
+			gridUnit = *(float*)&data[sizeof(float)];
+			gridLevelCnt = *(int*)&data[sizeof(float) * 2];
+			return sizeof(float) * 2 + sizeof(int);
+		}
 	};
 	struct Camera
 	{
@@ -170,6 +263,61 @@ namespace surf
 			intr(1, 1) = fy;
 			intr(0, 2) = cx;
 			intr(1, 2) = cy;
+		}
+		std::vector<char>serialization()const
+		{
+			std::vector<char>ret(6*sizeof(float));
+			float* data = (float*)&ret[0];
+			data[0] = fx;
+			data[1] = fy;
+			data[2] = cx;
+			data[3] = cy;
+			data[4] = height;
+			data[5] = width;
+			return ret;
+		}
+		bool deserialization(const char*data)
+		{
+			const float* floatData = (float*)&data[0];
+			fx = floatData[0];
+			fy = floatData[1];
+			cx = floatData[2];
+			cy = floatData[3] ;
+			height = floatData[4];
+			width = floatData[5] ;
+			intr = Eigen::Matrix4f::Identity();
+			intr(0, 0) = fx;
+			intr(1, 1) = fy;
+			intr(0, 2) = cx;
+			intr(1, 2) = cy;
+			return 6 * sizeof(float);
+		}
+		static std::vector<char>serialization(const std::unordered_map<size_t, Camera>& cameras)
+		{
+			std::vector<char>ret(sizeof(int));;
+			*(int*)&ret[0] = cameras.size();
+			for (const auto d : cameras)
+			{
+				std::vector<char>ret0(sizeof(size_t));
+				*(size_t*)&ret0[0] = d.first;
+				std::vector<char>ret1 = d.second.serialization();
+				ret.insert(ret.end(), ret0.begin(), ret0.end());
+				ret.insert(ret.end(), ret1.begin(), ret1.end());
+			}
+			return ret;
+		}
+		static int deserialization(const char* data, std::unordered_map<size_t, Camera>& dataOut)
+		{
+			dataOut.clear();
+			int elemCnt = *(int*)data;
+			int pos = sizeof(int);
+			for (int i = 0; i < elemCnt; i++)
+			{
+				size_t cameraId = *(size_t*)&data[pos]; pos += sizeof(size_t);
+				dataOut[cameraId] = Camera();
+				int deserialLength = dataOut[cameraId].deserialization(&data[pos]); pos += deserialLength;
+			}
+			return 0;
 		}
 		static size_t figureCameraHash(const Camera& c)
 		{
@@ -214,15 +362,114 @@ namespace surf
 		Eigen::Matrix4f Rt;
 		std::filesystem::path imgPath;
 		std::filesystem::path maskPath;
+		std::unordered_map<int, std::unordered_set<int>>pixelGridBelong;
+		std::vector<char>serialization()const
+		{
+			std::vector<char>Rtdata(16*sizeof(float));
+			float* Rtdata_ = (float*)&Rtdata[0];
+			for (int i = 0; i < 16; i++)
+			{
+				Rtdata_[i] = Rt(i / 4, i % 4);
+			}
+			std::vector<char>imgPathData, maskPathData;
+			transform(imgPath.string(), imgPathData);
+			transform(maskPath.string(), maskPathData);
+			std::list<int>pixelGridBelongData;//total:[key:size:element]
+			pixelGridBelongData.emplace_back(pixelGridBelong.size());
+			for (const auto&d: pixelGridBelong)
+			{
+				pixelGridBelongData.emplace_back(d.first);
+				pixelGridBelongData.emplace_back(d.second.size());
+				for (const auto& d2 : d.second)
+				{
+					pixelGridBelongData.emplace_back(d2);
+				}
+			}
+			std::vector<char>pixelGridBelongData_(pixelGridBelongData.size()*sizeof(int));
+			int* data = (int*)&pixelGridBelongData_[0];
+			for (const auto&d: pixelGridBelongData)
+			{
+				*data = d;
+				data++;
+			}
+			Rtdata.insert(Rtdata.end(), imgPathData.begin(), imgPathData.end());
+			Rtdata.insert(Rtdata.end(), maskPathData.begin(), maskPathData.end());
+			Rtdata.insert(Rtdata.end(), maskPathData.begin(), maskPathData.end());
+			Rtdata.insert(Rtdata.end(), pixelGridBelongData_.begin(), pixelGridBelongData_.end());
+			return Rtdata;
+		}
+		int deserialization(const char*data)
+		{
+			const float* Rtdata_ = (float*)data;
+			for (int i = 0; i < 16; i++)
+			{
+				Rt(i / 4, i % 4) = Rtdata_[i];
+			}
+			std::string line1, line2;
+			transform(&data[16 * sizeof(float)], line1);
+			imgPath = std::filesystem::path(line1);
+			transform(&data[16 * sizeof(float)+sizeof(int)+ line1.length()], line2);
+			maskPath = std::filesystem::path(line2);
+			const int* intData = (const int*)&data[16 * sizeof(float) + 2 * sizeof(int) + line1.length() + line2.length()];
+			int i = 0;
+			int mapSize = intData[i]; i++;
+			pixelGridBelong.clear();
+			for (int pixel = 0; pixel < mapSize; pixel++)
+			{
+				int key_ = intData[i]; i++;
+				int memberSize_ = intData[i]; i++;
+				for (int j = 0; j < memberSize_; j++)
+				{
+					pixelGridBelong[key_].insert(intData[i]); i++;
+				}
+			}
+			return 16 * sizeof(float) + 2 * sizeof(int) + line1.length() + line2.length() + i * sizeof(int);
+		}
+		static std::vector<char>serialization(const std::unordered_map<size_t, View>& views)
+		{
+			std::vector<char>ret(sizeof(int));;
+			*(int*)&ret[0] = views.size();
+			for (const auto d: views)
+			{
+				std::vector<char>ret0(sizeof(size_t));
+				*(size_t*)&ret0[0] = d.first;
+				std::vector<char>ret1 = d.second.serialization();
+				ret.insert(ret.end(), ret0.begin(), ret0.end());
+				ret.insert(ret.end(), ret1.begin(), ret1.end());
+			}
+			return ret;
+		}
+		static int deserialization(const char*data, std::unordered_map<size_t, View>&dataOut)
+		{
+			dataOut.clear();
+			int elemCnt = *(int*)data;
+			int pos = sizeof(int);
+			for (int i = 0; i < elemCnt; i++)
+			{
+				size_t viewId = *(size_t*)&data[pos]; pos += sizeof(size_t);
+				dataOut[viewId] = View();
+				int deserialLength = dataOut[viewId].deserialization(&data[pos]); pos += deserialLength;				
+			}
+			return 0;
+		}
 	};
 	struct SurfData
 	{
+#define XyzToGridXYZ(x,y,z,xStart,yStart,zStart,gridUnitInv,gridX,gridY,gridZ) \
+		int gridX = (x-xStart)*gridUnitInv;  \
+		int gridY = (y-yStart)*gridUnitInv;  \
+		int gridZ = (z-zStart)*gridUnitInv;  
+#define GridXyzToPosEncode(gridX,gridY,gridZ,resolutionX,resolutionXY,posEncode) \
+		int posEncode = gridX+gridY*resolutionX+gridZ*resolutionXY;
+#define ImgXyToPosEncode(x,y,imgWidth)  (imgWidth*y+x)
+
 		SurfData() {}
 		SurfData(const std::filesystem::path&dataDir_, const std::filesystem::path& objPath_, const GridConfig& gridConfig_)
 		{
 			dataDir = dataDir_;
 			objPath = objPath_;
 			gridConfig = gridConfig_;
+			this->gridUnitInv = 1. / gridConfig.gridUnit;
 			this->vertex.resize(0, 0);
 			{
 				bool loadObj = surf::readObj(objPath, this->vertex, this->faces, this->vertex_normal, this->face_normal);
@@ -236,16 +483,22 @@ namespace surf
 				float objMaxX = this->vertex.row(0).maxCoeff();
 				float objMaxY = this->vertex.row(1).maxCoeff();
 				float objMaxZ = this->vertex.row(2).maxCoeff();
-				this->targetMinBorder[0] = objMinX - 0.06 * (objMaxX - objMinX);
-				this->targetMinBorder[1] = objMinY - 0.06 * (objMaxY - objMinY);
-				this->targetMinBorder[2] = objMinZ - 0.06 * (objMaxZ - objMinZ);
-				this->targetMaxBorder[0] = objMaxX + 0.06 * (objMaxX - objMinX);
-				this->targetMaxBorder[1] = objMaxY + 0.06 * (objMaxY - objMinY);
-				this->targetMaxBorder[2] = objMaxZ + 0.06 * (objMaxZ - objMinZ);
+				this->targetMinBorderX = objMinX - 0.06 * (objMaxX - objMinX);
+				this->targetMinBorderY = objMinY - 0.06 * (objMaxY - objMinY);
+				this->targetMinBorderZ = objMinZ - 0.06 * (objMaxZ - objMinZ);
+				this->targetMaxBorderX = objMaxX + 0.06 * (objMaxX - objMinX);
+				this->targetMaxBorderY = objMaxY + 0.06 * (objMaxY - objMinY);
+				this->targetMaxBorderZ = objMaxZ + 0.06 * (objMaxZ - objMinZ);
 
-				this->resolutionX = (this->targetMaxBorder[0] - this->targetMinBorder[0]) / gridConfig.gridUnit + 1;
-				this->resolutionY = (this->targetMaxBorder[1] - this->targetMinBorder[1]) / gridConfig.gridUnit + 1;
-				this->resolutionZ = (this->targetMaxBorder[2] - this->targetMinBorder[2]) / gridConfig.gridUnit + 1;
+				this->resolutionX = (this->targetMaxBorderX - this->targetMinBorderX) / gridConfig.gridUnit + 1;
+				this->resolutionY = (this->targetMaxBorderY - this->targetMinBorderY) / gridConfig.gridUnit + 1;
+				this->resolutionZ = (this->targetMaxBorderZ - this->targetMinBorderZ) / gridConfig.gridUnit + 1;
+				if (!isValidResolutions(this->resolutionX, this->resolutionY, this->resolutionZ))
+				{
+					LOG_ERR_OUT << "grid unit too small!!!";
+					exit(-1);
+				}
+				this->resolutionXY = this->resolutionX * this->resolutionY;
 
 			}
 			for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ dataDir_ })
@@ -256,6 +509,7 @@ namespace surf
 					const auto& ext = thisFilename.extension().string();
 					if (ext.compare(".json") == 0)
 					{
+						LOG_OUT << thisFilename;
 						std::stringstream ss;
 						std::string aline;
 						std::fstream fin(thisFilename, std::ios::in);
@@ -275,36 +529,45 @@ namespace surf
 							LOG_ERR_OUT << "parse json fail.";
 							return;
 						}
-						auto newMemberNames = newRoot.getMemberNames();
-						if (std::find(newMemberNames.begin(), newMemberNames.end(), "imagePath") == newMemberNames.end())
+						try
 						{
-							continue;
+
+
+							auto newMemberNames = newRoot.getMemberNames();
+							if (std::find(newMemberNames.begin(), newMemberNames.end(), "imagePath") == newMemberNames.end())
+							{
+								continue;
+							}
+							if (std::find(newMemberNames.begin(), newMemberNames.end(), "fx") == newMemberNames.end())
+							{
+								continue;
+							}
+							if (std::find(newMemberNames.begin(), newMemberNames.end(), "fy") == newMemberNames.end())
+							{
+								continue;
+							}
+							if (std::find(newMemberNames.begin(), newMemberNames.end(), "cx") == newMemberNames.end())
+							{
+								continue;
+							}
+							if (std::find(newMemberNames.begin(), newMemberNames.end(), "cy") == newMemberNames.end())
+							{
+								continue;
+							}
+							if (std::find(newMemberNames.begin(), newMemberNames.end(), "height") == newMemberNames.end())
+							{
+								continue;
+							}
+							if (std::find(newMemberNames.begin(), newMemberNames.end(), "width") == newMemberNames.end())
+							{
+								continue;
+							}
+							if (std::find(newMemberNames.begin(), newMemberNames.end(), "Qt") == newMemberNames.end())
+							{
+								continue;
+							}
 						}
-						if (std::find(newMemberNames.begin(), newMemberNames.end(), "fx") == newMemberNames.end())
-						{
-							continue;
-						}
-						if (std::find(newMemberNames.begin(), newMemberNames.end(), "fy") == newMemberNames.end())
-						{
-							continue;
-						}
-						if (std::find(newMemberNames.begin(), newMemberNames.end(), "cx") == newMemberNames.end())
-						{
-							continue;
-						}
-						if (std::find(newMemberNames.begin(), newMemberNames.end(), "cy") == newMemberNames.end())
-						{
-							continue;
-						}
-						if (std::find(newMemberNames.begin(), newMemberNames.end(), "height") == newMemberNames.end())
-						{
-							continue;
-						}
-						if (std::find(newMemberNames.begin(), newMemberNames.end(), "width") == newMemberNames.end())
-						{
-							continue;
-						}
-						if (std::find(newMemberNames.begin(), newMemberNames.end(), "Qt") == newMemberNames.end())
+						catch (...)
 						{
 							continue;
 						}
@@ -348,9 +611,9 @@ namespace surf
 						}
 						Camera thisCamera(fx, fy, cx, cy, height, width);
 						size_t thisCameraSn = Camera::figureCameraHash(thisCamera);
-						if (cameras.count(thisCameraSn) == 0)
+						if (this->cameras.count(thisCameraSn) == 0)
 						{
-							cameras[thisCameraSn] = thisCamera;
+							this->cameras[thisCameraSn] = thisCamera;
 						}
 						if (!std::filesystem::exists(imgPath))
 						{
@@ -372,7 +635,8 @@ namespace surf
 							continue;
 						}
 						View thisView = { Rt ,imgPath ,maskPath };
-						views.emplace_back(thisView);
+						size_t viewIdx = this->views.size();
+						this->views[viewIdx]=thisView;
 						cv::Mat rayDistance = cv::Mat::ones(mask.size(), CV_32FC1) * -1;
 						const Eigen::Matrix3f R = Rt.block(0, 0, 3, 3);
 						const Eigen::Matrix4f KRt = thisCamera.intr * Rt;
@@ -411,8 +675,8 @@ namespace surf
 						{
 							Eigen::Matrix4Xf vertexInView = Rt * this->vertex;
 							std::vector<bool> vertexInViewInCanvas(this->vertex.cols(), false);
-							float fxInv = 1. / cameras[thisCameraSn].fx;
-							float fyInv = 1. / cameras[thisCameraSn].fy;
+							float fxInv = 1. / this->cameras[thisCameraSn].fx;
+							float fyInv = 1. / this->cameras[thisCameraSn].fy;
 #pragma omp parallel for
 							for (int i = 0; i < this->vertex.cols(); i++)
 							{
@@ -451,17 +715,76 @@ namespace surf
 						}
 						if (false)
 						{//show rayDistant
-							Eigen::MatrixXf pts = rayDistantMapToPts(rayDistance, cameras[thisCameraSn], Rt);
+							Eigen::MatrixXf pts = rayDistantMapToPts(rayDistance, this->cameras[thisCameraSn], Rt);
 							tools::saveColMajorPts3d("../surf/a.ply", pts);
 						}
-						this->registerRayDistanceMap(rayDistance, cameras[thisCameraSn], Rt);
+						this->registerRayDistanceMap(rayDistance, this->cameras[thisCameraSn], this->views[viewIdx]);
+						break;
 					}
 				}
 			}
-
+			std::vector<char>d = this->serialization();
+			std::fstream fout("../surf/d.dat",std::ios::out|std::ios::binary);
+			int dCnt = d.size();
+			fout.write((char*)&dCnt, sizeof(int));
+			fout.write(&d[0], dCnt* sizeof(char));
+			fout.close();
 		}
-		bool registerRayDistanceMap(const cv::Mat& rayDistantMap, Camera& camera, const Eigen::Matrix4f& viewRt)
+		static bool isValidResolutions(const int& resolutionX, const int& resolutionY, const int& resolutionZ)
 		{
+			if (resolutionX <= 0 || resolutionY <= 0 || resolutionZ <= 0)
+			{
+				return false;
+			}
+			int xy = resolutionX * resolutionY;
+			int xz = resolutionX * resolutionZ;
+			int zy = resolutionZ * resolutionY;
+			if ((xy / resolutionX != resolutionY) || (xz / resolutionX != resolutionZ) || (zy / resolutionY != resolutionZ))
+			{
+				return false;
+			}
+			int xyz = xy * resolutionZ;
+			if (xyz/ xy != resolutionZ)
+			{
+				return false;
+			}
+			return true;
+		}
+		bool registerRayDistanceMap(const cv::Mat& rayDistantMap, Camera& camera, View& view)
+		{//pixelGridBelong
+			cv::Mat imgDirs = camera.getImgDirs();
+			const Eigen::Matrix4f Rtinv = view.Rt.inverse();
+			const Eigen::Matrix3f Rinv = Rtinv.block(0, 0, 3, 3);
+			const Eigen::Vector3f tinv(Rtinv(0, 3), Rtinv(1, 3), Rtinv(2, 3));
+			int amplitudeCnt = 2 * this->gridConfig.amplitudeHalf / this->gridConfig.gridUnit + 1;
+			Eigen::MatrixXf pixelViewPts(4, amplitudeCnt);
+			{				
+				for (int r = 0; r < camera.height; r++)
+				{
+					for (int c = 0; c < camera.width; c++)
+					{
+						const float& rayDist = rayDistantMap.ptr<float>(r)[c];
+						if (1e-3 < rayDist)
+						{
+							int imgPixelPos = ImgXyToPosEncode(c, r, camera.width);
+							for (int i = 0; i < amplitudeCnt; i++)
+							{
+								Eigen::Vector3f p = (rayDist + -this->gridConfig.amplitudeHalf + i * this->gridConfig.gridUnit) * Eigen::Vector3f(imgDirs.at<cv::Vec3f>(r, c)[0], imgDirs.at<cv::Vec3f>(r, c)[1], imgDirs.at<cv::Vec3f>(r, c)[2]);
+								if (p[0] < this->targetMinBorderX || p[1] < this->targetMinBorderY || p[2] < this->targetMinBorderZ
+									|| p[0] >= this->targetMaxBorderX || p[1] >= this->targetMaxBorderY || p[2] >= this->targetMaxBorderZ)
+								{
+									continue;
+								}
+								Eigen::Vector3f p1 = Rinv * p + tinv;
+								XyzToGridXYZ(p1[0], p1[0], p1[2], this->targetMinBorderX, this->targetMinBorderY, this->targetMinBorderZ, this->gridUnitInv, gridX, gridY, gridZ);
+								GridXyzToPosEncode(gridX, gridY, gridZ, this->resolutionX, this->resolutionXY, posEncode);
+								view.pixelGridBelong[imgPixelPos].insert(posEncode);
+							}
+						}
+					}
+				}
+
+			}
 
 			return true;
 		}
@@ -496,9 +819,79 @@ namespace surf
 			const Eigen::Matrix4f Rtinv = viewRt.inverse();
 			return Rtinv* ret;
 		}
-		int encodeData(const cv::Mat& rayDistantMap,const float& amplitude,const int&sampledPtsCnt,const float&minGridUnit, const int& gridLevelCnt)
+		std::vector<char>serialization()const
 		{
-
+			std::vector<char>ret;
+			std::vector<char>imgPathData, maskPathData, vertexData, facesData, vertex_normalData, face_normalData;
+			transform(this->dataDir.string(), imgPathData);
+			transform(this->objPath.string(), maskPathData);
+			transform(this->vertex, vertexData);
+			transform(this->faces, facesData);
+			transform(this->vertex_normal, vertex_normalData);
+			transform(this->face_normal, face_normalData);
+			ret.insert(ret.end(), imgPathData.begin(), imgPathData.end());
+			ret.insert(ret.end(), maskPathData.begin(), maskPathData.end());
+			ret.insert(ret.end(), vertexData.begin(), vertexData.end());
+			ret.insert(ret.end(), facesData.begin(), facesData.end());
+			ret.insert(ret.end(), vertex_normalData.begin(), vertex_normalData.end());
+			ret.insert(ret.end(), face_normalData.begin(), face_normalData.end());
+			{
+				std::vector<char>floatDat(7*sizeof(float));
+				*(float*)&floatDat[0 * sizeof(float)]= targetMinBorderX;
+				*(float*)&floatDat[1 * sizeof(float)] = targetMinBorderY;
+				*(float*)&floatDat[2 * sizeof(float)] = targetMinBorderZ;
+				*(float*)&floatDat[3 * sizeof(float)] = targetMaxBorderX;
+				*(float*)&floatDat[4 * sizeof(float)] = targetMaxBorderY;
+				*(float*)&floatDat[5 * sizeof(float)]= targetMaxBorderZ;
+				*(float*)&floatDat[6 * sizeof(float)] = gridUnitInv;
+				std::vector<char>intDat(4 * sizeof(float));
+				*(int*)&intDat[0 * sizeof(int)] = resolutionX;
+				*(int*)&intDat[1 * sizeof(int)] = resolutionY;
+				*(int*)&intDat[2 * sizeof(int)] = resolutionZ;
+				*(int*)&intDat[3 * sizeof(int)] = resolutionXY;
+				ret.insert(ret.end(), floatDat.begin(), floatDat.end());
+				ret.insert(ret.end(), intDat.begin(), intDat.end());
+			}
+			std::vector<char>configDat = gridConfig.serialization();
+			ret.insert(ret.end(), configDat.begin(), configDat.end());
+			std::vector<char>camerasData = Camera::serialization(cameras);
+			ret.insert(ret.end(), camerasData.begin(), camerasData.end());
+			std::vector<char>viewData = View::serialization(views);
+			ret.insert(ret.end(), viewData.begin(), viewData.end());
+			return ret;
+		}
+		bool reload(const std::filesystem::path&path)
+		{
+			std::fstream fin(path,std::ios::in|std::ios::binary);
+			int totalSize = 0;
+			fin.read((char*)&totalSize,sizeof(int));
+			std::vector<char>dat(totalSize);
+			fin.read((char*)&dat[0], totalSize* sizeof(char));
+			int pos = 0;
+			std::string line;
+			pos += transform(&dat[pos], line); this->dataDir = std::filesystem::path(line);
+			pos += transform(&dat[pos], line); this->objPath = std::filesystem::path(line);
+			pos += transform(&dat[pos], this->vertex);
+			pos += transform(&dat[pos], this->faces);
+			pos += transform(&dat[pos], this->vertex_normal);
+			pos += transform(&dat[pos], this->face_normal);
+			{
+				targetMinBorderX = *(float*)&dat[pos]; pos += sizeof(float);
+				targetMinBorderY = *(float*)&dat[pos]; pos += sizeof(float);
+				targetMinBorderZ = *(float*)&dat[pos]; pos += sizeof(float);
+				targetMaxBorderX = *(float*)&dat[pos]; pos += sizeof(float);
+				targetMaxBorderY = *(float*)&dat[pos]; pos += sizeof(float);
+				targetMaxBorderZ = *(float*)&dat[pos]; pos += sizeof(float);
+				gridUnitInv = *(float*)&dat[pos]; pos += sizeof(float);
+				resolutionX = *(int*)&dat[pos]; pos += sizeof(int);
+				resolutionY = *(int*)&dat[pos]; pos += sizeof(int);
+				resolutionZ = *(int*)&dat[pos]; pos += sizeof(int);
+				resolutionXY = *(int*)&dat[pos]; pos += sizeof(int);
+			}
+			pos += gridConfig.deserialization(&dat[pos]);
+			pos += Camera::deserialization(&dat[pos], this->cameras);
+			pos += View::deserialization(&dat[pos], this->views);
+			return true;
 		}
 		std::filesystem::path dataDir;
 		std::filesystem::path objPath;
@@ -506,14 +899,21 @@ namespace surf
 		Eigen::MatrixXi faces;
 		Eigen::MatrixXf vertex_normal;
 		Eigen::MatrixXf face_normal;
-		Eigen::Vector3f targetMinBorder;
-		Eigen::Vector3f targetMaxBorder;
+		float targetMinBorderX;
+		float targetMinBorderY;
+		float targetMinBorderZ;
+		float targetMaxBorderX;
+		float targetMaxBorderY;
+		float targetMaxBorderZ;
+		float gridUnitInv;
 		int resolutionX;
 		int resolutionY;
 		int resolutionZ;
+		int resolutionXY;
 		std::unordered_map<size_t, Camera>cameras;
-		std::vector<View>views;
+		std::unordered_map < size_t, View>views;
 		GridConfig gridConfig;
+		
 	};
 } 
 int test_surf()
@@ -521,8 +921,9 @@ int test_surf()
 	float totalAmplitude = 0.3;//measured from obj data manually
 	float gridUnit = totalAmplitude / 10;// the Amplitude, i wang to separet it into 10 picecs
 	surf::GridConfig gridConfig = { totalAmplitude /2,gridUnit ,4};
-	surf::SurfData asd("D:/repo/colmapThird/data/a/result", "D:/repo/colmapThird/data/a/result/dense.obj", gridConfig);
+	//surf::SurfData asd("D:/repo/colmapThird/data/a/result", "D:/repo/colmapThird/data/a/result/dense.obj", gridConfig);
 
-
+	surf::SurfData asd2;
+	asd2.reload("../surf/d.dat");
 	return 0;
 }
