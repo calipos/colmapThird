@@ -363,7 +363,8 @@ namespace surf
 		Eigen::Matrix4f Rt;
 		std::filesystem::path imgPath;
 		std::filesystem::path maskPath;
-		std::unordered_map<std::uint32_t, std::unordered_set<std::uint32_t>>pixelGridBelong;
+		//std::unordered_map<std::uint32_t, std::unordered_set<std::uint32_t>>pixelGridBelong;
+		std::unordered_map<std::uint32_t, std::vector<std::uint32_t>>pixelGridBelong;
 		std::vector<char>serialization()const
 		{
 			std::vector<char>sndata(sizeof(int));
@@ -425,9 +426,10 @@ namespace surf
 			{
 				std::uint32_t key_ = intData[i]; i++;
 				std::uint32_t memberSize_ = intData[i]; i++;
-				for (std::uint32_t j = 0; j < memberSize_; j++)
+				pixelGridBelong[key_].resize(memberSize_);
+				for (int j = 0; j < memberSize_; j++)
 				{
-					pixelGridBelong[key_].insert(intData[i]); i++;
+					pixelGridBelong[key_][j] = intData[i]; i++;
 				}
 			}
 			return pos+sizeof(std::uint32_t)*i;
@@ -757,7 +759,8 @@ namespace surf
 			return true;
 		}
 		bool registerRayDistanceMap(const cv::Mat& rayDistantMap, Camera& camera, View& view)
-		{//pixelGridBelong
+		{
+			std::unordered_map<std::uint32_t, std::unordered_set<std::uint32_t>>pixelGridBelong_map;
 			cv::Mat imgDirs = camera.getImgDirs();
 			const Eigen::Matrix4f Rtinv = view.Rt.inverse();
 			const Eigen::Matrix3f Rinv = Rtinv.block(0, 0, 3, 3);
@@ -775,7 +778,8 @@ namespace surf
 							std::uint32_t imgPixelPos = ImgXyToPosEncode(c, r, camera.width);
 							for (int i = 0; i < amplitudeCnt; i++)
 							{
-								Eigen::Vector3f p = (rayDist + -this->gridConfig.amplitudeHalf + i * this->gridConfig.gridUnit) * Eigen::Vector3f(imgDirs.at<cv::Vec3f>(r, c)[0], imgDirs.at<cv::Vec3f>(r, c)[1], imgDirs.at<cv::Vec3f>(r, c)[2]);
+								Eigen::Vector3f pixelDir = Eigen::Vector3f(imgDirs.at<cv::Vec3f>(r, c)[0], imgDirs.at<cv::Vec3f>(r, c)[1], imgDirs.at<cv::Vec3f>(r, c)[2]);
+								Eigen::Vector3f p = (rayDist -this->gridConfig.amplitudeHalf + i * this->gridConfig.gridUnit) * pixelDir;
 								if (p[0] < this->targetMinBorderX || p[1] < this->targetMinBorderY || p[2] < this->targetMinBorderZ
 									|| p[0] >= this->targetMaxBorderX || p[1] >= this->targetMaxBorderY || p[2] >= this->targetMaxBorderZ)
 								{
@@ -784,12 +788,22 @@ namespace surf
 								Eigen::Vector3f p1 = Rinv * p + tinv;
 								XyzToGridXYZ(p1[0], p1[0], p1[2], this->targetMinBorderX, this->targetMinBorderY, this->targetMinBorderZ, this->gridUnitInv, gridX, gridY, gridZ);
 								GridXyzToPosEncode(gridX, gridY, gridZ, this->resolutionX, this->resolutionXY, posEncode);
-								view.pixelGridBelong[imgPixelPos].insert(posEncode);
+								//view.pixelGridBelong[imgPixelPos].emplace(posEncode);
+								pixelGridBelong_map[imgPixelPos].emplace(posEncode);
 							}
 						}
 					}
 				}
-
+				for (const auto&d: pixelGridBelong_map)
+				{
+					int elemSize = d.second.size();
+					view.pixelGridBelong[d.first].clear();
+					view.pixelGridBelong[d.first].reserve(elemSize);
+					for (const auto&d2:d.second)
+					{
+						view.pixelGridBelong[d.first].emplace_back(d2);
+					}
+				}
 			}
 
 			return true;
@@ -899,6 +913,16 @@ namespace surf
 			pos += View::deserialization(&dat[pos], this->views);
 			return true;
 		}
+		bool getTrainDat()
+		{
+			/// <summary>
+			///    RGB  |  xyz0 xyz1 2 3 ...  pixelDir
+			///              xyz[posEncode...]  ->  gridID[0,1,2,3...]
+			///              feat1ID[posEncode...]  ->  [0,1,2,3...]
+			///							  feat1ID  feat2ID feat3ID feat4ID
+			/// </summary>
+			return true;
+		}
 		std::filesystem::path dataDir;
 		std::filesystem::path objPath;
 		Eigen::MatrixXf vertex;
@@ -927,9 +951,10 @@ int test_surf()
 	float totalAmplitude = 0.3;//measured from obj data manually
 	float gridUnit = totalAmplitude / 10;// the Amplitude, i wang to separet it into 10 picecs
 	surf::GridConfig gridConfig = { totalAmplitude /2,gridUnit ,4};
-	surf::SurfData asd("D:/repo/colmapThird/data/a/result", "D:/repo/colmapThird/data/a/result/dense.obj", gridConfig);
+	//surf::SurfData asd("../data/a/result", "../data/a/result/dense.obj", gridConfig);
 
 	surf::SurfData asd2;
 	asd2.reload("../surf/d.dat");
+	asd2.getTrainDat();
 	return 0;
 }
