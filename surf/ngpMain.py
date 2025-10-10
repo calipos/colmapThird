@@ -64,9 +64,8 @@ class Trainer(object):
                 self.save_checkpoint()
 
     def save_checkpoint(self):
-        print("try save...")
-        torch.save(self.surfmodel.state_dict(), 'save.pt')
-        print("save done")
+        torch.save(self.surfmodel.state_dict(), f'surf/{self.global_step}_{self.local_step}.save.pt')
+
 
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

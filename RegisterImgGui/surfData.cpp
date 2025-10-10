@@ -1180,10 +1180,6 @@ namespace surf
 	};
 	bool saveTrainData(const std::filesystem::path&path,std::list<surf::trainTerm1>&data)
 	{
-		data.resize(1024);
-
-
-
 		std::fstream fout(path, std::ios::out | std::ios::binary);
 		int dataType = 1;
 		fout.write((char*)&dataType, sizeof(dataType));
