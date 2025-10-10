@@ -1121,9 +1121,9 @@ namespace surf
 					const float& wordDirZ = imgWorldDir.at<cv::Vec3f>(imgY, imgX)[2];
 					std::vector<float>dirEncode;
 					shEncoder(wordDirX, wordDirY, wordDirZ, dat.worldDirSh);
-					dat.b = img.at<cv::Vec3b>(imgY, imgX)[0] * 0.0078125 - 1;
-					dat.g = img.at<cv::Vec3b>(imgY, imgX)[1] * 0.0078125 - 1;
-					dat.r = img.at<cv::Vec3b>(imgY, imgX)[2] * 0.0078125 - 1;
+					dat.b = img.at<cv::Vec3b>(imgY, imgX)[0] * 0.00390625;
+					dat.g = img.at<cv::Vec3b>(imgY, imgX)[1] * 0.00390625;
+					dat.r = img.at<cv::Vec3b>(imgY, imgX)[2] * 0.00390625;
 					dat.featLevelCnt = this->gridConfig.gridLevelCnt;
 					dat.potentialGridCnt = pixel.second.size();
 					std::vector<std::uint32_t>&thisPixelFeatId= dat.featsId;
@@ -1178,8 +1178,12 @@ namespace surf
 		GridConfig gridConfig;
 		
 	};
-	bool saveTrainData(const std::filesystem::path&path,const std::list<surf::trainTerm1>&data)
+	bool saveTrainData(const std::filesystem::path&path,std::list<surf::trainTerm1>&data)
 	{
+		data.resize(1024);
+
+
+
 		std::fstream fout(path, std::ios::out | std::ios::binary);
 		int dataType = 1;
 		fout.write((char*)&dataType, sizeof(dataType));

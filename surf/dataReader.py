@@ -1,30 +1,65 @@
 import numpy as np
 import struct
+import torch
+from torch.utils.data import DataLoader, Dataset
 
 
+class SurfDataset(Dataset):
+    def __init__(self, device, dataPath,type='train', n_test=10):
+        super().__init__()
+        self.dataPath = dataPath
+        self.device = device
+        self.type = type  # train, val, test
+        self.training = self.type in ['train', 'all', 'trainval']
+        self.num_rays = -1
+        with open(dataPath, 'rb') as file:
+            self.dataType = struct.unpack('i', file.read(4))[0]
+            self.num_rays = struct.unpack('i', file.read(4))[0]
+            print('num_rays = ', self.num_rays)
+            self.featLevelCnt = struct.unpack('i', file.read(4))[0]
+            self.potentialGridCnt = struct.unpack('i', file.read(4))[0]
+            cnt = self.featLevelCnt*self.potentialGridCnt
+            self.sphereHarmonicSize = struct.unpack('i', file.read(4))[0]
+            rgbData = np.zeros(
+                [self.num_rays, 3], dtype=np.float32)
+            dirData = np.zeros(
+                [self.num_rays, self.sphereHarmonicSize], dtype=np.float32)
+            featsId = np.zeros(
+                [self.num_rays*self.potentialGridCnt, self.featLevelCnt], dtype=np.int32)
+            if self.dataType == 1:
+                print('dataType == 1')
+                for i in range(self.num_rays):
+                    rgbData[i, :] = np.array(struct.unpack('3f', file.read(12)))
+                    dirData[i, :] = np.array(
+                        struct.unpack('16f', file.read(4*16)))
+                    featsId[self.potentialGridCnt*i:self.potentialGridCnt*i+self.potentialGridCnt, :] = np.array(
+                        struct.unpack(str(cnt)+'I', file.read(4*cnt)), dtype=np.int32).reshape(self.potentialGridCnt, self.featLevelCnt)
+                self.maxFeatId = np.max(featsId, axis=0)+1
+                b = [np.sum(self.maxFeatId[:n+1]) for n in range(len(self.maxFeatId))]
+                self.maxFeatId = np.array(b)
+                featsId = featsId + np.pad(self.maxFeatId[:-1], (1, 0),'constant', constant_values=(0))
+                self.rgbData = torch.from_numpy(rgbData)
+                self.dirData = torch.from_numpy(dirData)
+                self.featsId = torch.from_numpy(featsId)
+                self.rgbData = self.rgbData.to(self.device)
+                self.dirData = self.dirData.to(self.device)
+                self.featsId = self.featsId.to(self.device)
+                del rgbData
+                del dirData
+                del featsId
 
+
+    def __len__(self):
+        return self.rgbData.shape[0]
+
+    def __getitem__(self, idx):
+        return self.rgbData[idx, :], self.dirData[idx, :], self.featsId[self.potentialGridCnt*idx:self.potentialGridCnt*idx+self.potentialGridCnt, :],
+
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if __name__=='__main__':
-    dataPath = 'surf/trainTerm1.dat'
-    data = []
-    maxFeatId = np.array([0],dtype=np.uint32)
-    with open(dataPath, 'rb') as file:
-        dataType = struct.unpack('i', file.read(4))[0]
-        itemCnt = struct.unpack('i', file.read(4))[0]
-        featLevelCnt = struct.unpack('i', file.read(4))[0]
-        potentialGridCnt = struct.unpack('i', file.read(4))[0]
-        cnt = featLevelCnt*potentialGridCnt
-        sphereHarmonicSize = struct.unpack('i', file.read(4))[0]
-        rgbData = np.zeros([itemCnt, 3])
-        dirData = np.zeros([itemCnt, sphereHarmonicSize])
-        featsId = np.zeros(
-            [itemCnt*potentialGridCnt, featLevelCnt], dtype=np.uint32)
-        if dataType==1:
-            print('dataType == 1')
-            for i in range(itemCnt):
-                rgbData[i,:] = np.array(struct.unpack('3f', file.read(12)))
-                dirData[i, :] = np.array(struct.unpack('16f', file.read(4*16)))
-                featsId[potentialGridCnt*i:potentialGridCnt*i+potentialGridCnt, :] = np.array(struct.unpack(
-                    str(cnt)+'I', file.read(4*cnt)),dtype=np.uint32).reshape(potentialGridCnt, featLevelCnt)
-            maxFeatId = np.max(featsId, axis=0)
-        pass
-
+    surfdata = SurfDataset(device, 'surf/trainTerm1.dat')
+    dataloader = DataLoader(surfdata, batch_size=3, shuffle=True)
+    for batch in dataloader:
+        print(batch)
+        break

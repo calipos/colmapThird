@@ -375,6 +375,9 @@ class DenseData:
         self.vertex = d['vertex']
         self.face = d['face']
 
+
+
+
 if __name__=='__main__':
 
     unit = 0.01
