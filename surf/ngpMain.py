@@ -34,8 +34,8 @@ class Trainer(object):
         for epoch in range(self.max_epochs):
             self.epoch = epoch
             self.train_one_epoch()
-            if self.epoch % 10 == 0:
-                self.save_checkpoint()
+            # if self.epoch % 10 == 0:
+            #     self.save_checkpoint()
 
     def evaluate(self, loader, name=None):
         self.evaluate_one_epoch(loader, name)
@@ -61,13 +61,11 @@ class Trainer(object):
                 showLoss = loss.detach().sum()/B
                 end_time = time.time()                
                 print(f"batch={B}, lr={self.lr_scheduler.get_lr()}, loss={showLoss},  cost={(end_time - start_time)/B}s")
+                self.save_checkpoint()
 
     def save_checkpoint(self):
-        state = {}
-        path = f"surf/{self.global_step}_{self.local_step}.pth"
-        state['model'] = self.surfmodel.state_dict()
         print("try save...")
-        torch.save(state, path)
+        torch.save(self.surfmodel.state_dict(), 'save.pt')
         print("save done")
 
 if __name__ == '__main__':
