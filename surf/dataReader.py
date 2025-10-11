@@ -47,7 +47,29 @@ class SurfDataset(Dataset):
                 del rgbData
                 del dirData
                 del featsId
+                featIdToPosEncodeVectSize = struct.unpack('i', file.read(4))[0]
+                featIdToPosEncodeVect = struct.unpack(
+                    str(featIdToPosEncodeVectSize)+'i', file.read(4*featIdToPosEncodeVectSize))
+                self.featIdToPosEncode = {}
+                for i in range(featIdToPosEncodeVectSize//2):
+                    i2=i*2
+                    self.featIdToPosEncode[featIdToPosEncodeVect[i2]
+                                               ] = featIdToPosEncodeVect[i2+1]
+                self.resolutionX = struct.unpack('i', file.read(4))[0]
+                self.resolutionY = struct.unpack('i', file.read(4))[0]
+                self.resolutionZ = struct.unpack('i', file.read(4))[0]
+                self.resolutionXY = self.resolutionX*self.resolutionY
+                self.xStart = struct.unpack('f', file.read(4))[0]
+                self.yStart = struct.unpack('f', file.read(4))[0]
+                self.zStart = struct.unpack('f', file.read(4))[0]
+                self.resolutionUnit = struct.unpack('f', file.read(4))[0]
 
+    def posEncodeToXyz(self,posEncode):
+        Z = posEncode//self.resolutionXY
+        Y = posEncode % self.resolutionXY
+        X = Y % self.resolutionX
+        Y = Y // self.resolutionX
+        return self.xStart+X*self.resolutionUnit, self.yStart+Y*self.resolutionUnit, self.zStart+Z*self.resolutionUnit
 
     def __len__(self):
         return self.rgbData.shape[0]

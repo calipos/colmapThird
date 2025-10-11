@@ -22,6 +22,7 @@ class SurfNetwork(nn.Module):
         super().__init__()
         # sigma network
         self.num_layers = num_layers
+        self.eachGridFeatDim = eachGridFeatDim
         self.hidden_dim = hidden_dim
         self.geo_feat_dim = geo_feat_dim
         self.in_dim = gridFeatLevelCnt*eachGridFeatDim

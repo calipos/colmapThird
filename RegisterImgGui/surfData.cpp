@@ -935,7 +935,7 @@ namespace surf
 										continue;
 									}
 									Eigen::Vector3f p1 = Rinv * p + tinv;
-									XyzToGridXYZ(p1[0], p1[0], p1[2], this->targetMinBorderX, this->targetMinBorderY, this->targetMinBorderZ, this->gridUnitInv, gridX, gridY, gridZ);
+									XyzToGridXYZ(p1[0], p1[1], p1[2], this->targetMinBorderX, this->targetMinBorderY, this->targetMinBorderZ, this->gridUnitInv, gridX, gridY, gridZ);
 									GridXyzToPosEncode(gridX, gridY, gridZ, this->resolutionX, this->resolutionXY, posEncode);
 									pixelGridBelong_map[imgPixelPos].emplace(posEncode);
 								}
@@ -951,7 +951,7 @@ namespace surf
 										continue;
 									}
 									Eigen::Vector3f p1 = Rinv * p + tinv;
-									XyzToGridXYZ(p1[0], p1[0], p1[2], this->targetMinBorderX, this->targetMinBorderY, this->targetMinBorderZ, this->gridUnitInv, gridX, gridY, gridZ);
+									XyzToGridXYZ(p1[0], p1[1], p1[2], this->targetMinBorderX, this->targetMinBorderY, this->targetMinBorderZ, this->gridUnitInv, gridX, gridY, gridZ);
 									GridXyzToPosEncode(gridX, gridY, gridZ, this->resolutionX, this->resolutionXY, posEncode);
 									pixelGridBelong_map[imgPixelPos].emplace(posEncode);
 								}
@@ -1088,7 +1088,7 @@ namespace surf
 			}
 			return true;
 		}
-		std::list<trainTerm1> getTrainDat()const
+		std::list<trainTerm1> getTrainDat(std::unordered_map<std::uint32_t, std::uint32_t>&featIdToPosEncode)const
 		{
 			std::list<trainTerm1>ret;
 			/// <summary>
@@ -1098,6 +1098,7 @@ namespace surf
 			///									                     ->  feat2gridID[0,4,8,12...]   ->  feat2gridID
 			///									                     ->  feat3gridID[0,8,16,24...]  ->  feat3gridID
 			std::vector<std::unordered_map<std::uint32_t, std::uint32_t>>featsId(this->gridConfig.gridLevelCnt);
+			featIdToPosEncode.clear();
 			for (const auto&v:views)
 			{
 				const auto& viewId = v.first;
@@ -1137,6 +1138,7 @@ namespace surf
 							featsId[0][rayPtPosEncode] = newId;
 						}
 						thisPixelFeatId.emplace_back(featsId[0][rayPtPosEncode]);
+						featIdToPosEncode[featsId[0][rayPtPosEncode]] = rayPtPosEncode;
 						for (int gridLevel = 1; gridLevel < this->gridConfig.gridLevelCnt; gridLevel++)
 						{
 							std::uint32_t gridX_temp = gridX>>gridLevel;
@@ -1178,7 +1180,8 @@ namespace surf
 		GridConfig gridConfig;
 		
 	};
-	bool saveTrainData(const std::filesystem::path&path,std::list<surf::trainTerm1>&data)
+	bool saveTrainData(const std::filesystem::path&path,std::list<surf::trainTerm1>&data, const std::unordered_map<std::uint32_t, std::uint32_t>&featIdToPosEncode,
+		const int& resolutionX, const int& resolutionY, const int& resolutionZ, const float& xStart, const float& yStart, const float& zStart, const float& gridUnit)
 	{
 		std::fstream fout(path, std::ios::out | std::ios::binary);
 		int dataType = 1;
@@ -1197,6 +1200,23 @@ namespace surf
 			fout.write((char*)&d.worldDirSh[0], d.worldDirSh.size()*sizeof(float));
 			fout.write((char*)&d.featsId[0], d.featsId.size() * sizeof(std::uint32_t));
 		}
+		std::vector<std::uint32_t>featIdToPosEncodeVect(featIdToPosEncode.size() * 2);
+		int i = featIdToPosEncodeVect.size();
+		fout.write((char*)&i, sizeof(i));
+		i = 0;
+		for (const auto&d: featIdToPosEncode)
+		{
+			featIdToPosEncodeVect[i++] = d.first;
+			featIdToPosEncodeVect[i++] = d.second;
+		}
+		fout.write((char*)&featIdToPosEncodeVect[0], featIdToPosEncodeVect.size() * sizeof(std::uint32_t));
+		fout.write((char*)&resolutionX, sizeof(resolutionX));
+		fout.write((char*)&resolutionY, sizeof(resolutionY));
+		fout.write((char*)&resolutionZ, sizeof(resolutionZ));
+		fout.write((char*)&xStart, sizeof(float));
+		fout.write((char*)&yStart, sizeof(float));
+		fout.write((char*)&zStart, sizeof(float));
+		fout.write((char*)&gridUnit, sizeof(float));
 		fout.close();
 		return true;
 	}
@@ -1210,7 +1230,8 @@ int test_surf()
 
 	surf::SurfData asd2;
 	asd2.reload("../surf/d.dat");
-	std::list<surf::trainTerm1>trainDat = asd2.getTrainDat();
-	surf::saveTrainData("../surf/trainTerm1.dat", trainDat);
+	std::unordered_map<std::uint32_t, std::uint32_t> featIdToPosEncode;
+	std::list<surf::trainTerm1>trainDat = asd2.getTrainDat(featIdToPosEncode);
+	surf::saveTrainData("../surf/trainTerm1.dat", trainDat, featIdToPosEncode, asd2.resolutionX, asd2.resolutionY, asd2.resolutionZ, asd2.targetMinBorderX, asd2.targetMinBorderY, asd2.targetMinBorderZ,asd2.gridConfig.gridUnit);
 	return 0;
 }
