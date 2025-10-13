@@ -60,13 +60,13 @@ class SurfNetwork(nn.Module):
             color_net.append(nn.Linear(in_dim, out_dim, bias=False))
         self.color_net = nn.ModuleList(color_net)
 
-    def forward(self, x, d):
+    def forward_softmax(self, x, d):  # softmax
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], nomalized in [-1, 1]
         # sigma
-        B,N,_=x.shape
+        B, N, _ = x.shape
         feat = torch.index_select(
-            self.gridWeight, dim=0, index=x.reshape(-1)).reshape(B, N,-1)
+            self.gridWeight, dim=0, index=x.reshape(-1)).reshape(B, N, -1)
         h = feat
         for l in range(self.num_layers):
             h = self.sigma_net[l](h)
@@ -86,7 +86,36 @@ class SurfNetwork(nn.Module):
         # sigmoid activation for rgb
         color = torch.sigmoid(h)
 
-        return sigma, color
+        return sigma, color, 0
+    def forward(self, x, d): #pick max
+        # x: [N, 3], in [-bound, bound]
+        # d: [N, 3], nomalized in [-1, 1]
+        # sigma
+        B,N,_=x.shape
+        feat = torch.index_select(
+            self.gridWeight, dim=0, index=x.reshape(-1)).reshape(B, N,-1)
+        h = feat
+        for l in range(self.num_layers):
+            h = self.sigma_net[l](h)
+            if l != self.num_layers - 1:
+                h = F.relu(h, inplace=True)
+
+        # sigma = F.relu(h[..., 0])
+        sigma = F.softmax(h[..., 0], dim=1)
+        _, max_indices = torch.max(sigma, dim=1)
+        sigma = sigma[torch.arange(B), max_indices]
+        geo_feat = h[torch.arange(B), max_indices, 1:]
+
+        # color
+        h = torch.cat([d, geo_feat], dim=-1)
+        for l in range(self.num_layers_color):
+            h = self.color_net[l](h)
+            if l != self.num_layers_color - 1:
+                h = F.relu(h, inplace=True)
+        # sigmoid activation for rgb
+        color = torch.sigmoid(h)
+
+        return sigma, color, max_indices
 
 
     # optimizer utils

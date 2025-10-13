@@ -618,7 +618,7 @@ namespace surf
 #define ImgXyToPosEncode(x,y,imgWidth)  (imgWidth*y+x)
 #define PosEncodeToImgXy(posEncode,x,y,imgWidth)  \
 		int y = posEncode / imgWidth;				\
-		int x = posEncode & imgWidth;
+		int x = posEncode % imgWidth;
 
 		SurfData() {}
 		SurfData(const std::filesystem::path&dataDir_, const std::filesystem::path& objPath_, const GridConfig& gridConfig_)
@@ -1225,11 +1225,10 @@ int test_surf()
 {
 	float totalAmplitude = 0.3;//measured from obj data manually
 	float gridUnit = totalAmplitude / 12;// the Amplitude, i wang to separet it into 16 picecs
-	surf::GridConfig gridConfig = { totalAmplitude /2,gridUnit ,4};
-	surf::SurfData asd("../data/a/result", "../data/a/result/dense.obj", gridConfig);
-
-	surf::SurfData asd2;
-	asd2.reload("../surf/d.dat");
+	surf::GridConfig gridConfig = { totalAmplitude /2,gridUnit ,2};
+	surf::SurfData asd2("../data/a/result", "../data/a/result/dense.obj", gridConfig);
+	//surf::SurfData asd2;
+	//asd2.reload("../surf/d.dat");
 	std::unordered_map<std::uint32_t, std::uint32_t> featIdToPosEncode;
 	std::list<surf::trainTerm1>trainDat = asd2.getTrainDat(featIdToPosEncode);
 	surf::saveTrainData("../surf/trainTerm1.dat", trainDat, featIdToPosEncode, asd2.resolutionX, asd2.resolutionY, asd2.resolutionZ, asd2.targetMinBorderX, asd2.targetMinBorderY, asd2.targetMinBorderZ,asd2.gridConfig.gridUnit);
