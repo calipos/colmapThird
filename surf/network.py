@@ -60,7 +60,7 @@ class SurfNetwork(nn.Module):
             color_net.append(nn.Linear(in_dim, out_dim, bias=False))
         self.color_net = nn.ModuleList(color_net)
 
-    def forward_softmax(self, x, d):  # softmax
+    def forward(self, x, d):  # softmax
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], nomalized in [-1, 1]
         # sigma
@@ -87,7 +87,8 @@ class SurfNetwork(nn.Module):
         color = torch.sigmoid(h)
 
         return sigma, color, 0
-    def forward(self, x, d): #pick max
+
+    def forward_pick_max(self, x, d):  # pick max
         # x: [N, 3], in [-bound, bound]
         # d: [N, 3], nomalized in [-1, 1]
         # sigma

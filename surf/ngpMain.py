@@ -10,6 +10,7 @@ import numpy as np
 class Trainer(object):
     def __init__(self,opt):
         self.device = opt['device']
+        self.dataPath = opt['dataPath']
         self.max_epochs = opt['max_epochs']
         self.batch = opt['batch']
         self.dataload_num_workers = opt['dataload_num_workers']
@@ -18,9 +19,9 @@ class Trainer(object):
         self.epoch = 0
         self.global_step = 0
         self.local_step = 0
-        self.surfdata = SurfDataset(self.device, 'surf/trainTerm1.dat')
+        self.surfdata = SurfDataset(self.device, self.dataPath)
         self.dataloader = DataLoader(
-            self.surfdata, batch_size=self.batch, shuffle=True, num_workers=self.dataload_num_workers)
+            self.surfdata, batch_size=self.batch, shuffle=False, num_workers=self.dataload_num_workers)
         print('data load done. dataloader num_workers=', self.dataloader.num_workers)
         self.surfmodel = network.SurfNetwork(
             device, self.surfdata.maxFeatId, self.surfdata.featLevelCnt, self.eachGridFeatDim)
@@ -33,6 +34,7 @@ class Trainer(object):
         self.ema = ExponentialMovingAverage(
             self.surfmodel.parameters(), decay=0.95)
         self.criterion = torch.nn.MSELoss(reduction='none')
+        self.criterionSigma = torch.nn.MSELoss(reduction='mean')
         pass
     def train(self):
         # if os.path.exists('surf/160_20.save.pt'):
@@ -56,6 +58,7 @@ class Trainer(object):
             self.optimizer.zero_grad()
             B, N, _ = featId.shape
             sigma, color, max_indices = self.surfmodel(featId, dirEncode)
+            loss01 = 0.25-self.criterionSigma(sigma, 0.5*torch.ones_like(sigma))
             # MSE loss
             # [B, N, 3] --> [B, N]
             #loss = sigma*self.criterion(rgb.unsqueeze(1).tile(1, N, 1), color).mean(-1) #softmax
@@ -112,15 +115,16 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
         pts[i, 0], pts[i, 1], pts[i, 2] = surfdata.posEncodeToXyz(posEncode)
     np.savetxt(outPath, pts, delimiter=' ')
 if __name__ == '__main__':
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')# torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     opt = {'device': device, 
+        'dataPath': 'surf/trainTerm2.dat',
         'max_epochs': 100, 
-        'batch': 512000, 
+        'batch': 512, 
         'dataload_num_workers': 4, 
-        'gridLevelCnt':5,
+        'gridLevelCnt':2,
         'eachGridFeatDim':4}
-    # trainer = Trainer(opt)
-    # trainer.train()
-    surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/2.pt', 'surf/asd.pts')
+    trainer = Trainer(opt)
+    trainer.train()
+    # surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/4.pt', 'surf/asd.pts')
 
 

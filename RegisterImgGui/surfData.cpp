@@ -462,6 +462,18 @@ namespace surf
 		int featLevelCnt;
 		std::vector<std::uint32_t>featsId;
 	};
+	struct trainTerm2
+	{
+		float r, g, b;
+		std::vector<float>worldDirSh;
+		int potentialGridCnt;
+		int featLevelCnt;
+		std::vector<std::uint32_t>featsId;
+		int viewId;
+		int imgPosX;
+		int imgPosY;
+		float t0x, t0y, t0z;
+	};
 	struct View
 	{
 		int cameraId;
@@ -1158,6 +1170,85 @@ namespace surf
 			}
 			return ret;
 		}
+		std::list<trainTerm2> getTrainDat2(std::unordered_map<std::uint32_t, std::uint32_t>& featIdToPosEncode, std::vector<cv::Mat>&viewDistance)const
+		{
+			std::list<trainTerm2>ret;
+			std::vector<std::unordered_map<std::uint32_t, std::uint32_t>>featsId(this->gridConfig.gridLevelCnt);
+			viewDistance.resize(views.size());
+			featIdToPosEncode.clear();
+			int viewId = 0;
+			for (const auto& v : views)
+			{
+				const auto& viewId = v.first;
+				const auto& cameraId = v.second.cameraId;
+				const auto& thisCamera = this->cameras.at(cameraId);
+				const auto& Rt = v.second.Rt;
+				const auto& imgWorldDir = v.second.getImgWorldDir();
+				cv::Mat img = cv::imread(v.second.imgPath.string());
+				cv::Mat& distMat = viewDistance[viewId];
+				distMat = cv::Mat::zeros(img.size(), CV_32FC1);
+				if (img.empty())
+				{
+					LOG_ERR_OUT << "not found : " << v.second.imgPath;
+					return std::list<trainTerm2>();;
+				}
+				for (const auto& pixel : v.second.pixelGridBelong)
+				{
+					trainTerm2 dat;
+					const auto& pixelId = pixel.first;
+					PosEncodeToImgXy(pixelId, imgX, imgY, thisCamera.width);
+					const float& wordDirX = imgWorldDir.at<cv::Vec3f>(imgY, imgX)[0];
+					const float& wordDirY = imgWorldDir.at<cv::Vec3f>(imgY, imgX)[1];
+					const float& wordDirZ = imgWorldDir.at<cv::Vec3f>(imgY, imgX)[2];
+					std::vector<float>dirEncode;
+					shEncoder(wordDirX, wordDirY, wordDirZ, dat.worldDirSh);
+					dat.b = img.at<cv::Vec3b>(imgY, imgX)[0] * 0.00390625;
+					dat.g = img.at<cv::Vec3b>(imgY, imgX)[1] * 0.00390625;
+					dat.r = img.at<cv::Vec3b>(imgY, imgX)[2] * 0.00390625;
+					dat.featLevelCnt = this->gridConfig.gridLevelCnt;
+					dat.potentialGridCnt = pixel.second.size();
+					dat.imgPosX = imgX;
+					dat.imgPosY = imgY;
+					dat.viewId = viewId;
+					dat.t0x = Rt(0, 3);
+					dat.t0y = Rt(1, 3);
+					dat.t0z = Rt(2, 3);
+					std::vector<std::uint32_t>& thisPixelFeatId = dat.featsId;
+					thisPixelFeatId.reserve(this->gridConfig.gridLevelCnt * pixel.second.size());
+					for (const auto& rayPtPosEncode : pixel.second)
+					{
+						PosEncodeToGridXyz(rayPtPosEncode, this->resolutionX, this->resolutionXY, gridX, gridY, gridZ);
+						Eigen::Vector3f gridPtDist; 
+						gridPtDist[0] = gridX * this->gridConfig.gridUnit + this->targetMinBorderX - Rt(0, 3);
+						gridPtDist[1] = gridY * this->gridConfig.gridUnit + this->targetMinBorderY - Rt(1, 3);
+						gridPtDist[2] = gridZ * this->gridConfig.gridUnit + this->targetMinBorderZ - Rt(2, 3);
+						if (featsId[0].count(rayPtPosEncode) == 0)
+						{
+							std::uint32_t newId = featsId[0].size();
+							featsId[0][rayPtPosEncode] = newId;
+						}
+						distMat.ptr<float>(imgY)[imgX] = gridPtDist.norm();
+						thisPixelFeatId.emplace_back(featsId[0][rayPtPosEncode]);
+						featIdToPosEncode[featsId[0][rayPtPosEncode]] = rayPtPosEncode;
+						for (int gridLevel = 1; gridLevel < this->gridConfig.gridLevelCnt; gridLevel++)
+						{
+							std::uint32_t gridX_temp = gridX >> gridLevel;
+							std::uint32_t gridY_temp = gridY >> gridLevel;
+							std::uint32_t gridZ_temp = gridZ >> gridLevel;
+							GridXyzToPosEncode(gridX_temp, gridY_temp, gridZ_temp, this->resolutionX, this->resolutionXY, posEncode_temp);
+							if (featsId[gridLevel].count(posEncode_temp) == 0)
+							{
+								std::uint32_t newId = featsId[gridLevel].size();
+								featsId[gridLevel][posEncode_temp] = newId;
+							}
+							thisPixelFeatId.emplace_back(featsId[gridLevel][posEncode_temp]);
+						}
+					}
+					ret.emplace_back(dat);
+				}
+			}
+			return ret;
+		}
 		std::filesystem::path dataDir;
 		std::filesystem::path objPath;
 		Eigen::MatrixXf vertex;
@@ -1220,17 +1311,131 @@ namespace surf
 		fout.close();
 		return true;
 	}
+
+	bool saveTrainData(const std::filesystem::path& path, 
+		std::list<surf::trainTerm2>& data, 
+		const std::unordered_map<std::uint32_t, std::uint32_t>& featIdToPosEncode,
+		const std::vector<cv::Mat>& viewDistance, 
+		const int& resolutionX, const int& resolutionY, const int& resolutionZ, const float& xStart, const float& yStart, const float& zStart, const float& gridUnit)
+	{
+		std::fstream fout(path, std::ios::out | std::ios::binary);
+		int dataType = 2;
+		fout.write((char*)&dataType, sizeof(dataType));
+		int itemCnt = data.size();
+		fout.write((char*)&itemCnt, sizeof(itemCnt));
+		fout.write((char*)&data.begin()->featLevelCnt, sizeof(int));
+		fout.write((char*)&data.begin()->potentialGridCnt, sizeof(int));
+		int shSize = SH_DEGREE * SH_DEGREE;
+		fout.write((char*)&shSize, sizeof(int));
+
+		{//rgb
+			std::vector<float> rgbs;
+			rgbs.reserve(data.size()*3);
+			for (const auto& d : data)
+			{
+				rgbs.emplace_back(d.r);
+				rgbs.emplace_back(d.g);
+				rgbs.emplace_back(d.b);
+			}
+			fout.write((char*)&rgbs[0], data.size() * 3*sizeof(float));
+		}
+		{//worldDir sphere harmonic
+			std::vector<float> worldDirSh;
+			worldDirSh.reserve(data.size() * shSize);
+			for (const auto& d : data)
+			{
+				for (int i = 0; i < shSize; i++)
+				{
+					worldDirSh.emplace_back(d.worldDirSh[i]);
+				}
+			}
+			fout.write((char*)&worldDirSh[0], data.size() * shSize * sizeof(float));
+		}
+		{//featsId
+			std::vector<std::uint32_t> featsId;
+			featsId.reserve(data.size() * data.begin()->featsId.size());
+			for (const auto& d : data)
+			{
+				for (const auto&d2:d.featsId)
+				{
+					featsId.emplace_back(d2);
+				}
+			}
+			fout.write((char*)&featsId[0], featsId.size() * sizeof(std::uint32_t));
+		}
+		{
+			//viewId
+			//imgPosX
+			//imgPosY
+			//t0x
+			//t0y
+			//t0z
+			std::vector<int> viewId;
+			std::vector<int> imgPosXY;
+			std::vector<float> t0xyz;
+			viewId.reserve(data.size());
+			imgPosXY.reserve(2*data.size());
+			t0xyz.reserve(3*data.size());
+			for (const auto& d : data)
+			{
+				viewId.emplace_back(d.viewId);
+				imgPosXY.emplace_back(d.imgPosX);
+				imgPosXY.emplace_back(d.imgPosY);
+				t0xyz.emplace_back(d.t0x);
+				t0xyz.emplace_back(d.t0y);
+				t0xyz.emplace_back(d.t0z);
+			}
+			fout.write((char*)&viewId[0], viewId.size() * sizeof(int));
+			fout.write((char*)&imgPosXY[0], imgPosXY.size()* sizeof(int));
+			fout.write((char*)&t0xyz[0], t0xyz.size() * sizeof(float));
+		}
+		{
+			int viewCnt = viewDistance.size();
+			fout.write((char*)&viewCnt, sizeof(int));
+			for (int i = 0; i < viewCnt; i++)
+			{
+				int height = viewDistance[i].rows;
+				int width = viewDistance[i].cols;
+				fout.write((char*)&height, sizeof(int));
+				fout.write((char*)&width, sizeof(int));
+				fout.write((char*)viewDistance[i].data, height* width *sizeof(float));
+			}
+		}
+		std::vector<std::uint32_t>featIdToPosEncodeVect(featIdToPosEncode.size() * 2);
+		int i = featIdToPosEncodeVect.size();
+		fout.write((char*)&i, sizeof(i));
+		i = 0;
+		for (const auto& d : featIdToPosEncode)
+		{
+			featIdToPosEncodeVect[i++] = d.first;
+			featIdToPosEncodeVect[i++] = d.second;
+		}
+		fout.write((char*)&featIdToPosEncodeVect[0], featIdToPosEncodeVect.size() * sizeof(std::uint32_t));
+		fout.write((char*)&resolutionX, sizeof(resolutionX));
+		fout.write((char*)&resolutionY, sizeof(resolutionY));
+		fout.write((char*)&resolutionZ, sizeof(resolutionZ));
+		fout.write((char*)&xStart, sizeof(float));
+		fout.write((char*)&yStart, sizeof(float));
+		fout.write((char*)&zStart, sizeof(float));
+		fout.write((char*)&gridUnit, sizeof(float));
+		fout.close();
+		return true;
+	}
 } 
 int test_surf()
 {
 	float totalAmplitude = 0.3;//measured from obj data manually
 	float gridUnit = totalAmplitude / 12;// the Amplitude, i wang to separet it into 16 picecs
 	surf::GridConfig gridConfig = { totalAmplitude /2,gridUnit ,2};
-	surf::SurfData asd2("../data/a/result", "../data/a/result/dense.obj", gridConfig);
-	//surf::SurfData asd2;
-	//asd2.reload("../surf/d.dat");
+	//surf::SurfData asd("../data/a/result", "../data/a/result/dense.obj", gridConfig);
+	surf::SurfData asd2;
+	asd2.reload("../surf/d.dat");
 	std::unordered_map<std::uint32_t, std::uint32_t> featIdToPosEncode;
-	std::list<surf::trainTerm1>trainDat = asd2.getTrainDat(featIdToPosEncode);
-	surf::saveTrainData("../surf/trainTerm1.dat", trainDat, featIdToPosEncode, asd2.resolutionX, asd2.resolutionY, asd2.resolutionZ, asd2.targetMinBorderX, asd2.targetMinBorderY, asd2.targetMinBorderZ,asd2.gridConfig.gridUnit);
+	//std::list<surf::trainTerm1>trainDat = asd2.getTrainDat(featIdToPosEncode);
+	//surf::saveTrainData("../surf/trainTerm1.dat", trainDat, featIdToPosEncode, asd2.resolutionX, asd2.resolutionY, asd2.resolutionZ, asd2.targetMinBorderX, asd2.targetMinBorderY, asd2.targetMinBorderZ,asd2.gridConfig.gridUnit);
+
+	std::vector<cv::Mat> viewDistance;
+	std::list<surf::trainTerm2>trainDat = asd2.getTrainDat2(featIdToPosEncode, viewDistance);
+	surf::saveTrainData("../surf/trainTerm2.dat", trainDat, featIdToPosEncode, viewDistance,asd2.resolutionX, asd2.resolutionY, asd2.resolutionZ, asd2.targetMinBorderX, asd2.targetMinBorderY, asd2.targetMinBorderZ,asd2.gridConfig.gridUnit);
 	return 0;
 }

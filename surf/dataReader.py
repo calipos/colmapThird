@@ -26,6 +26,9 @@ class SurfDataset(Dataset):
                 [self.num_rays, self.sphereHarmonicSize], dtype=np.float32)
             featsId = np.zeros(
                 [self.num_rays*self.potentialGridCnt, self.featLevelCnt], dtype=np.int32)
+            viewIds = np.zeros(self.num_rays, dtype=np.int32)
+            imgPosXYs = np.zeros([self.num_rays, 2], dtype=np.int32)
+            t0Pos = np.zeros([self.num_rays, 3], dtype=np.float32)
             if self.dataType == 1:
                 print('dataType == 1')
                 for i in range(self.num_rays):
@@ -63,7 +66,78 @@ class SurfDataset(Dataset):
                 self.yStart = struct.unpack('f', file.read(4))[0]
                 self.zStart = struct.unpack('f', file.read(4))[0]
                 self.resolutionUnit = struct.unpack('f', file.read(4))[0]
+            elif self.dataType == 2:
+                print('dataType == 2')
+                rgbData = np.array(struct.unpack(
+                    str(3*self.num_rays)+'f', file.read(4*3*self.num_rays)), dtype=np.float32).reshape(-1, 3)
+                dirData = np.array(struct.unpack(
+                    str(16*self.num_rays)+'f', file.read(4*16*self.num_rays)), dtype=np.float32).reshape(-1, 16)
+                featsId = np.array(struct.unpack(
+                    str(self.potentialGridCnt*self.featLevelCnt*self.num_rays)+'I', file.read(4*self.potentialGridCnt*self.featLevelCnt*self.num_rays)), dtype=np.int32).reshape(self.num_rays*self.potentialGridCnt, self.featLevelCnt)
+                viewIds = np.array(struct.unpack(
+                    str(self.num_rays)+'i', file.read(4*self.num_rays)), dtype=np.int32)
+                imgPosXYs = np.array(struct.unpack(
+                    str(2*self.num_rays)+'i', file.read(4*2*self.num_rays)), dtype=np.int32).reshape(-1, 2)
+                t0xyz = np.array(struct.unpack(
+                    str(3*self.num_rays)+'f', file.read(4*3*self.num_rays)), dtype=np.float32).reshape(-1, 3)
+                viewCnt = struct.unpack('i', file.read(4))[0]
+                viewDistance = np.array([viewCnt])
+                for v in range(viewCnt):
+                    viewDistHeight = struct.unpack('i', file.read(4))[0]
+                    viewDistWidth = struct.unpack('i', file.read(4))[0]
+                    if len(viewDistance.shape)==1:
+                        viewDistance = np.zeros(
+                            [viewCnt, viewDistHeight, viewDistWidth], dtype=np.float32)
+                    viewDistance[v, ...] = np.array(
+                        struct.unpack(str(viewDistHeight*viewDistWidth)+'f', file.read(viewDistHeight*viewDistWidth*4)), dtype=np.float32).reshape(viewDistHeight, viewDistWidth)
 
+
+                self.maxFeatId = np.max(featsId, axis=0)+1
+                b = [np.sum(self.maxFeatId[:n+1])
+                     for n in range(len(self.maxFeatId))]
+                self.maxFeatId = np.array(b)
+                featsId = featsId + \
+                    np.pad(self.maxFeatId[:-1], (1, 0),
+                           'constant', constant_values=(0))
+                self.rgbData = torch.from_numpy(rgbData)
+                self.dirData = torch.from_numpy(dirData)
+                self.featsId = torch.from_numpy(featsId)
+                self.viewIds = torch.from_numpy(viewIds)
+                self.imgPosXYs = torch.from_numpy(imgPosXYs)
+                self.t0xyz = torch.from_numpy(t0xyz)
+                self.viewDistance = torch.from_numpy(viewDistance)
+
+                self.rgbData = self.rgbData.to(self.device)
+                self.dirData = self.dirData.to(self.device)
+                self.featsId = self.featsId.to(self.device)
+                self.viewIds = self.viewIds.to(self.device)
+                self.imgPosXYs = self.imgPosXYs.to(self.device)
+                self.t0xyz = self.t0xyz.to(self.device)
+                self.viewDistance = self.viewDistance.to(self.device)
+                del rgbData
+                del dirData
+                del featsId
+                del viewIds
+                del imgPosXYs
+                del t0xyz
+                del viewDistance
+                featIdToPosEncodeVectSize = struct.unpack('i', file.read(4))[0]
+                featIdToPosEncodeVect = struct.unpack(
+                    str(featIdToPosEncodeVectSize)+'i', file.read(4*featIdToPosEncodeVectSize))
+                self.featIdToPosEncode = {}
+                for i in range(featIdToPosEncodeVectSize//2):
+                    i2 = i*2
+                    self.featIdToPosEncode[featIdToPosEncodeVect[i2]
+                                           ] = featIdToPosEncodeVect[i2+1]
+                self.resolutionX = struct.unpack('i', file.read(4))[0]
+                self.resolutionY = struct.unpack('i', file.read(4))[0]
+                self.resolutionZ = struct.unpack('i', file.read(4))[0]
+                self.resolutionXY = self.resolutionX*self.resolutionY
+                self.xStart = struct.unpack('f', file.read(4))[0]
+                self.yStart = struct.unpack('f', file.read(4))[0]
+                self.zStart = struct.unpack('f', file.read(4))[0]
+                self.resolutionUnit = struct.unpack('f', file.read(4))[0]
+        print(self.featsId)
     def posEncodeToXyz(self,posEncode):
         Z = posEncode//self.resolutionXY
         Y = posEncode % self.resolutionXY
