@@ -57,12 +57,12 @@ class Trainer(object):
             self.global_step += 1
             self.optimizer.zero_grad()
             B, N, _ = featId.shape
-            sigma, color, max_indices = self.surfmodel(featId, dirEncode)
-            loss01 = 0.25-self.criterionSigma(sigma, 0.5*torch.ones_like(sigma))
+            # sigma, color, max_indices = self.surfmodel(featId, dirEncode)
+            sigma, colors = self.surfmodel(featId, dirEncode)
             # MSE loss
             # [B, N, 3] --> [B, N]
             #loss = sigma*self.criterion(rgb.unsqueeze(1).tile(1, N, 1), color).mean(-1) #softmax
-            loss = self.criterion(rgb, color).mean(-1)  # pick max
+            loss = self.criterion(rgb, colors).mean(-1) 
             loss.sum().backward()
             self.optimizer.step()
             if self.global_step % 2 == 0:
@@ -100,7 +100,7 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
         for rgb, dirEncode, featId in constructionloader:
             B, N, _ = featId.shape
 
-            sigma, _, max_indices = surfmodel(featId, dirEncode)
+            sigma, colors = surfmodel(featId, dirEncode)
             featLevel0Ids = featId[torch.arange(B), max_indices, 0]
             featLevel0Ids = featLevel0Ids.to(torch.device('cpu'))
             ptsId.update(quickQuery[featLevel0Ids].numpy())    
@@ -115,16 +115,17 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
         pts[i, 0], pts[i, 1], pts[i, 2] = surfdata.posEncodeToXyz(posEncode)
     np.savetxt(outPath, pts, delimiter=' ')
 if __name__ == '__main__':
-    device = torch.device('cpu')# torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cpu')
     opt = {'device': device, 
-        'dataPath': 'surf/trainTerm2.dat',
+        'dataPath': 'surf/trainTerm1.dat',
         'max_epochs': 100, 
-        'batch': 512, 
+        'batch': 512000, 
         'dataload_num_workers': 4, 
         'gridLevelCnt':2,
-        'eachGridFeatDim':4}
-    trainer = Trainer(opt)
-    trainer.train()
-    # surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/4.pt', 'surf/asd.pts')
+        'eachGridFeatDim':3}
+    # trainer = Trainer(opt)
+    # trainer.train()
+    surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/9.pt', 'surf/asd.pts')
 
 

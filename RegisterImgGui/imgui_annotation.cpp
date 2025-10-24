@@ -548,8 +548,8 @@ bool annotationFrame(bool* show_regist_window)
 				{
 					LOG_OUT << imgDirPath;
 				}
-				delete modelDirPicker;
-				modelDirPicker = nullptr;
+				delete imgDirPicker;
+				imgDirPicker = nullptr;
 			}
 		}
 		ImGui::SameLine();

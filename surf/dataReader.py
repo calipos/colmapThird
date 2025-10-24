@@ -38,8 +38,10 @@ class SurfDataset(Dataset):
                     featsId[self.potentialGridCnt*i:self.potentialGridCnt*i+self.potentialGridCnt, :] = np.array(
                         struct.unpack(str(cnt)+'I', file.read(4*cnt)), dtype=np.int32).reshape(self.potentialGridCnt, self.featLevelCnt)
                 self.maxFeatId = np.max(featsId, axis=0)+1
-                b = [np.sum(self.maxFeatId[:n+1]) for n in range(len(self.maxFeatId))]
-                self.maxFeatId = np.array(b)
+                # b = [np.sum(self.maxFeatId[:n+1]) for n in range(len(self.maxFeatId))]
+                # self.maxFeatId = np.array(b)
+                self.maxFeatId = torch.cumsum(
+                    torch.from_numpy(self.maxFeatId), axis=0)
                 featsId = featsId + np.pad(self.maxFeatId[:-1], (1, 0),'constant', constant_values=(0))
                 self.rgbData = torch.from_numpy(rgbData)
                 self.dirData = torch.from_numpy(dirData)
@@ -137,7 +139,7 @@ class SurfDataset(Dataset):
                 self.yStart = struct.unpack('f', file.read(4))[0]
                 self.zStart = struct.unpack('f', file.read(4))[0]
                 self.resolutionUnit = struct.unpack('f', file.read(4))[0]
-        print(self.featsId)
+        
     def posEncodeToXyz(self,posEncode):
         Z = posEncode//self.resolutionXY
         Y = posEncode % self.resolutionXY

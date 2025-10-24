@@ -925,6 +925,7 @@ namespace surf
 			const Eigen::Matrix4f Rtinv = view.Rt.inverse();
 			const Eigen::Matrix3f Rinv = Rtinv.block(0, 0, 3, 3);
 			const Eigen::Vector3f tinv(Rtinv(0, 3), Rtinv(1, 3), Rtinv(2, 3));
+			const cv::Point3f cameraCenter(view.Rt(0, 3), view.Rt(1, 3), view.Rt(2, 3));
 			float rayStepUnit = this->gridConfig.gridUnit * 0.5;
 			int amplitudeCnt = 2 * this->gridConfig.amplitudeHalf / gridConfig.gridUnit;
 			{				
@@ -978,11 +979,25 @@ namespace surf
 				for (const auto&d: pixelGridBelong_map)
 				{
 					int elemSize = d.second.size();
-					view.pixelGridBelong[d.first].clear();
-					view.pixelGridBelong[d.first].reserve(elemSize);
-					for (const auto&d2:d.second)
+					std::vector<std::pair<float, std::uint32_t>>sortWithDists(elemSize);
+					int i = 0;
+					for (const auto& d2 : d.second)
 					{
-						view.pixelGridBelong[d.first].emplace_back(d2);
+						sortWithDists[i].second = d2;
+						PosEncodeToGridXyz(d2, this->resolutionX, this->resolutionXY, gridX, gridY, gridZ);
+						cv::Point3f gridCentor;
+						gridCentor.x = gridX * this->gridConfig.gridUnit + this->targetMinBorderX;
+						gridCentor.x = gridY * this->gridConfig.gridUnit + this->targetMinBorderY;
+						gridCentor.x = gridZ * this->gridConfig.gridUnit + this->targetMinBorderZ;
+						sortWithDists[i].first=cv::norm(cameraCenter- gridCentor);
+						i++;
+					}
+					std::sort(sortWithDists.begin(), sortWithDists.end(), [](const auto& a, const auto& b) {return a.first < b.first; });
+					view.pixelGridBelong[d.first].clear();
+					view.pixelGridBelong[d.first].resize(elemSize);
+					for (i = 0; i < elemSize; i++)
+					{
+						view.pixelGridBelong[d.first][i] = sortWithDists[i].second;
 					}
 				}
 			}
@@ -1156,85 +1171,6 @@ namespace surf
 							std::uint32_t gridX_temp = gridX>>gridLevel;
 							std::uint32_t gridY_temp = gridY>>gridLevel;
 							std::uint32_t gridZ_temp = gridZ>>gridLevel;
-							GridXyzToPosEncode(gridX_temp, gridY_temp, gridZ_temp, this->resolutionX, this->resolutionXY, posEncode_temp);
-							if (featsId[gridLevel].count(posEncode_temp) == 0)
-							{
-								std::uint32_t newId = featsId[gridLevel].size();
-								featsId[gridLevel][posEncode_temp] = newId;
-							}
-							thisPixelFeatId.emplace_back(featsId[gridLevel][posEncode_temp]);
-						}
-					}
-					ret.emplace_back(dat);
-				}
-			}
-			return ret;
-		}
-		std::list<trainTerm2> getTrainDat2(std::unordered_map<std::uint32_t, std::uint32_t>& featIdToPosEncode, std::vector<cv::Mat>&viewDistance)const
-		{
-			std::list<trainTerm2>ret;
-			std::vector<std::unordered_map<std::uint32_t, std::uint32_t>>featsId(this->gridConfig.gridLevelCnt);
-			viewDistance.resize(views.size());
-			featIdToPosEncode.clear();
-			int viewId = 0;
-			for (const auto& v : views)
-			{
-				const auto& viewId = v.first;
-				const auto& cameraId = v.second.cameraId;
-				const auto& thisCamera = this->cameras.at(cameraId);
-				const auto& Rt = v.second.Rt;
-				const auto& imgWorldDir = v.second.getImgWorldDir();
-				cv::Mat img = cv::imread(v.second.imgPath.string());
-				cv::Mat& distMat = viewDistance[viewId];
-				distMat = cv::Mat::zeros(img.size(), CV_32FC1);
-				if (img.empty())
-				{
-					LOG_ERR_OUT << "not found : " << v.second.imgPath;
-					return std::list<trainTerm2>();;
-				}
-				for (const auto& pixel : v.second.pixelGridBelong)
-				{
-					trainTerm2 dat;
-					const auto& pixelId = pixel.first;
-					PosEncodeToImgXy(pixelId, imgX, imgY, thisCamera.width);
-					const float& wordDirX = imgWorldDir.at<cv::Vec3f>(imgY, imgX)[0];
-					const float& wordDirY = imgWorldDir.at<cv::Vec3f>(imgY, imgX)[1];
-					const float& wordDirZ = imgWorldDir.at<cv::Vec3f>(imgY, imgX)[2];
-					std::vector<float>dirEncode;
-					shEncoder(wordDirX, wordDirY, wordDirZ, dat.worldDirSh);
-					dat.b = img.at<cv::Vec3b>(imgY, imgX)[0] * 0.00390625;
-					dat.g = img.at<cv::Vec3b>(imgY, imgX)[1] * 0.00390625;
-					dat.r = img.at<cv::Vec3b>(imgY, imgX)[2] * 0.00390625;
-					dat.featLevelCnt = this->gridConfig.gridLevelCnt;
-					dat.potentialGridCnt = pixel.second.size();
-					dat.imgPosX = imgX;
-					dat.imgPosY = imgY;
-					dat.viewId = viewId;
-					dat.t0x = Rt(0, 3);
-					dat.t0y = Rt(1, 3);
-					dat.t0z = Rt(2, 3);
-					std::vector<std::uint32_t>& thisPixelFeatId = dat.featsId;
-					thisPixelFeatId.reserve(this->gridConfig.gridLevelCnt * pixel.second.size());
-					for (const auto& rayPtPosEncode : pixel.second)
-					{
-						PosEncodeToGridXyz(rayPtPosEncode, this->resolutionX, this->resolutionXY, gridX, gridY, gridZ);
-						Eigen::Vector3f gridPtDist; 
-						gridPtDist[0] = gridX * this->gridConfig.gridUnit + this->targetMinBorderX - Rt(0, 3);
-						gridPtDist[1] = gridY * this->gridConfig.gridUnit + this->targetMinBorderY - Rt(1, 3);
-						gridPtDist[2] = gridZ * this->gridConfig.gridUnit + this->targetMinBorderZ - Rt(2, 3);
-						if (featsId[0].count(rayPtPosEncode) == 0)
-						{
-							std::uint32_t newId = featsId[0].size();
-							featsId[0][rayPtPosEncode] = newId;
-						}
-						distMat.ptr<float>(imgY)[imgX] = gridPtDist.norm();
-						thisPixelFeatId.emplace_back(featsId[0][rayPtPosEncode]);
-						featIdToPosEncode[featsId[0][rayPtPosEncode]] = rayPtPosEncode;
-						for (int gridLevel = 1; gridLevel < this->gridConfig.gridLevelCnt; gridLevel++)
-						{
-							std::uint32_t gridX_temp = gridX >> gridLevel;
-							std::uint32_t gridY_temp = gridY >> gridLevel;
-							std::uint32_t gridZ_temp = gridZ >> gridLevel;
 							GridXyzToPosEncode(gridX_temp, gridY_temp, gridZ_temp, this->resolutionX, this->resolutionXY, posEncode_temp);
 							if (featsId[gridLevel].count(posEncode_temp) == 0)
 							{
@@ -1425,17 +1361,31 @@ namespace surf
 int test_surf()
 {
 	float totalAmplitude = 0.3;//measured from obj data manually
-	float gridUnit = totalAmplitude / 12;// the Amplitude, i wang to separet it into 16 picecs
+	float gridUnit = totalAmplitude / 8;// the Amplitude, i wang to separet it into 16 picecs
 	surf::GridConfig gridConfig = { totalAmplitude /2,gridUnit ,2};
 	//surf::SurfData asd("../data/a/result", "../data/a/result/dense.obj", gridConfig);
 	surf::SurfData asd2;
 	asd2.reload("../surf/d.dat");
 	std::unordered_map<std::uint32_t, std::uint32_t> featIdToPosEncode;
-	//std::list<surf::trainTerm1>trainDat = asd2.getTrainDat(featIdToPosEncode);
-	//surf::saveTrainData("../surf/trainTerm1.dat", trainDat, featIdToPosEncode, asd2.resolutionX, asd2.resolutionY, asd2.resolutionZ, asd2.targetMinBorderX, asd2.targetMinBorderY, asd2.targetMinBorderZ,asd2.gridConfig.gridUnit);
+	int saveType = 1;
+	switch (saveType)
+	{
+	case 1:
+	{
+		std::list<surf::trainTerm1>trainDat = asd2.getTrainDat(featIdToPosEncode);
+		surf::saveTrainData("../surf/trainTerm1.dat", trainDat, featIdToPosEncode, asd2.resolutionX, asd2.resolutionY, asd2.resolutionZ, asd2.targetMinBorderX, asd2.targetMinBorderY, asd2.targetMinBorderZ, asd2.gridConfig.gridUnit);
+		break;
+	}
+	case 2:
+	{
 
-	std::vector<cv::Mat> viewDistance;
-	std::list<surf::trainTerm2>trainDat = asd2.getTrainDat2(featIdToPosEncode, viewDistance);
-	surf::saveTrainData("../surf/trainTerm2.dat", trainDat, featIdToPosEncode, viewDistance,asd2.resolutionX, asd2.resolutionY, asd2.resolutionZ, asd2.targetMinBorderX, asd2.targetMinBorderY, asd2.targetMinBorderZ,asd2.gridConfig.gridUnit);
+		break;
+	}
+	default:
+		break;
+	}
+
+
+
 	return 0;
 }

@@ -10,8 +10,8 @@ class SurfNetwork(nn.Module):
                  gridFeatLevelCnt=4,
                  eachGridFeatDim=4,
                  num_layers=2,
-                 hidden_dim=64,
-                 geo_feat_dim=15,
+                 hidden_dim=4,
+                 geo_feat_dim=2,
                  in_dim_dir=16,
                  num_layers_color=3,
                  hidden_dim_color=64,
@@ -21,6 +21,7 @@ class SurfNetwork(nn.Module):
                  ):
         super().__init__()
         # sigma network
+        self.device = device
         self.num_layers = num_layers
         self.eachGridFeatDim = eachGridFeatDim
         self.hidden_dim = hidden_dim
@@ -74,6 +75,7 @@ class SurfNetwork(nn.Module):
                 h = F.relu(h, inplace=True)
 
         # sigma = F.relu(h[..., 0])
+        # sigma = F.softmax(h[..., 0], dim=1)
         sigma = F.softmax(h[..., 0], dim=1)
         geo_feat = h[..., 1:]
 
@@ -85,38 +87,11 @@ class SurfNetwork(nn.Module):
                 h = F.relu(h, inplace=True)
         # sigmoid activation for rgb
         color = torch.sigmoid(h)
-
-        return sigma, color, 0
-
-    def forward_pick_max(self, x, d):  # pick max
-        # x: [N, 3], in [-bound, bound]
-        # d: [N, 3], nomalized in [-1, 1]
-        # sigma
-        B,N,_=x.shape
-        feat = torch.index_select(
-            self.gridWeight, dim=0, index=x.reshape(-1)).reshape(B, N,-1)
-        h = feat
-        for l in range(self.num_layers):
-            h = self.sigma_net[l](h)
-            if l != self.num_layers - 1:
-                h = F.relu(h, inplace=True)
-
-        # sigma = F.relu(h[..., 0])
-        sigma = F.softmax(h[..., 0], dim=1)
-        _, max_indices = torch.max(sigma, dim=1)
-        sigma = sigma[torch.arange(B), max_indices]
-        geo_feat = h[torch.arange(B), max_indices, 1:]
-
-        # color
-        h = torch.cat([d, geo_feat], dim=-1)
-        for l in range(self.num_layers_color):
-            h = self.color_net[l](h)
-            if l != self.num_layers_color - 1:
-                h = F.relu(h, inplace=True)
-        # sigmoid activation for rgb
-        color = torch.sigmoid(h)
-
-        return sigma, color, max_indices
+        transparentBrfore = torch.hstack(
+            [torch.ones([B, 1]).to(self.device), torch.cumprod((1-sigma), 1)[:, 1:]])
+        colorWeight = transparentBrfore*sigma
+        return sigma,torch.sum(colorWeight.unsqueeze(2).tile(1, 1, 3)*color, axis=1)
+        return transparentBrfore*sigma, color, 0
 
 
     # optimizer utils
