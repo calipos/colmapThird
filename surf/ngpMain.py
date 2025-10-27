@@ -21,15 +21,15 @@ class Trainer(object):
         self.local_step = 0
         self.surfdata = SurfDataset(self.device, self.dataPath)
         self.dataloader = DataLoader(
-            self.surfdata, batch_size=self.batch, shuffle=False, num_workers=self.dataload_num_workers)
+            self.surfdata, batch_size=self.batch, shuffle=True, num_workers=self.dataload_num_workers)
         print('data load done. dataloader num_workers=', self.dataloader.num_workers)
         self.surfmodel = network.SurfNetwork(
             device, self.surfdata.maxFeatId, self.surfdata.featLevelCnt, self.eachGridFeatDim)
         self.surfmodel.to(self.device)
         self.optimizer = optim.Adam(
-            self.surfmodel.parameters(), lr=0.001, weight_decay=5e-4)  # naive adam
+            self.surfmodel.parameters(), lr=0.1, weight_decay=5e-4)  # naive adam
         self.scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(
-            optimizer, lambda iter: 0.1 ** min(iter / 300, 1))
+            optimizer, lambda iter: 0.1 ** min(iter / 5, 1))
         self.lr_scheduler = self.scheduler(self.optimizer)
         self.ema = ExponentialMovingAverage(
             self.surfmodel.parameters(), decay=0.95)
@@ -62,8 +62,10 @@ class Trainer(object):
             # MSE loss
             # [B, N, 3] --> [B, N]
             #loss = sigma*self.criterion(rgb.unsqueeze(1).tile(1, N, 1), color).mean(-1) #softmax
-            loss = self.criterion(rgb, colors).mean(-1) 
-            loss.sum().backward()
+            loss0 = (torch.log(sigma)*sigma).sum()
+            # loss1 = self.criterion(rgb, colors).sum()
+            loss = -10*loss0#+loss1
+            loss.backward()
             self.optimizer.step()
             if self.global_step % 2 == 0:
                 showLoss = loss.detach().sum()/B
@@ -82,7 +84,7 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
         print('not found : ', modelPath)
     surfdata = SurfDataset(device, trainDataPath)
     constructionloader = DataLoader(
-        surfdata, 25600, shuffle=False, num_workers=dataload_num_workers)
+        surfdata, 256, shuffle=False, num_workers=dataload_num_workers)
     surfmodel = network.SurfNetwork(
         device, surfdata.maxFeatId, surfdata.featLevelCnt, opt['eachGridFeatDim'])
     surfmodel.load_state_dict(torch.load(modelPath))
@@ -101,14 +103,15 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
             B, N, _ = featId.shape
 
             sigma, colors = surfmodel(featId, dirEncode)
-            featLevel0Ids = featId[torch.arange(B), max_indices, 0]
-            featLevel0Ids = featLevel0Ids.to(torch.device('cpu'))
-            ptsId.update(quickQuery[featLevel0Ids].numpy())    
+            print(sigma)
+            # featLevel0Ids = featId[torch.arange(B), max_indices, 0]
+            # featLevel0Ids = featLevel0Ids.to(torch.device('cpu'))
+            # ptsId.update(quickQuery[featLevel0Ids].numpy())    
                
             # featId_1 = featId.reshape(B*N, -1)
             # ptsId.update(quickQuery[featId.reshape(B*N, -1)[:, 0]].numpy())
             # ptsId.update(quickQuery[featId.reshape(B*N, -1).reshape(-1)].numpy())
-            break
+            continue
 
     pts = np.zeros([len(ptsId),3])
     for i, posEncode in enumerate(ptsId):
@@ -116,7 +119,7 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
     np.savetxt(outPath, pts, delimiter=' ')
 if __name__ == '__main__':
     # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    device = torch.device('cpu')
+    device = torch.device('cuda')
     opt = {'device': device, 
         'dataPath': 'surf/trainTerm1.dat',
         'max_epochs': 100, 
@@ -126,6 +129,6 @@ if __name__ == '__main__':
         'eachGridFeatDim':3}
     # trainer = Trainer(opt)
     # trainer.train()
-    surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/9.pt', 'surf/asd.pts')
+    surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/1.pt', 'surf/asd.pts')
 
 

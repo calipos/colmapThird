@@ -11,12 +11,10 @@ class SurfNetwork(nn.Module):
                  eachGridFeatDim=4,
                  num_layers=2,
                  hidden_dim=4,
-                 geo_feat_dim=2,
+                 geo_feat_dim=3,
                  in_dim_dir=16,
-                 num_layers_color=3,
-                 hidden_dim_color=64,
-                 num_layers_bg=2,
-                 hidden_dim_bg=64,
+                 num_layers_color=2,
+                 hidden_dim_color=8,
                  **kwargs,
                  ):
         super().__init__()
@@ -26,11 +24,12 @@ class SurfNetwork(nn.Module):
         self.eachGridFeatDim = eachGridFeatDim
         self.hidden_dim = hidden_dim
         self.geo_feat_dim = geo_feat_dim
+        self.gridFeatLevelCnt = gridFeatLevelCnt
         self.in_dim = gridFeatLevelCnt*eachGridFeatDim
         self.in_dim_dir = in_dim_dir
 
         self.gridWeight = nn.Parameter(torch.rand(
-            maxGridFeatId[-1], eachGridFeatDim), requires_grad=True)
+            maxGridFeatId[-1], eachGridFeatDim), requires_grad=True)#[0,1]
 
         sigma_net = []
         for l in range(num_layers):
@@ -51,7 +50,8 @@ class SurfNetwork(nn.Module):
         color_net = []
         for l in range(num_layers_color):
             if l == 0:
-                in_dim = self.in_dim_dir + self.geo_feat_dim
+                # in_dim = self.in_dim_dir + self.geo_feat_dim
+                in_dim = self.in_dim_dir + self.gridFeatLevelCnt * self.eachGridFeatDim-self.gridFeatLevelCnt
             else:
                 in_dim = hidden_dim_color
             if l == num_layers_color - 1:
@@ -67,18 +67,22 @@ class SurfNetwork(nn.Module):
         # sigma
         B, N, _ = x.shape
         feat = torch.index_select(
-            self.gridWeight, dim=0, index=x.reshape(-1)).reshape(B, N, -1)
-        h = feat
-        for l in range(self.num_layers):
-            h = self.sigma_net[l](h)
-            if l != self.num_layers - 1:
-                h = F.relu(h, inplace=True)
-
+            self.gridWeight, dim=0, index=x.reshape(-1)).reshape(B, N*2, -1)
+        sigma12 = feat[..., 0].reshape(B, N, -1)
+        sigma1 = sigma12[..., 0]
+        sigma2 = sigma12[..., 1]
+        # for l in range(self.num_layers):
+        #     h = self.sigma_net[l](h)
+        #     if l != self.num_layers - 1:
+        #         h = F.relu(h, inplace=True)
         # sigma = F.relu(h[..., 0])
         # sigma = F.softmax(h[..., 0], dim=1)
-        sigma = F.softmax(h[..., 0], dim=1)
-        geo_feat = h[..., 1:]
-
+        # sigma = F.softmax(h[..., 0], dim=1)
+        # sigma = F.sigmoid(h[..., 0])
+        # geo_feat = h[..., 1:]
+        # sigma = F.softmax(sigma1*sigma2, dim=1)
+        sigma = F.sigmoid(sigma1*sigma2)
+        geo_feat = feat[..., 1:].reshape(B, N, -1)
         # color
         h = torch.cat([d.unsqueeze(1).tile(1, N, 1), geo_feat], dim=-1)
         for l in range(self.num_layers_color):
@@ -87,18 +91,20 @@ class SurfNetwork(nn.Module):
                 h = F.relu(h, inplace=True)
         # sigmoid activation for rgb
         color = torch.sigmoid(h)
-        transparentBrfore = torch.hstack(
-            [torch.ones([B, 1]).to(self.device), torch.cumprod((1-sigma), 1)[:, 1:]])
+        transparentBrfore = torch.cumprod(torch.hstack([torch.ones([B, 1]).to(self.device), (1-sigma)[:, :-1]]), 1)
         colorWeight = transparentBrfore*sigma
-        return sigma,torch.sum(colorWeight.unsqueeze(2).tile(1, 1, 3)*color, axis=1)
+        color_0 = torch.sum(colorWeight*color[..., 0], axis=1).reshape(-1, 1)
+        color_1 = torch.sum(colorWeight*color[..., 1], axis=1).reshape(-1, 1)
+        color_2 = torch.sum(colorWeight*color[..., 2], axis=1).reshape(-1, 1)
+        return sigma, torch.concat([color_0, color_1, color_2], axis=1)
         return transparentBrfore*sigma, color, 0
 
 
     # optimizer utils
-    def get_params(self, lr):
-        params = [
-            {'params': self.sigma_net.parameters(), 'lr': lr},
-            {'params': self.color_net.parameters(), 'lr': lr},
-            {'params': self.gridWeight, 'lr': lr},
-        ]
-        return params
+    # def get_params(self, lr):
+    #     params = [
+    #         {'params': self.sigma_net.parameters(), 'lr': lr},
+    #         {'params': self.color_net.parameters(), 'lr': lr},
+    #         {'params': self.gridWeight, 'lr': lr},
+    #     ]
+    #     return params
