@@ -63,8 +63,8 @@ class Trainer(object):
             # [B, N, 3] --> [B, N]
             #loss = sigma*self.criterion(rgb.unsqueeze(1).tile(1, N, 1), color).mean(-1) #softmax
             loss0 = (torch.log(sigma)*sigma).sum()
-            # loss1 = self.criterion(rgb, colors).sum()
-            loss = -10*loss0#+loss1
+            loss1 = self.criterion(rgb, colors).sum()
+            loss = -0.001*loss0+loss1
             loss.backward()
             self.optimizer.step()
             if self.global_step % 2 == 0:
@@ -119,7 +119,7 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
     np.savetxt(outPath, pts, delimiter=' ')
 if __name__ == '__main__':
     # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    device = torch.device('cuda')
+    device = torch.device('cpu')
     opt = {'device': device, 
         'dataPath': 'surf/trainTerm1.dat',
         'max_epochs': 100, 
@@ -129,6 +129,6 @@ if __name__ == '__main__':
         'eachGridFeatDim':3}
     # trainer = Trainer(opt)
     # trainer.train()
-    surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/1.pt', 'surf/asd.pts')
+    surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/15.pt', 'surf/asd.pts')
 
 

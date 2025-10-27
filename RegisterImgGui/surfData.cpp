@@ -1363,7 +1363,7 @@ int test_surf()
 	float totalAmplitude = 0.3;//measured from obj data manually
 	float gridUnit = totalAmplitude / 8;// the Amplitude, i wang to separet it into 16 picecs
 	surf::GridConfig gridConfig = { totalAmplitude /2,gridUnit ,2};
-	//surf::SurfData asd("../data/a/result", "../data/a/result/dense.obj", gridConfig);
+	surf::SurfData asd("../data/a/result", "../data/a/result/dense.obj", gridConfig);
 	surf::SurfData asd2;
 	asd2.reload("../surf/d.dat");
 	std::unordered_map<std::uint32_t, std::uint32_t> featIdToPosEncode;
