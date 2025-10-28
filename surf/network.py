@@ -14,7 +14,7 @@ class SurfNetwork(nn.Module):
                  geo_feat_dim=3,
                  in_dim_dir=16,
                  num_layers_color=2,
-                 hidden_dim_color=8,
+                 hidden_dim_color=16,
                  **kwargs,
                  ):
         super().__init__()
@@ -69,9 +69,9 @@ class SurfNetwork(nn.Module):
         feat = torch.index_select(
             self.gridWeight, dim=0, index=x.reshape(-1)).reshape(B, N*2, -1)
         sigma12 = feat[..., 0].reshape(B, N, -1)
-        sigma1 = sigma12[..., 0]
-        sigma2 = sigma12[..., 1]
-        # for l in range(self.num_layers):
+        sigma1 = torch.clip(sigma12[..., 0], min=0.0, max=1.0)
+        sigma2 = torch.clip(sigma12[..., 1], min=0.0, max=1.0)
+        # for l in range(self.num_layers):  
         #     h = self.sigma_net[l](h)
         #     if l != self.num_layers - 1:
         #         h = F.relu(h, inplace=True)
@@ -81,7 +81,7 @@ class SurfNetwork(nn.Module):
         # sigma = F.sigmoid(h[..., 0])
         # geo_feat = h[..., 1:]
         # sigma = F.softmax(sigma1*sigma2, dim=1)
-        sigma = F.sigmoid(sigma1*sigma2)
+        sigma = sigma1*sigma2
         geo_feat = feat[..., 1:].reshape(B, N, -1)
         # color
         h = torch.cat([d.unsqueeze(1).tile(1, N, 1), geo_feat], dim=-1)

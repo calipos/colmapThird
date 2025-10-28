@@ -108,11 +108,6 @@ class SurfDataset(Dataset):
                 self.imgPosXYs = torch.from_numpy(imgPosXYs)
                 self.t0xyz = torch.from_numpy(t0xyz)
                 self.viewDistance = torch.from_numpy(viewDistance)
-
-                self.rgbData = self.rgbData.to(self.device)
-                self.dirData = self.dirData.to(self.device)
-                self.featsId = self.featsId.to(self.device)
-                self.viewIds = self.viewIds.to(self.device)
                 self.imgPosXYs = self.imgPosXYs.to(self.device)
                 self.t0xyz = self.t0xyz.to(self.device)
                 self.viewDistance = self.viewDistance.to(self.device)
@@ -151,7 +146,10 @@ class SurfDataset(Dataset):
         return self.rgbData.shape[0]
 
     def __getitem__(self, idx):
-        return self.rgbData[idx, :], self.dirData[idx, :], self.featsId[self.potentialGridCnt*idx:self.potentialGridCnt*idx+self.potentialGridCnt, :],
+        # self.rgbData = self.rgbData.to(self.device)
+        # self.dirData = self.dirData.to(self.device)
+        # self.featsId = self.featsId.to(self.device)
+        return self.rgbData[idx, :], self.dirData[idx, :], self.featsId[self.potentialGridCnt*idx:self.potentialGridCnt*idx+self.potentialGridCnt, :]
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
