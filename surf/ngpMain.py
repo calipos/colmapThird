@@ -7,6 +7,15 @@ from torch_ema import ExponentialMovingAverage
 import time
 import os
 import numpy as np
+
+
+def ohem_loss(pred, target, keep_num):
+    # loss = torch.sum((pred - target)**2, axis=1)
+    # thre = torch.mean(loss.detach())
+    # pickHem = loss > 0 
+    # loss_keep = loss[pickHem]
+    # return loss_keep.sum() / torch.sum(pickHem)/3
+    return torch.sum((pred - target)**2)
 class Trainer(object):
     def __init__(self,opt):
         self.device = opt['device']
@@ -29,7 +38,7 @@ class Trainer(object):
         self.optimizer = optim.Adam(
             self.surfmodel.parameters(), lr=0.1, weight_decay=5e-4)  # naive adam
         self.scheduler = lambda optimizer: optim.lr_scheduler.LambdaLR(
-            optimizer, lambda iter: 0.1 ** min(iter / 50, 1))
+            optimizer, lambda iter: 0.1 ** min(iter / 40, 1))
         self.lr_scheduler = self.scheduler(self.optimizer)
         self.ema = ExponentialMovingAverage(
             self.surfmodel.parameters(), decay=0.95)
@@ -48,6 +57,8 @@ class Trainer(object):
             self.lr_scheduler.step()
             self.save_checkpoint()
 
+
+
     def evaluate(self, loader, name=None):
         self.evaluate_one_epoch(loader, name)
 
@@ -61,14 +72,17 @@ class Trainer(object):
             self.optimizer.zero_grad()
             B, N, _ = featId.shape
             sigma, colors = self.surfmodel(featId, dirEncode)
-            loss0 = (-(sigma-0.5)**2).sum()
-            loss1 = self.criterion(rgb, colors).sum()
-            loss = loss1#loss0+loss1
+            # loss0 = (-(sigma-0.5)**2).sum()
+            # loss0 = torch.sum(sigma)
+            loss1 = self.criterion(rgb, colors).sum()  
+            loss = loss1#+loss0
             loss.backward()
             self.optimizer.step()
             if self.global_step % 2 == 0:
-                showLoss = loss.detach().sum()/B
-                print(f"batch={B}, loss={showLoss}")
+                showLoss0 = 0#loss0.detach().sum()/B
+                showLoss1 = loss1.detach()/B/3
+                print(
+                    f"batch={B}, loss0={showLoss0}, loss1={showLoss1}")
             # if B != self.batch:
             #     showColors = colors.detach()
             #     showColorsTar = rgb.detach()
@@ -96,6 +110,20 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
     surfmodel.to(device)
     # surfdata.featIdToPosEncode
 
+    for rgb, dirEncode, featId in constructionloader:
+        B, N, _ = featId.shape
+        # shape = B,N*featDim,featlevelcnt
+        feat = torch.index_select(surfmodel.gridWeight, dim=0, index=featId.reshape(-1)).reshape(B, N*4, -1)
+        sigma1234 = feat[..., 0].reshape(B, N, -1)
+        sigma1 = torch.clip(sigma1234[..., 0], min=0.0, max=1.0)
+        sigma2 = torch.clip(sigma1234[..., 1], min=0.0, max=1.0)
+        sigma3 = torch.clip(sigma1234[..., 2], min=0.0, max=1.0)
+        sigma4 = torch.clip(sigma1234[..., 3], min=0.0, max=1.0)
+        sigma = sigma1*sigma2*sigma3*sigma4
+        batchPosId = np.zeros(B)
+    #     for i in range(N):
+
+
     validPos = np.zeros(surfdata.maxFeatId[0], dtype=bool)
     for i in range(surfdata.maxFeatId[0]):
         if surfmodel.gridWeight[i,0]>0.9:
@@ -122,8 +150,8 @@ if __name__ == '__main__':
            'dataload_num_workers': dataload_num_workers,
         'gridLevelCnt':4,
         'eachGridFeatDim':4}
-    trainer = Trainer(opt)
-    trainer.train()
-    # surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/35.pt', 'surf/asd.pts')
+    # trainer = Trainer(opt)
+    # trainer.train()
+    surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/4.pt', 'surf/asd.pts')
 
 
