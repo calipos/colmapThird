@@ -31,18 +31,18 @@ class SurfNetwork(nn.Module):
         self.gridWeight = nn.Parameter(torch.rand(
             maxGridFeatId[-1], eachGridFeatDim), requires_grad=True)#[0,1]
 
-        sigma_net = []
-        for l in range(num_layers):
-            if l == 0:
-                in_dim = self.in_dim
-            else:
-                in_dim = hidden_dim
-            if l == num_layers - 1:
-                out_dim = 1 + self.geo_feat_dim  # 1 sigma + 15 SH features for color
-            else:
-                out_dim = hidden_dim
-            sigma_net.append(nn.Linear(in_dim, out_dim, bias=False))
-        self.sigma_net = nn.ModuleList(sigma_net)
+        # sigma_net = []
+        # for l in range(num_layers):
+        #     if l == 0:
+        #         in_dim = self.in_dim
+        #     else:
+        #         in_dim = hidden_dim
+        #     if l == num_layers - 1:
+        #         out_dim = 1 + self.geo_feat_dim  # 1 sigma + 15 SH features for color
+        #     else:
+        #         out_dim = hidden_dim
+        #     sigma_net.append(nn.Linear(in_dim, out_dim, bias=False))
+        # self.sigma_net = nn.ModuleList(sigma_net)
 
         # color network
         self.num_layers_color = num_layers_color  # 3
@@ -58,7 +58,7 @@ class SurfNetwork(nn.Module):
                 out_dim = 3  # 3 rgb
             else:
                 out_dim = hidden_dim_color
-            color_net.append(nn.Linear(in_dim, out_dim, bias=False))
+            color_net.append(nn.Linear(in_dim, out_dim, bias=True))
         self.color_net = nn.ModuleList(color_net)
 
     def forward(self, x, d):  # softmax
@@ -73,17 +73,16 @@ class SurfNetwork(nn.Module):
         sigma2 = torch.clip(sigma1234[..., 1], min=0.0, max=1.0)
         sigma3 = torch.clip(sigma1234[..., 2], min=0.0, max=1.0)
         sigma4 = torch.clip(sigma1234[..., 3], min=0.0, max=1.0)
-        # for l in range(self.num_layers):  
-        #     h = self.sigma_net[l](h)
-        #     if l != self.num_layers - 1:
-        #         h = F.relu(h, inplace=True)
-        # sigma = F.relu(h[..., 0])
-        # sigma = F.softmax(h[..., 0], dim=1)
-        # sigma = F.softmax(h[..., 0], dim=1)
-        # sigma = F.sigmoid(h[..., 0])
-        # geo_feat = h[..., 1:]
-        # sigma = F.softmax(sigma1*sigma2, dim=1)
+        # sigma1 = 1-torch.exp(-10*sigma1234[..., 0]*sigma1234[..., 0])
+        # sigma2 = 1-torch.exp(-10*sigma1234[..., 1]*sigma1234[..., 1])
+        # sigma3 = 1-torch.exp(-10*sigma1234[..., 2]*sigma1234[..., 2])
+        # sigma4 = 1-torch.exp(-10*sigma1234[..., 3]*sigma1234[..., 3])
+
+
+  
         sigma = sigma1*sigma2*sigma3*sigma4
+
+
         geo_feat = feat[..., 1:].reshape(B, N, -1)
         # color
         h = torch.cat([d.unsqueeze(1).tile(1, N, 1), geo_feat], dim=-1)
@@ -93,17 +92,14 @@ class SurfNetwork(nn.Module):
                 h = F.relu(h, inplace=True)
         # sigmoid activation for rgb
         color = torch.sigmoid(h)
-        alpha = 1-sigma
-        transparentBrfore = torch.cumprod(torch.hstack(
-            [torch.ones([B, 1]).to(self.device), alpha[:, :-1]]), 1)
-        colorWeight = transparentBrfore*sigma
-        color_0 = torch.sum(colorWeight *
-                            color[..., 0], axis=1).reshape(-1, 1)
-        color_1 = torch.sum(colorWeight *
-                            color[..., 1], axis=1).reshape(-1, 1)
-        color_2 = torch.sum(colorWeight *
-                            color[..., 2], axis=1).reshape(-1, 1)
-        return sigma, torch.concat([color_0, color_1, color_2], axis=1)
+        # alpha = 1-sigma
+        # transparentBrfore = torch.cumprod(torch.hstack(
+        #     [torch.ones([B, 1]).to(self.device), alpha[:, :-1]]), 1)
+        # colorWeight = transparentBrfore*sigma
+        # color_0 = torch.sum(colorWeight *color[..., 0], axis=1).reshape(-1, 1)
+        # color_1 = torch.sum(colorWeight *color[..., 1], axis=1).reshape(-1, 1)
+        # color_2 = torch.sum(colorWeight *color[..., 2], axis=1).reshape(-1, 1)
+        return sigma, color
         return transparentBrfore*sigma, color, 0
 
 

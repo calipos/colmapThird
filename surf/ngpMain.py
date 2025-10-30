@@ -43,7 +43,7 @@ class Trainer(object):
         self.ema = ExponentialMovingAverage(
             self.surfmodel.parameters(), decay=0.95)
         self.criterion = torch.nn.MSELoss(reduction='none')
-        self.criterionSigma = torch.nn.MSELoss(reduction='mean')
+        self.criterionSigma = torch.nn.MSELoss(reduction='none')
         pass
     def train(self):
         # if os.path.exists('surf/160_20.save.pt'):
@@ -72,17 +72,30 @@ class Trainer(object):
             self.optimizer.zero_grad()
             B, N, _ = featId.shape
             sigma, colors = self.surfmodel(featId, dirEncode)
+
+###
+            loss1 = self.criterion(rgb.unsqueeze(1).tile(
+                [1, N, 1]).reshape([B, N, 3]), colors)
+            # _, hardSigma = torch.min(loss1.detach().sum(axis=2), dim=1)
+            # hardSigmaOneHot = torch.nn.functional.one_hot(
+            #     hardSigma, num_classes=N).float()
+            # loss2 = self.criterionSigma(
+            #     torch.cumsum(sigma, axis=1), torch.cumsum(hardSigmaOneHot, axis=1))
+
+###
+
+
             # loss0 = (-(sigma-0.5)**2).sum()
             # loss0 = torch.sum(sigma)
-            loss1 = self.criterion(rgb, colors).sum()  
-            loss = loss1#+loss0
+            # loss1 = self.criterion(rgb, colors).sum()  
+            loss = loss1.mean()#+loss2.mean()
             loss.backward()
             self.optimizer.step()
             if self.global_step % 2 == 0:
                 showLoss0 = 0#loss0.detach().sum()/B
-                showLoss1 = loss1.detach()/B/3
+                # showLoss1 = loss1.detach()/B/3
                 print(
-                    f"batch={B}, loss0={showLoss0}, loss1={showLoss1}")
+                    f"batch={B}, loss0={showLoss0}, loss1={loss.detach()}")
             # if B != self.batch:
             #     showColors = colors.detach()
             #     showColorsTar = rgb.detach()
@@ -120,6 +133,16 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
         sigma3 = torch.clip(sigma1234[..., 2], min=0.0, max=1.0)
         sigma4 = torch.clip(sigma1234[..., 3], min=0.0, max=1.0)
         sigma = sigma1*sigma2*sigma3*sigma4
+
+        alpha = 1-sigma
+        transparentBrfore = torch.cumprod(torch.hstack(
+            [torch.ones([B, 1]), alpha[:, :-1]]), 1)
+        colorWeight = transparentBrfore*sigma
+        print('sigma=', sigma)
+        print('alpha=', alpha)
+        print('transparentBrfore=', transparentBrfore)
+        print('colorWeight=', colorWeight)
+        exit(0)
         batchPosId = np.zeros(B)
     #     for i in range(N):
 
@@ -149,9 +172,9 @@ if __name__ == '__main__':
         'batch': 512000, 
            'dataload_num_workers': dataload_num_workers,
         'gridLevelCnt':4,
-        'eachGridFeatDim':4}
-    # trainer = Trainer(opt)
-    # trainer.train()
-    surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/4.pt', 'surf/asd.pts')
+        'eachGridFeatDim':3}
+    trainer = Trainer(opt)
+    trainer.train()
+    # surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/7.pt', 'surf/asd.pts')
 
 
