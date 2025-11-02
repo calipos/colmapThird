@@ -14,7 +14,7 @@ class SurfNetwork(nn.Module):
                  geo_feat_dim=3,
                  in_dim_dir=16,
                  num_layers_color=3,
-                 hidden_dim_color=64,
+                 hidden_dim_color=32,
                  **kwargs,
                  ):
         super().__init__()
@@ -69,10 +69,10 @@ class SurfNetwork(nn.Module):
         feat = torch.index_select(
             self.gridWeight, dim=0, index=x.reshape(-1)).reshape(B, N*4, -1)
         sigma1234 = feat[..., 0].reshape(B, N, -1)
-        sigma1 = torch.clip(sigma1234[..., 0], min=0.0, max=1.0)
-        sigma2 = torch.clip(sigma1234[..., 1], min=0.0, max=1.0)
-        sigma3 = torch.clip(sigma1234[..., 2], min=0.0, max=1.0)
-        sigma4 = torch.clip(sigma1234[..., 3], min=0.0, max=1.0)
+        sigma1 = torch.clip(sigma1234[..., 0], min=0.0, max=1.0).reshape(B, N, 1)
+        sigma2 = torch.clip(sigma1234[..., 1], min=0.0, max=1.0).reshape(B, N, 1)
+        sigma3 = torch.clip(sigma1234[..., 2], min=0.0, max=1.0).reshape(B, N, 1)
+        sigma4 = torch.clip(sigma1234[..., 3], min=0.0, max=1.0).reshape(B, N, 1)
         # sigma1 = 1-torch.exp(-10*sigma1234[..., 0]*sigma1234[..., 0])
         # sigma2 = 1-torch.exp(-10*sigma1234[..., 1]*sigma1234[..., 1])
         # sigma3 = 1-torch.exp(-10*sigma1234[..., 2]*sigma1234[..., 2])
@@ -80,8 +80,8 @@ class SurfNetwork(nn.Module):
 
 
   
-        sigma = sigma1*sigma2*sigma3*sigma4
-
+        # sigma = sigma1*sigma2*sigma3*sigma4
+        sigma = torch.softmax(sigma1*sigma2*sigma3*sigma4,dim=1)
 
         geo_feat = feat[..., 1:].reshape(B, N, -1)
         # color
@@ -92,15 +92,14 @@ class SurfNetwork(nn.Module):
                 h = F.relu(h, inplace=True)
         # sigmoid activation for rgb
         color = torch.sigmoid(h)
-        # alpha = 1-sigma
-        # transparentBrfore = torch.cumprod(torch.hstack(
-        #     [torch.ones([B, 1]).to(self.device), alpha[:, :-1]]), 1)
-        # colorWeight = transparentBrfore*sigma
-        # color_0 = torch.sum(colorWeight *color[..., 0], axis=1).reshape(-1, 1)
-        # color_1 = torch.sum(colorWeight *color[..., 1], axis=1).reshape(-1, 1)
-        # color_2 = torch.sum(colorWeight *color[..., 2], axis=1).reshape(-1, 1)
-        return sigma, color
-        return transparentBrfore*sigma, color, 0
+        alpha = 1-sigma
+        transparentBrfore = torch.cumprod(torch.hstack(
+            [torch.ones([B, 1,1]).to(self.device), alpha[:, :-1]]), 2)
+        colorWeight0 = transparentBrfore*sigma
+        # colorWeight = colorWeight0/torch.sum(colorWeight0,axis=1,keepdim=True)
+        colorOut = colorWeight0 *color 
+        return sigma, torch.sum(colorOut ,axis=1)
+        # return transparentBrfore*sigma, color
 
 
     # optimizer utils

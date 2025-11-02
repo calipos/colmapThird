@@ -72,30 +72,17 @@ class Trainer(object):
             self.optimizer.zero_grad()
             B, N, _ = featId.shape
             sigma, colors = self.surfmodel(featId, dirEncode)
-
-###
-            loss1 = self.criterion(rgb.unsqueeze(1).tile(
-                [1, N, 1]).reshape([B, N, 3]), colors)
-            # _, hardSigma = torch.min(loss1.detach().sum(axis=2), dim=1)
-            # hardSigmaOneHot = torch.nn.functional.one_hot(
-            #     hardSigma, num_classes=N).float()
-            # loss2 = self.criterionSigma(
-            #     torch.cumsum(sigma, axis=1), torch.cumsum(hardSigmaOneHot, axis=1))
-
-###
-
-
-            # loss0 = (-(sigma-0.5)**2).sum()
-            # loss0 = torch.sum(sigma)
-            # loss1 = self.criterion(rgb, colors).sum()  
-            loss = loss1.mean()#+loss2.mean()
+            loss0 = self.criterion(rgb, colors).sum()# /B/3
+            loss1 = (-(sigma-0.5)**2).sum()#/B/N
+            loss = loss0+loss1
             loss.backward()
             self.optimizer.step()
             if self.global_step % 2 == 0:
-                showLoss0 = 0#loss0.detach().sum()/B
-                # showLoss1 = loss1.detach()/B/3
+                showLoss0 = loss0.detach()/B/3#loss0.detach().sum()/B
+                showLoss1 = loss1.detach()/B/N
+                # showLoss2 = loss2.detach()/B
                 print(
-                    f"batch={B}, loss0={showLoss0}, loss1={loss.detach()}")
+                    f"batch={B}, loss0={showLoss0}, loss1={showLoss1}")
             # if B != self.batch:
             #     showColors = colors.detach()
             #     showColorsTar = rgb.detach()
@@ -122,29 +109,28 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
     surfmodel.load_state_dict(torch.load(modelPath))
     surfmodel.to(device)
     # surfdata.featIdToPosEncode
-
-    for rgb, dirEncode, featId in constructionloader:
-        B, N, _ = featId.shape
-        # shape = B,N*featDim,featlevelcnt
-        feat = torch.index_select(surfmodel.gridWeight, dim=0, index=featId.reshape(-1)).reshape(B, N*4, -1)
-        sigma1234 = feat[..., 0].reshape(B, N, -1)
-        sigma1 = torch.clip(sigma1234[..., 0], min=0.0, max=1.0)
-        sigma2 = torch.clip(sigma1234[..., 1], min=0.0, max=1.0)
-        sigma3 = torch.clip(sigma1234[..., 2], min=0.0, max=1.0)
-        sigma4 = torch.clip(sigma1234[..., 3], min=0.0, max=1.0)
-        sigma = sigma1*sigma2*sigma3*sigma4
-
-        alpha = 1-sigma
-        transparentBrfore = torch.cumprod(torch.hstack(
-            [torch.ones([B, 1]), alpha[:, :-1]]), 1)
-        colorWeight = transparentBrfore*sigma
-        print('sigma=', sigma)
-        print('alpha=', alpha)
-        print('transparentBrfore=', transparentBrfore)
-        print('colorWeight=', colorWeight)
-        exit(0)
-        batchPosId = np.zeros(B)
-    #     for i in range(N):
+    with torch.no_grad():
+        for rgb, dirEncode, featId in constructionloader:
+            B, N, _ = featId.shape
+            # shape = B,N*featDim,featlevelcnt
+            feat = torch.index_select(surfmodel.gridWeight, dim=0, index=featId.reshape(-1)).reshape(B, N*4, -1)
+            sigma1234 = feat[..., 0].reshape(B, N, -1)
+            sigma1 = torch.clip(sigma1234[..., 0], min=0.0, max=1.0)
+            sigma2 = torch.clip(sigma1234[..., 1], min=0.0, max=1.0)
+            sigma3 = torch.clip(sigma1234[..., 2], min=0.0, max=1.0)
+            sigma4 = torch.clip(sigma1234[..., 3], min=0.0, max=1.0)
+            sigma = sigma1*sigma2*sigma3*sigma4
+            if torch.max(sigma)>0.5:
+                print(sigma)
+            # alpha = 1-sigma
+            # transparentBrfore = torch.cumprod(torch.hstack(
+            #     [torch.ones([B, 1]), alpha[:, :-1]]), 1)
+            # colorWeight = transparentBrfore*sigma
+            # print('sigma=', sigma)
+            # print('alpha=', alpha)
+            # print('transparentBrfore=', transparentBrfore)
+            # print('colorWeight=', colorWeight)
+ 
 
 
     validPos = np.zeros(surfdata.maxFeatId[0], dtype=bool)
@@ -172,9 +158,9 @@ if __name__ == '__main__':
         'batch': 512000, 
            'dataload_num_workers': dataload_num_workers,
         'gridLevelCnt':4,
-        'eachGridFeatDim':3}
+        'eachGridFeatDim':4}
     trainer = Trainer(opt)
     trainer.train()
-    # surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/7.pt', 'surf/asd.pts')
+    # surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/50.pt', 'surf/asd.pts')
 
 
