@@ -80,9 +80,11 @@ class SurfNetwork(nn.Module):
 
 
   
-        # sigma = sigma1*sigma2*sigma3*sigma4
-        sigma = torch.softmax(sigma1*sigma2*sigma3*sigma4,dim=1)
+        sigma0 = (sigma1*sigma2*sigma3*sigma4+1e-4)
 
+        # sigma = torch.softmax(sigma1*sigma2*sigma3*sigma4,dim=1)
+        maxValue,maxIdx =torch.max(sigma0, axis=1,keepdim=True)
+        sigma = sigma0/(maxValue)
         geo_feat = feat[..., 1:].reshape(B, N, -1)
         # color
         h = torch.cat([d.unsqueeze(1).tile(1, N, 1), geo_feat], dim=-1)

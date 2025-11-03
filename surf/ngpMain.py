@@ -93,6 +93,28 @@ class Trainer(object):
 
     def save_checkpoint(self):
         torch.save(self.surfmodel.state_dict(),f'surf/{self.epoch}.pt')
+
+
+def collectAllPotentialPts(opt, trainDataPath, modelPath, outPath):
+    device = torch.device('cpu')
+    dataload_num_workers = opt['dataload_num_workers']
+    if not os.path.exists(trainDataPath):
+        print('not found : ', trainDataPath)
+    if not os.path.exists(modelPath):
+        print('not found : ', modelPath)
+    surfdata = SurfDataset(device, trainDataPath)
+    constructionloader = DataLoader(
+        surfdata, 64, shuffle=False, num_workers=dataload_num_workers)
+    validPos = set()
+    with torch.no_grad():
+        for rgb, dirEncode, featId in constructionloader:
+            validPos.update(featId[..., 0].reshape(-1).numpy())
+    pts = np.zeros([len(validPos), 3])
+    for i, pos in enumerate(validPos):
+        pts[i, 0], pts[i, 1], pts[i, 2] = surfdata.posEncodeToXyz(surfdata.featIdToPosEncode[pos])
+    np.savetxt(outPath, pts, delimiter=' ')
+
+
 def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
 
     device = torch.device('cpu')
@@ -103,12 +125,13 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
         print('not found : ', modelPath)
     surfdata = SurfDataset(device, trainDataPath)
     constructionloader = DataLoader(
-        surfdata, 25600, shuffle=False, num_workers=dataload_num_workers)
+        surfdata, 64, shuffle=False, num_workers=dataload_num_workers)
     surfmodel = network.SurfNetwork(
         device, surfdata.maxFeatId, surfdata.featLevelCnt, opt['eachGridFeatDim'])
     surfmodel.load_state_dict(torch.load(modelPath))
     surfmodel.to(device)
     # surfdata.featIdToPosEncode
+    validPos=set()
     with torch.no_grad():
         for rgb, dirEncode, featId in constructionloader:
             B, N, _ = featId.shape
@@ -121,30 +144,31 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
             sigma4 = torch.clip(sigma1234[..., 3], min=0.0, max=1.0)
             sigma = sigma1*sigma2*sigma3*sigma4
             if torch.max(sigma)>0.5:
-                print(sigma)
-            # alpha = 1-sigma
-            # transparentBrfore = torch.cumprod(torch.hstack(
-            #     [torch.ones([B, 1]), alpha[:, :-1]]), 1)
-            # colorWeight = transparentBrfore*sigma
-            # print('sigma=', sigma)
-            # print('alpha=', alpha)
-            # print('transparentBrfore=', transparentBrfore)
-            # print('colorWeight=', colorWeight)
+                # print(sigma)
+                # alpha = 1-sigma
+                # transparentBrfore = torch.cumprod(torch.hstack(
+                #     [torch.ones([B, 1]), alpha[:, :-1]]), 1)
+                # colorWeight = transparentBrfore*sigma
+                # print('sigma=', sigma)
+                # print('alpha=', alpha)
+                # print('transparentBrfore=', transparentBrfore)
+                # print('colorWeight=', colorWeight)
+                picks = surfdata .potentialGridCnt - \
+                    torch.sum(torch.cumsum(sigma > 0.5, axis=1) >= 1, axis=1)
+                for b,Pick in enumerate(picks.numpy()):
+                    if Pick < surfdata.potentialGridCnt:
+                        try:
+                            validPos.add(
+                                surfdata.featIdToPosEncode[featId[b, Pick, 0].item()])
+                        except: 
+                            for b  in range(B):
+                                print(torch.cumsum(sigma > 0.5, axis=1))
+                            exit(0)
  
-
-
-    validPos = np.zeros(surfdata.maxFeatId[0], dtype=bool)
-    for i in range(surfdata.maxFeatId[0]):
-        if surfmodel.gridWeight[i,0]>0.9:
-            validPos[i]=True
- 
-    pts = np.zeros([sum(validPos), 3])
-    i=0
-    for pos, Value in enumerate(validPos):
-        if Value:
-            pts[i, 0], pts[i, 1], pts[i, 2] = surfdata.posEncodeToXyz(
-                surfdata.featIdToPosEncode[pos])
-            i+=1
+    pts = np.zeros([len(validPos), 3])
+    
+    for i,pos in enumerate(validPos):
+        pts[i, 0], pts[i, 1], pts[i, 2] = surfdata.posEncodeToXyz(pos)
     np.savetxt(outPath, pts, delimiter=' ')
 if __name__ == '__main__':
     # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -159,8 +183,10 @@ if __name__ == '__main__':
            'dataload_num_workers': dataload_num_workers,
         'gridLevelCnt':4,
         'eachGridFeatDim':4}
-    trainer = Trainer(opt)
-    trainer.train()
-    # surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/50.pt', 'surf/asd.pts')
+    # trainer = Trainer(opt)
+    # trainer.train()
+    # surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/22.pt', 'surf/asd.pts')
+    collectAllPotentialPts(opt, 'surf/trainTerm1.dat',
+                           'surf/22.pt', 'surf/asd.pts')
 
 

@@ -95,6 +95,8 @@ namespace surf
 		}
 		return strLength+sizeof(int);
 	}
+
+
 	bool readObj(const std::filesystem::path&objPath, Eigen::MatrixXf& vertex, Eigen::MatrixXi& faces, Eigen::MatrixXf& vertex_normal, Eigen::MatrixXf& face_normal)
 	{
 		if (!std::filesystem::exists(objPath))
@@ -145,6 +147,43 @@ namespace surf
 		}
 		igl::per_vertex_normals(vertex, faces, vertex_normal);
 		igl::per_face_normals(vertex, faces, face_normal);
+
+		LOG_OUT << "specify the view Point to define the normal direct out:";
+		LOG_OUT << ":viewPointFilePath  objPath.parent_dir()/view0.txt";
+		std::filesystem::path viewPointFilePath = objPath.parent_path() / "view0.txt";
+		if (std::filesystem::exists(viewPointFilePath))
+		{
+			try
+			{
+				std::fstream fin(viewPointFilePath,std::ios::in);
+				std::string line;
+				std::getline(fin, line);
+				std::stringstream ss(line);
+				Eigen::Vector3f viewPoint(0,0,0);
+				ss >> viewPoint[0] >> viewPoint[1] >> viewPoint[2];
+				std::vector<float>distFromT(faces.cols());
+#pragma omp parallel for
+				for (int i = 0; i < faces.cols(); i++)
+				{
+					const int& v = faces(0, i);//choose the first vertex idx
+					const float a = viewPoint[0] - vertex(0, v);
+					const float b = viewPoint[1] - vertex(1, v);
+					const float c = viewPoint[2] - vertex(2, v);
+					distFromT[i] = a * a + b * b + c * c;
+				}
+				int neareatFaceIdx = std::min_element(distFromT.begin(), distFromT.end()) - distFromT.begin();
+				std::int8_t nearestFaceNormalSigned = visualFace[neareatFaceIdx];
+#pragma omp parallel for
+				for (int i = 0; i < visualFace.size(); i++)
+				{
+					visualFace[i] *= nearestFaceNormalSigned;
+				}
+			}
+			catch (const std::exception&)
+			{
+
+			}
+		}
 //		if (cameraT != nullptr)
 //		{
 //			std::vector<float>distFromT(f.size());
@@ -678,6 +717,11 @@ namespace surf
 					const auto& ext = thisFilename.extension().string();
 					if (ext.compare(".json") == 0)
 					{
+						std::string shortName__ = thisFilename.filename().stem().string();
+						if (shortName__.compare("a@00026") != 0)
+						{
+							continue;
+						}
 						LOG_OUT << thisFilename;
 						std::stringstream ss;
 						std::string aline;
@@ -700,8 +744,6 @@ namespace surf
 						}
 						try
 						{
-
-
 							auto newMemberNames = newRoot.getMemberNames();
 							if (std::find(newMemberNames.begin(), newMemberNames.end(), "imagePath") == newMemberNames.end())
 							{
@@ -882,7 +924,7 @@ namespace surf
 								}
 							}
 						}
-						if (false)
+						if (true)
 						{//show rayDistant
 							Eigen::MatrixXf pts = rayDistantMapToPts(rayDistance, this->cameras[thisCameraSn], Rt);
 							tools::saveColMajorPts3d("../surf/a.ply", pts);
@@ -987,8 +1029,8 @@ namespace surf
 						PosEncodeToGridXyz(d2, this->resolutionX, this->resolutionXY, gridX, gridY, gridZ);
 						cv::Point3f gridCentor;
 						gridCentor.x = gridX * this->gridConfig.gridUnit + this->targetMinBorderX;
-						gridCentor.x = gridY * this->gridConfig.gridUnit + this->targetMinBorderY;
-						gridCentor.x = gridZ * this->gridConfig.gridUnit + this->targetMinBorderZ;
+						gridCentor.y = gridY * this->gridConfig.gridUnit + this->targetMinBorderY;
+						gridCentor.z = gridZ * this->gridConfig.gridUnit + this->targetMinBorderZ;
 						sortWithDists[i].first=cv::norm(cameraCenter- gridCentor);
 						i++;
 					}
