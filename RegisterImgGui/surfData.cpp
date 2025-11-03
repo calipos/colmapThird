@@ -161,23 +161,31 @@ namespace surf
 				std::stringstream ss(line);
 				Eigen::Vector3f viewPoint(0,0,0);
 				ss >> viewPoint[0] >> viewPoint[1] >> viewPoint[2];
-				std::vector<float>distFromT(faces.cols());
+				std::vector<float>distFromT(faces.rows());
 #pragma omp parallel for
-				for (int i = 0; i < faces.cols(); i++)
+				for (int i = 0; i < faces.rows(); i++)
 				{
-					const int& v = faces(0, i);//choose the first vertex idx
-					const float a = viewPoint[0] - vertex(0, v);
-					const float b = viewPoint[1] - vertex(1, v);
-					const float c = viewPoint[2] - vertex(2, v);
+					const int& v = faces(i, 0);//choose the first vertex idx
+					const float a = viewPoint[0] - vertex(v, 0);
+					const float b = viewPoint[1] - vertex(v, 1);
+					const float c = viewPoint[2] - vertex(v, 2);
 					distFromT[i] = a * a + b * b + c * c;
 				}
 				int neareatFaceIdx = std::min_element(distFromT.begin(), distFromT.end()) - distFromT.begin();
-				std::int8_t nearestFaceNormalSigned = visualFace[neareatFaceIdx];
-#pragma omp parallel for
-				for (int i = 0; i < visualFace.size(); i++)
 				{
-					visualFace[i] *= nearestFaceNormalSigned;
-				}
+					const int& v = faces(neareatFaceIdx, 0);//choose the first vertex idx 
+					const float a = viewPoint[0] - vertex(v, 0);
+					const float b = viewPoint[1] - vertex(v, 1);
+					const float c = viewPoint[2] - vertex(v, 2);
+					if (a * face_normal(neareatFaceIdx,0 ) + b * face_normal(neareatFaceIdx,1) + c * face_normal(neareatFaceIdx,2) < 0)
+					{
+						face_normal = face_normal * -1;
+					}
+					if (a * vertex_normal(v,0) + b * vertex_normal(v,1) + c * vertex_normal(v,2) < 0)
+					{
+						vertex_normal = vertex_normal * -1;
+					}
+				} 
 			}
 			catch (const std::exception&)
 			{
@@ -854,31 +862,32 @@ namespace surf
 						std::vector<std::int8_t> visualFace(this->faces.cols(), 0);
 						Eigen::Vector3f cameraT(Rt(0, 3), Rt(1, 3), Rt(2, 3));
 						{
-							std::vector<float>distFromT(this->faces.cols());
 #pragma omp parallel for
 							for (int i = 0; i < this->faces.cols(); i++)
 							{
-								const int& v = faces(0, i);//choose the first vertex idx
-								const float a = Rt(0, 3) - this->vertex(0, v);
-								const float b = Rt(1, 3) - this->vertex(1, v);
-								const float c = Rt(2, 3) - this->vertex(2, v);
-								float dirSign = a * this->face_normal(0, i) + b * this->face_normal(1, i) + c * this->face_normal(2, i);
-								if (dirSign > 0)
+								const int& va = faces(0, i);//choose the first vertex idx
+								const int& vb = faces(1, i);//choose the first vertex idx
+								const int& vc = faces(2, i);//choose the first vertex idx
+								float a = Rt(0, 3) - this->vertex(0, va);
+								float b = Rt(1, 3) - this->vertex(1, va);
+								float c = Rt(2, 3) - this->vertex(2, va);
+								float dirSignA = a * this->vertex_normal(0, va) + b * this->vertex_normal(1, va) + c * this->vertex_normal(2, va);
+								a = Rt(0, 3) - this->vertex(0, vb);
+								b = Rt(1, 3) - this->vertex(1, vb);
+								c = Rt(2, 3) - this->vertex(2, vb);
+								float dirSignB = a * this->vertex_normal(0, vb) + b * this->vertex_normal(1, vb) + c * this->vertex_normal(2, vb);
+								a = Rt(0, 3) - this->vertex(0, vb);
+								b = Rt(1, 3) - this->vertex(1, vb);
+								c = Rt(2, 3) - this->vertex(2, vb);
+								float dirSignC = a * this->vertex_normal(0, vc) + b * this->vertex_normal(1, vc) + c * this->vertex_normal(2, vc);
+								if (dirSignA > 0&& dirSignB > 0&& dirSignC > 0)
 								{
 									visualFace[i] = 1;
 								}
-								else if (dirSign < 0)
+								else
 								{
 									visualFace[i] = -1;
 								}
-								distFromT[i] = a * a + b * b + c * c;
-							}
-							int neareatFaceIdx = std::min_element(distFromT.begin(), distFromT.end()) - distFromT.begin();
-							std::int8_t nearestFaceNormalSigned = visualFace[neareatFaceIdx];
-#pragma omp parallel for
-							for (int i = 0; i < visualFace.size(); i++)
-							{
-								visualFace[i] *= nearestFaceNormalSigned;
 							}
 						}
 						std::vector<cv::Vec2i>vertexInImg(this->vertex.cols());
@@ -924,7 +933,7 @@ namespace surf
 								}
 							}
 						}
-						if (true)
+						if (false)
 						{//show rayDistant
 							Eigen::MatrixXf pts = rayDistantMapToPts(rayDistance, this->cameras[thisCameraSn], Rt);
 							tools::saveColMajorPts3d("../surf/a.ply", pts);
