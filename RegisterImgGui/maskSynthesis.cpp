@@ -32,6 +32,9 @@ namespace sdf
 		int yx_size = x_size * y_size;
 		gridCenterHitValue = std::vector<float>(x_size * y_size * z_size, 1.0f);
 		grid = Eigen::Matrix4Xf(4, gridCenterHitValue.size());
+		int numX_1 = x_size - 1;
+		int numY_1 = y_size - 1;
+		int numZ_1 = z_size - 1;
 		for (int i = 0; i < gridCenterHitValue.size(); i++)
 		{
 			int i_z = i / yx_size;
@@ -42,6 +45,10 @@ namespace sdf
 			grid(1, i) = startY + i_y * unit;
 			grid(2, i) = startZ + i_z * unit;
 			grid(3, i) = 1;
+			if (i_x == numX_1 || i_y == numY_1 || i_z == numZ_1 || i_x == 0 || i_y == 0 || i_z == 0)
+			{
+				gridCenterHitValue[i]=-1;//border
+			}
 		}
 		LOG_OUT << grid.row(0).maxCoeff() << " " << grid.row(0).minCoeff();;
 		LOG_OUT << grid.row(1).maxCoeff() << " " << grid.row(1).minCoeff();;
@@ -128,7 +135,6 @@ namespace sdf
 			int numY_1 = y_size - 1;
 			int numZ_1 = z_size - 1;
 			const int yx_size = x_size * y_size;
-
 			for (int i = 0; i < gridCnt; i++)
 			{
 				if (gridCenterHitValue[i] > thre)

@@ -97,7 +97,7 @@ namespace surf
 	}
 
 
-	bool readObj(const std::filesystem::path&objPath, Eigen::MatrixXf& vertex, Eigen::MatrixXi& faces, Eigen::MatrixXf& vertex_normal, Eigen::MatrixXf& face_normal)
+	bool readObj(const std::filesystem::path& objPath, Eigen::MatrixXf& vertex, Eigen::MatrixXi& faces, Eigen::MatrixXf& vertex_normal, Eigen::MatrixXf& face_normal)
 	{
 		if (!std::filesystem::exists(objPath))
 		{
@@ -108,15 +108,15 @@ namespace surf
 		std::string aline;
 		std::list<Eigen::Vector3f>v;
 		std::list<Eigen::Vector3i>f;
-		while (std::getline(fin,aline))
+		while (std::getline(fin, aline))
 		{
-			if (aline.length()>2 && aline[0] == 'v'&& aline[1] == ' ')
+			if (aline.length() > 2 && aline[0] == 'v' && aline[1] == ' ')
 			{
 				std::stringstream ss(aline);
 				char c;
 				float x, y, z;
 				ss >> c >> x >> y >> z;
-				v.emplace_back(x,y,z);
+				v.emplace_back(x, y, z);
 			}
 			if (aline.length() > 2 && aline[0] == 'f' && aline[1] == ' ')
 			{
@@ -124,13 +124,13 @@ namespace surf
 				char c;
 				int x, y, z;
 				ss >> c >> x >> y >> z;
-				f.emplace_back(x-1, y - 1, z - 1);
+				f.emplace_back(x - 1, y - 1, z - 1);
 			}
 		}
-		vertex = Eigen::MatrixXf( v.size(),3);
-		faces = Eigen::MatrixXi( f.size(),3);
+		vertex = Eigen::MatrixXf(v.size(), 3);
+		faces = Eigen::MatrixXi(f.size(), 3);
 		int i = 0;
-		for (const auto&d:v)
+		for (const auto& d : v)
 		{
 			vertex(i, 0) = d.x();
 			vertex(i, 1) = d.y();
@@ -155,11 +155,11 @@ namespace surf
 		{
 			try
 			{
-				std::fstream fin(viewPointFilePath,std::ios::in);
+				std::fstream fin(viewPointFilePath, std::ios::in);
 				std::string line;
 				std::getline(fin, line);
 				std::stringstream ss(line);
-				Eigen::Vector3f viewPoint(0,0,0);
+				Eigen::Vector3f viewPoint(0, 0, 0);
 				ss >> viewPoint[0] >> viewPoint[1] >> viewPoint[2];
 				std::vector<float>distFromT(faces.rows());
 #pragma omp parallel for
@@ -177,63 +177,124 @@ namespace surf
 					const float a = viewPoint[0] - vertex(v, 0);
 					const float b = viewPoint[1] - vertex(v, 1);
 					const float c = viewPoint[2] - vertex(v, 2);
-					if (a * face_normal(neareatFaceIdx,0 ) + b * face_normal(neareatFaceIdx,1) + c * face_normal(neareatFaceIdx,2) < 0)
+					if (a * face_normal(neareatFaceIdx, 0) + b * face_normal(neareatFaceIdx, 1) + c * face_normal(neareatFaceIdx, 2) < 0)
 					{
 						face_normal = face_normal * -1;
 					}
-					if (a * vertex_normal(v,0) + b * vertex_normal(v,1) + c * vertex_normal(v,2) < 0)
+					if (a * vertex_normal(v, 0) + b * vertex_normal(v, 1) + c * vertex_normal(v, 2) < 0)
 					{
 						vertex_normal = vertex_normal * -1;
 					}
-				} 
+				}
 			}
 			catch (const std::exception&)
 			{
 
 			}
 		}
-//		if (cameraT != nullptr)
-//		{
-//			std::vector<float>distFromT(f.size());
-//#pragma omp parallel for
-//			for (int i = 0; i < f.size(); i++)
-//			{
-//				const int& v = faces(i, 0);//choose the first vertex idx
-//				float a = vertex(v, 0) - cameraT->x();
-//				float b = vertex(v, 1) - cameraT->y();
-//				float c = vertex(v, 2) - cameraT->z();
-//				distFromT[i] = a * a + b * b + c * c;
-//			}
-//			int neareatFaceIdx = std::min_element(distFromT.begin(), distFromT.end()) - distFromT.begin();
-//			int neareatVertexIdx = faces(neareatFaceIdx, 0);
-//			Eigen::Vector3f vertexNormal(vertex_normal(neareatVertexIdx, 0), vertex_normal(neareatVertexIdx, 1), vertex_normal(neareatVertexIdx, 2));
-//			Eigen::Vector3f cameraTDir(vertex(neareatVertexIdx, 0) - cameraT->x(), vertex(neareatVertexIdx, 1) - cameraT->y(), vertex(neareatVertexIdx, 2) - cameraT->z());
-//			Eigen::Vector3f faceNormal(face_normal(neareatFaceIdx, 0), face_normal(neareatFaceIdx, 1), face_normal(neareatFaceIdx, 2));
-//			cameraTDir.normalize();
-//			if (vertexNormal.dot(cameraTDir) < 0)
-//			{
-//				LOG_OUT << "swtich normals.";
-//				vertex_normal *= -1;
-//			}
-//			if (faceNormal.dot(cameraTDir) < 0)
-//			{
-//				LOG_OUT << "swtich normals.";
-//				face_normal *= -1;
-//			}
-//		}
-		vertex = Eigen::Matrix4Xf(4,v.size()); 
+		//		if (cameraT != nullptr)
+		//		{
+		//			std::vector<float>distFromT(f.size());
+		//#pragma omp parallel for
+		//			for (int i = 0; i < f.size(); i++)
+		//			{
+		//				const int& v = faces(i, 0);//choose the first vertex idx
+		//				float a = vertex(v, 0) - cameraT->x();
+		//				float b = vertex(v, 1) - cameraT->y();
+		//				float c = vertex(v, 2) - cameraT->z();
+		//				distFromT[i] = a * a + b * b + c * c;
+		//			}
+		//			int neareatFaceIdx = std::min_element(distFromT.begin(), distFromT.end()) - distFromT.begin();
+		//			int neareatVertexIdx = faces(neareatFaceIdx, 0);
+		//			Eigen::Vector3f vertexNormal(vertex_normal(neareatVertexIdx, 0), vertex_normal(neareatVertexIdx, 1), vertex_normal(neareatVertexIdx, 2));
+		//			Eigen::Vector3f cameraTDir(vertex(neareatVertexIdx, 0) - cameraT->x(), vertex(neareatVertexIdx, 1) - cameraT->y(), vertex(neareatVertexIdx, 2) - cameraT->z());
+		//			Eigen::Vector3f faceNormal(face_normal(neareatFaceIdx, 0), face_normal(neareatFaceIdx, 1), face_normal(neareatFaceIdx, 2));
+		//			cameraTDir.normalize();
+		//			if (vertexNormal.dot(cameraTDir) < 0)
+		//			{
+		//				LOG_OUT << "swtich normals.";
+		//				vertex_normal *= -1;
+		//			}
+		//			if (faceNormal.dot(cameraTDir) < 0)
+		//			{
+		//				LOG_OUT << "swtich normals.";
+		//				face_normal *= -1;
+		//			}
+		//		}
+		vertex = Eigen::Matrix4Xf(4, v.size());
 		i = 0;
 		for (const auto& d : v)
 		{
-			vertex(0,i) = d.x();
-			vertex(1,i) = d.y();
-			vertex(2,i) = d.z();
-			vertex(3,i) = 1;
+			vertex(0, i) = d.x();
+			vertex(1, i) = d.y();
+			vertex(2, i) = d.z();
+			vertex(3, i) = 1;
 			i += 1;
 		}
 		faces.transposeInPlace();
 		vertex_normal.transposeInPlace();
 		face_normal.transposeInPlace();
+		return true;
+	}
+	bool readObj(const std::filesystem::path& objPath, Eigen::MatrixXf& vertex, Eigen::MatrixXi& faces)
+	{
+		if (!std::filesystem::exists(objPath))
+		{
+			LOG_ERR_OUT << "not found : " << objPath;
+			return false;
+		}
+		std::fstream fin(objPath, std::ios::in);
+		std::string aline;
+		std::list<Eigen::Vector3f>v;
+		std::list<Eigen::Vector3i>f;
+		while (std::getline(fin, aline))
+		{
+			if (aline.length() > 2 && aline[0] == 'v' && aline[1] == ' ')
+			{
+				std::stringstream ss(aline);
+				char c;
+				float x, y, z;
+				ss >> c >> x >> y >> z;
+				v.emplace_back(x, y, z);
+			}
+			if (aline.length() > 2 && aline[0] == 'f' && aline[1] == ' ')
+			{
+				std::stringstream ss(aline);
+				char c;
+				int x, y, z;
+				ss >> c >> x >> y >> z;
+				f.emplace_back(x - 1, y - 1, z - 1);
+			}
+		}
+		vertex = Eigen::MatrixXf(v.size(), 3);
+		faces = Eigen::MatrixXi(f.size(), 3);
+		int i = 0;
+		for (const auto& d : v)
+		{
+			vertex(i, 0) = d.x();
+			vertex(i, 1) = d.y();
+			vertex(i, 2) = d.z();
+			i += 1;
+		}
+		i = 0;
+		for (const auto& d : f)
+		{
+			faces(i, 0) = d.x();
+			faces(i, 1) = d.y();
+			faces(i, 2) = d.z();
+			i += 1;
+		}
+		vertex = Eigen::Matrix4Xf(4, v.size());
+		i = 0;
+		for (const auto& d : v)
+		{
+			vertex(0, i) = d.x();
+			vertex(1, i) = d.y();
+			vertex(2, i) = d.z();
+			vertex(3, i) = 1;
+			i += 1;
+		}
+		faces.transposeInPlace();
 		return true;
 	}
 	std::list<cv::Vec2i> triangle(const cv::Vec2i& p0, const cv::Vec2i& p1, const cv::Vec2i& p2) {
@@ -688,7 +749,7 @@ namespace surf
 			this->gridUnitInv = 1. / gridConfig.gridUnit;
 			this->vertex.resize(0, 0);
 			{
-				bool loadObj = surf::readObj(objPath, this->vertex, this->faces, this->vertex_normal, this->face_normal);
+				bool loadObj = surf::readObj(objPath, this->vertex, this->faces);
 				if (!loadObj)
 				{
 					LOG_ERR_OUT << "read obj fail : " << objPath;
@@ -726,10 +787,6 @@ namespace surf
 					if (ext.compare(".json") == 0)
 					{
 						std::string shortName__ = thisFilename.filename().stem().string();
-						if (shortName__.compare("a@00026") != 0)
-						{
-							continue;
-						}
 						LOG_OUT << thisFilename;
 						std::stringstream ss;
 						std::string aline;
@@ -859,42 +916,12 @@ namespace surf
 						cv::Mat rayDistance = cv::Mat::ones(mask.size(), CV_32FC1) * -1;
 						const Eigen::Matrix3f R = Rt.block(0, 0, 3, 3);
 						const Eigen::Matrix4f KRt = thisCamera.intr * Rt;
-						std::vector<std::int8_t> visualFace(this->faces.cols(), 0);
-						Eigen::Vector3f cameraT(Rt(0, 3), Rt(1, 3), Rt(2, 3));
-						{
-#pragma omp parallel for
-							for (int i = 0; i < this->faces.cols(); i++)
-							{
-								const int& va = faces(0, i);//choose the first vertex idx
-								const int& vb = faces(1, i);//choose the first vertex idx
-								const int& vc = faces(2, i);//choose the first vertex idx
-								float a = Rt(0, 3) - this->vertex(0, va);
-								float b = Rt(1, 3) - this->vertex(1, va);
-								float c = Rt(2, 3) - this->vertex(2, va);
-								float dirSignA = a * this->vertex_normal(0, va) + b * this->vertex_normal(1, va) + c * this->vertex_normal(2, va);
-								a = Rt(0, 3) - this->vertex(0, vb);
-								b = Rt(1, 3) - this->vertex(1, vb);
-								c = Rt(2, 3) - this->vertex(2, vb);
-								float dirSignB = a * this->vertex_normal(0, vb) + b * this->vertex_normal(1, vb) + c * this->vertex_normal(2, vb);
-								a = Rt(0, 3) - this->vertex(0, vb);
-								b = Rt(1, 3) - this->vertex(1, vb);
-								c = Rt(2, 3) - this->vertex(2, vb);
-								float dirSignC = a * this->vertex_normal(0, vc) + b * this->vertex_normal(1, vc) + c * this->vertex_normal(2, vc);
-								if (dirSignA > 0&& dirSignB > 0&& dirSignC > 0)
-								{
-									visualFace[i] = 1;
-								}
-								else
-								{
-									visualFace[i] = -1;
-								}
-							}
-						}
+						Eigen::Vector3f cameraT(Rt(0, 3), Rt(1, 3), Rt(2, 3));						
 						std::vector<cv::Vec2i>vertexInImg(this->vertex.cols());
 						std::vector<float>vertexDist(this->vertex.cols());
+						std::vector<bool> vertexInViewInCanvas(this->vertex.cols(), false);
 						{
 							Eigen::Matrix4Xf vertexInView = Rt * this->vertex;
-							std::vector<bool> vertexInViewInCanvas(this->vertex.cols(), false);
 							float fxInv = 1. / this->cameras[thisCameraSn].fx;
 							float fyInv = 1. / this->cameras[thisCameraSn].fy;
 #pragma omp parallel for
@@ -909,27 +936,34 @@ namespace surf
 								}
 							}
 							for (int i = 0; i < this->faces.cols(); i++)
-							{
-								if (visualFace[i] > 0)
+							{								
+								const auto& a = this->faces(0, i);
+								const auto& b = this->faces(1, i);
+								const auto& c = this->faces(2, i);
+								if (vertexInViewInCanvas[a] && vertexInViewInCanvas[b] && vertexInViewInCanvas[c])
 								{
-									const auto& a = this->faces(0, i);
-									const auto& b = this->faces(1, i);
-									const auto& c = this->faces(2, i);
-									if (vertexInViewInCanvas[a] && vertexInViewInCanvas[b] && vertexInViewInCanvas[c])
+									const cv::Vec2i& uv0 = vertexInImg[a];
+									const cv::Vec2i& uv1 = vertexInImg[b];
+									const cv::Vec2i& uv2 = vertexInImg[c];
+									int minX = (std::min)((std::min)(uv0[0], uv1[0]), uv2[0]);
+									int minY = (std::min)((std::min)(uv0[1], uv1[1]), uv2[1]);
+									int maxX = (std::max)((std::max)(uv0[0], uv1[0]), uv2[0]);
+									int maxY = (std::max)((std::max)(uv0[1], uv1[1]), uv2[1]);
+									float nearestDist = (std::min)((std::min)(vertexDist[a], vertexDist[b]), vertexDist[c]);
+									for (int r_ = minY; r_ <= maxY; r_++)
 									{
-										const cv::Vec2i& uv0 = vertexInImg[a];
-										const cv::Vec2i& uv1 = vertexInImg[b];
-										const cv::Vec2i& uv2 = vertexInImg[c];
-										std::list<cv::Vec2i> trianglePixel = triangle(uv0, uv1, uv2);
-										for (const auto& d : trianglePixel)
+										for (int c_ = minX; c_ <= maxX; c_++)
 										{
-											float& dist = rayDistance.ptr<float>(d[1])[d[0]];
-											if (dist<0 || dist>vertexDist[a])
+											if (mask.ptr<uchar>(r_)[c_] > 0)
 											{
-												dist = vertexDist[a];
+												float& dist = rayDistance.ptr<float>(r_)[c_];
+												if (dist<0 || dist>nearestDist)
+												{
+													dist = nearestDist;
+												}
 											}
 										}
-									}
+									} 
 								}
 							}
 						}
@@ -989,17 +1023,17 @@ namespace surf
 						{
 							Eigen::Vector3f pixelDir = Eigen::Vector3f(imgDirs.at<cv::Vec3f>(r, c)[0], imgDirs.at<cv::Vec3f>(r, c)[1], imgDirs.at<cv::Vec3f>(r, c)[2]);
 							std::uint32_t imgPixelPos = ImgXyToPosEncode(c, r, camera.width);
-							for (int i = 0; ; i++)
+							for (int i = 0;; i++)
 							{
 								{
-									Eigen::Vector3f p = (rayDist - i * rayStepUnit) * pixelDir;
+									Eigen::Vector3f p0 = (rayDist - i * rayStepUnit) * pixelDir;
+									Eigen::Vector4f p = Rtinv*Eigen::Vector4f(p0[0], p0[1], p0[2], 1);
 									if (p[0] < this->targetMinBorderX || p[1] < this->targetMinBorderY || p[2] < this->targetMinBorderZ
 										|| p[0] >= this->targetMaxBorderX || p[1] >= this->targetMaxBorderY || p[2] >= this->targetMaxBorderZ)
 									{
 										continue;
 									}
-									Eigen::Vector3f p1 = Rinv * p + tinv;
-									XyzToGridXYZ(p1[0], p1[1], p1[2], this->targetMinBorderX, this->targetMinBorderY, this->targetMinBorderZ, this->gridUnitInv, gridX, gridY, gridZ);
+									XyzToGridXYZ(p[0], p[1], p[2], this->targetMinBorderX, this->targetMinBorderY, this->targetMinBorderZ, this->gridUnitInv, gridX, gridY, gridZ);
 									GridXyzToPosEncode(gridX, gridY, gridZ, this->resolutionX, this->resolutionXY, posEncode);
 									pixelGridBelong_map[imgPixelPos].emplace(posEncode);
 								}
@@ -1008,14 +1042,14 @@ namespace surf
 									break;
 								}
 								{
-									Eigen::Vector3f p = (rayDist + i * rayStepUnit) * pixelDir;
+									Eigen::Vector3f p0 = (rayDist + i * rayStepUnit) * pixelDir;
+									Eigen::Vector4f p = Rtinv * Eigen::Vector4f(p0[0], p0[1], p0[2], 1);
 									if (p[0] < this->targetMinBorderX || p[1] < this->targetMinBorderY || p[2] < this->targetMinBorderZ
 										|| p[0] >= this->targetMaxBorderX || p[1] >= this->targetMaxBorderY || p[2] >= this->targetMaxBorderZ)
 									{
 										continue;
 									}
-									Eigen::Vector3f p1 = Rinv * p + tinv;
-									XyzToGridXYZ(p1[0], p1[1], p1[2], this->targetMinBorderX, this->targetMinBorderY, this->targetMinBorderZ, this->gridUnitInv, gridX, gridY, gridZ);
+									XyzToGridXYZ(p[0], p[1], p[2], this->targetMinBorderX, this->targetMinBorderY, this->targetMinBorderZ, this->gridUnitInv, gridX, gridY, gridZ);
 									GridXyzToPosEncode(gridX, gridY, gridZ, this->resolutionX, this->resolutionXY, posEncode);
 									pixelGridBelong_map[imgPixelPos].emplace(posEncode);
 								}
