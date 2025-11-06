@@ -190,6 +190,7 @@
     <ClCompile Include="MarchCube.cpp" />
     <ClCompile Include="maskSynthesis.cpp" />
     <ClCompile Include="misc.cpp" />
+    <ClCompile Include="mrf.cpp" />
     <ClCompile Include="opencvTools.cpp" />
     <ClCompile Include="pips2.cpp" />
     <ClCompile Include="pose.cpp" />
@@ -234,6 +235,7 @@
     <ClInclude Include="maskSynthesis.h" />
     <ClInclude Include="matrix.h" />
     <ClInclude Include="misc.h" />
+    <ClInclude Include="mrf.h" />
     <ClInclude Include="opencvTools.h" />
     <ClInclude Include="pips2.h" />
     <ClInclude Include="pose.h" />

@@ -1,7 +1,7 @@
+#include "marchCube.h"
 #include <filesystem>
 #include <fstream>
 #include <stdint.h>
-#include "marchCube.h"
 #include "log.h"
 
 

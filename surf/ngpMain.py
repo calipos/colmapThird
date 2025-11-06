@@ -73,13 +73,13 @@ class Trainer(object):
             B, N, _ = featId.shape
             sigma, colors = self.surfmodel(featId, dirEncode)
             loss0 = self.criterion(rgb, colors).sum()# /B/3
-            loss1 = (-(sigma-0.5)**2).sum()#/B/N
-            loss = loss0+loss1
+            # loss1 = (-(sigma-0.5)**2).sum()#/B/N
+            loss = loss0#+loss1
             loss.backward()
             self.optimizer.step()
             if self.global_step % 2 == 0:
                 showLoss0 = loss0.detach()/B/3#loss0.detach().sum()/B
-                showLoss1 = loss1.detach()/B/N
+                showLoss1 = 0#loss1.detach()/B/N
                 # showLoss2 = loss2.detach()/B
                 print(
                     f"batch={B}, loss0={showLoss0}, loss1={showLoss1}")
@@ -171,7 +171,7 @@ def surfPtsConstruct(opt,trainDataPath,modelPath,outPath):
         pts[i, 0], pts[i, 1], pts[i, 2] = surfdata.posEncodeToXyz(pos)
     np.savetxt(outPath, pts, delimiter=' ')
 if __name__ == '__main__':
-    # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     device = torch.device('cpu')
     dataload_num_workers =4 
     if device == torch.device('cpu'):
@@ -181,12 +181,11 @@ if __name__ == '__main__':
         'max_epochs': 100, 
         'batch': 512000, 
            'dataload_num_workers': dataload_num_workers,
-        'gridLevelCnt':4,
+        'gridLevelCnt':6,
         'eachGridFeatDim':4}
-    # trainer = Trainer(opt)
-    # trainer.train()
-    # surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/22.pt', 'surf/asd.pts')
-    collectAllPotentialPts(opt, 'surf/trainTerm1.dat',
-                           'surf/22.pt', 'surf/asd.pts')
+    trainer = Trainer(opt)
+    trainer.train()
+    # surfPtsConstruct(opt, 'surf/trainTerm1.dat','surf/15.pt', 'surf/asd.pts')
+    # collectAllPotentialPts(opt, 'surf/trainTerm1.dat','surf/22.pt', 'surf/asd.pts')
 
 

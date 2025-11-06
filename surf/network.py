@@ -7,14 +7,14 @@ class SurfNetwork(nn.Module):
     def __init__(self,
                  device,
                  maxGridFeatId=0,
-                 gridFeatLevelCnt=4,
+                 gridFeatLevelCnt=2,
                  eachGridFeatDim=4,
                  num_layers=2,
                  hidden_dim=4,
                  geo_feat_dim=3,
                  in_dim_dir=16,
                  num_layers_color=3,
-                 hidden_dim_color=32,
+                 hidden_dim_color=64,
                  **kwargs,
                  ):
         super().__init__()
@@ -67,12 +67,14 @@ class SurfNetwork(nn.Module):
         # sigma
         B, N, _ = x.shape
         feat = torch.index_select(
-            self.gridWeight, dim=0, index=x.reshape(-1)).reshape(B, N*4, -1)
+            self.gridWeight, dim=0, index=x.reshape(-1)).reshape(B, N*self.gridFeatLevelCnt, -1)
         sigma1234 = feat[..., 0].reshape(B, N, -1)
         sigma1 = torch.clip(sigma1234[..., 0], min=0.0, max=1.0).reshape(B, N, 1)
         sigma2 = torch.clip(sigma1234[..., 1], min=0.0, max=1.0).reshape(B, N, 1)
         sigma3 = torch.clip(sigma1234[..., 2], min=0.0, max=1.0).reshape(B, N, 1)
-        sigma4 = torch.clip(sigma1234[..., 3], min=0.0, max=1.0).reshape(B, N, 1)
+        sigma4 = torch.clip(sigma1234[..., 3],min=0.0, max=1.0).reshape(B, N, 1)
+        sigma5 = torch.clip(sigma1234[..., 4],min=0.0, max=1.0).reshape(B, N, 1)
+        sigma6 = torch.clip(sigma1234[..., 5],min=0.0, max=1.0).reshape(B, N, 1)
         # sigma1 = 1-torch.exp(-10*sigma1234[..., 0]*sigma1234[..., 0])
         # sigma2 = 1-torch.exp(-10*sigma1234[..., 1]*sigma1234[..., 1])
         # sigma3 = 1-torch.exp(-10*sigma1234[..., 2]*sigma1234[..., 2])
@@ -80,7 +82,9 @@ class SurfNetwork(nn.Module):
 
 
   
-        sigma0 = (sigma1*sigma2*sigma3*sigma4+1e-4)
+        # sigma0 = (sigma1*sigma2*sigma3*sigma4+1e-4)
+        sigma0 = (sigma1*sigma2*sigma3*sigma4*sigma5*sigma6+1e-4)
+        # sigma0 = (sigma1*sigma2+1e-4)
 
         # sigma = torch.softmax(sigma1*sigma2*sigma3*sigma4,dim=1)
         maxValue,maxIdx =torch.max(sigma0, axis=1,keepdim=True)

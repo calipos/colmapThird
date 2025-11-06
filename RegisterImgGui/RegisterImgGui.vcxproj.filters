@@ -156,6 +156,9 @@
     <ClCompile Include="surfData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="mrf.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">
@@ -282,6 +285,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="marchCube.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mrf.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

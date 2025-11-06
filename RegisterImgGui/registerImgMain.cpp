@@ -33,9 +33,10 @@ extern ImU32 getImguiColor();
 extern int test_writelabel();
 extern int test_sdf();
 extern int test_surf();
+extern int test_mrf();
 int main(int, char**)
 {
-    return test_surf();
+    return test_mrf();
     //return test_pips2();
     //return test_sam2();
     //return test_incremental();
