@@ -427,7 +427,7 @@ namespace mrf
 				dataOut[viewId] = View();
 				int deserialLength = dataOut[viewId].deserialization(&data[pos]); pos += deserialLength;
 			}
-			return 0;
+			return pos;
 		}
 		cv::Mat getImgWorldDir(const Camera& c)
 		{
@@ -938,6 +938,7 @@ namespace mrf
 					pos += sizeof(uchar);
 				}
 			}
+			ret.insert(ret.end(), gridInViewsAndRgbset.begin(), gridInViewsAndRgbset.end());
 			return ret;
 		}
 		bool serialization(const std::filesystem::path&path)const
@@ -997,22 +998,88 @@ namespace mrf
 				this->gridRgbset[gridId].resize(this->views.size());
 				for (int j = 0; j < this->views.size(); j++)
 				{
-					this->gridInViews[gridId][i] = *(std::uint8_t*)&dat[pos];
+					this->gridInViews[gridId][j] = *(std::uint8_t*)&dat[pos];
 					pos += sizeof(std::uint8_t);
 				}
 				for (int j = 0; j < this->views.size(); j++)
 				{
-					this->gridRgbset[gridId][i][0] = *(uchar*)&dat[pos];
+					this->gridRgbset[gridId][j][0] = *(uchar*)&dat[pos];
 					pos += sizeof(uchar);
-					this->gridRgbset[gridId][i][1] = *(uchar*)&dat[pos];
+					this->gridRgbset[gridId][j][1] = *(uchar*)&dat[pos];
 					pos += sizeof(uchar);
-					this->gridRgbset[gridId][i][2] = *(uchar*)&dat[pos];
+					this->gridRgbset[gridId][j][2] = *(uchar*)&dat[pos];
 					pos += sizeof(uchar);
 				}
 			}
-
-
 			return true;
+		}
+		int pickColorScoreMax()const
+		{
+			for (auto& v : this->views)
+			{
+				const auto& cameraId = v.second.cameraId;
+				auto& thisCamera = this->cameras.at(cameraId);
+				const auto&thisView = v.second;
+				for (const auto&pixel: thisView.pixelGridBelong)
+				{
+					const std::uint32_t& pixelId = pixel.first;
+					const std::vector<std::uint32_t>& gridsId = pixel.second;
+					for (size_t i = 0; i < gridsId.size(); i++)
+					{
+						const std::vector<std::uint8_t>&inWhichViews = gridInViews.at(gridsId[i]);
+						if (inWhichViews.size()!= this->views.size())
+						{
+							LOG_ERR_OUT << "inWhichViews.size()!= this->views.size()";
+							exit(-1);
+						}
+						float  colorScore = getColorScore(inWhichViews, gridRgbset.at(gridsId[i]));
+					}					
+				}				
+			}
+			return 0;
+		}
+
+		static std::pair<float, float> calVarStdev(std::vector<float> vecNums) {
+			std::pair<float, float> res;
+			float sumNum = accumulate(vecNums.begin(), vecNums.end(), 0.0);
+			float mean = sumNum / vecNums.size(); // 计算均值
+			float accum = 0.0;
+			for_each(vecNums.begin(), vecNums.end(), [&](const float d) {
+				accum += (d - mean) * (d - mean);
+				});
+			float variance = accum / vecNums.size(); // 计算方差
+			res.first = mean;
+			res.second = variance;
+			return res;
+		}
+		static float getColorScore(const std::vector<std::uint8_t>& inWhichViews, const std::vector<cv::Vec3b>& rgbSet)
+		{
+			std::vector<float>redSet;
+			std::vector<float>greenSet;
+			std::vector<float>blueSet; 
+			redSet.reserve(inWhichViews.size());
+			greenSet.reserve(inWhichViews.size());
+			blueSet.reserve(inWhichViews.size());
+			int cnt = 0;
+			for (int i = 0; i < inWhichViews.size(); i++)
+			{
+				if (inWhichViews[i]>0)
+				{
+					cnt += 1;
+					redSet.emplace_back(rgbSet[i][0]);
+					greenSet.emplace_back(rgbSet[i][1]);
+					blueSet.emplace_back(rgbSet[i][2]);
+				}
+			}
+			if (cnt<=3)
+			{
+				return 0;
+			}
+			std::pair<float, float>redMeanVar = calVarStdev(redSet);
+			std::pair<float, float>greenMeanVar = calVarStdev(greenSet);
+			std::pair<float, float>blueMeanVar = calVarStdev(blueSet);
+
+			return 0;
 		}
 	private:
 		std::filesystem::path dataDir;
@@ -1044,9 +1111,10 @@ int test_mrf()
 {
 	float gridResolution = 0.03;//need measured before
 	mrf::GridConfig gridConfig = { 8,gridResolution };
-	mrf::Mrf asd("../data/a/result", "../data/a/result/dense.obj", gridConfig);
-	asd.serialization("../surf/d.dat");
+	//mrf::Mrf asd("../data/a/result", "../data/a/result/dense.obj", gridConfig);
+	//asd.serialization("../surf/d.dat");
 	mrf::Mrf asd2;
 	asd2.reload("../surf/d.dat");
+	asd2.pickColorScoreMax();
 	return 0;
 }
