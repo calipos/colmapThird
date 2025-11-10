@@ -1,3 +1,4 @@
+#include <functional>
 #include <numeric>
 #include <fstream>
 #include <filesystem>
@@ -194,7 +195,19 @@ namespace mrf
 		faces.transposeInPlace();
 		return true;
 	}
-
+	std::pair<float, float> calVarStdev(std::vector<float> vecNums) {
+		std::pair<float, float> res;
+		float sumNum = accumulate(vecNums.begin(), vecNums.end(), 0.0);
+		float mean = sumNum / vecNums.size(); // 计算均值
+		float accum = 0.0;
+		for_each(vecNums.begin(), vecNums.end(), [&](const float d) {
+			accum += (d - mean) * (d - mean);
+			});
+		float variance = accum / vecNums.size(); // 计算方差
+		res.first = mean;
+		res.second = variance;
+		return res;
+	}
 	struct Camera
 	{
 		Camera() {}
@@ -821,9 +834,9 @@ namespace mrf
 					sortWithDists[i].second = d2;
 					PosEncodeToGridXyz(d2, this->resolutionX, this->resolutionXY, gridX, gridY, gridZ);
 					cv::Point3f gridCentor;
-					gridCentor.x = gridX * this->gridResolution + this->targetMinBorderX;
-					gridCentor.y = gridY * this->gridResolution + this->targetMinBorderY;
-					gridCentor.z = gridZ * this->gridResolution + this->targetMinBorderZ;
+					gridCentor.x = (0.5+gridX) * this->gridResolution + this->targetMinBorderX;
+					gridCentor.y = (0.5+gridY) * this->gridResolution + this->targetMinBorderY;
+					gridCentor.z = (0.5+gridZ) * this->gridResolution + this->targetMinBorderZ;
 					sortWithDists[i].first = cv::norm(cameraCenter - gridCentor);
 					i++;
 				}
@@ -1013,45 +1026,58 @@ namespace mrf
 			}
 			return true;
 		}
-		int pickColorScoreMax()const
+		int figurePixelColorScore(const std::function<float(const std::vector<std::uint8_t>& inWhichViews, const std::vector<cv::Vec3b>& rgbSet)>&scoreFun)const
 		{
+			
+
+
+			std::unordered_map<std::uint32_t, float>gridColorScore;
+			for (const auto&d:this->gridInViews)
+			{
+				const auto& gridId = d.first;
+				const std::vector<std::uint8_t>& inWhichViews = gridInViews.at(gridId);
+				const std::vector<cv::Vec3b>& rgbSet = gridRgbset.at(gridId);
+				gridColorScore[gridId] = scoreFun(inWhichViews, rgbSet);
+			}
+			std::unordered_set<std::uint32_t>pickedMaxColorScoreGrids;
 			for (auto& v : this->views)
 			{
 				const auto& cameraId = v.second.cameraId;
 				auto& thisCamera = this->cameras.at(cameraId);
-				const auto&thisView = v.second;
-				for (const auto&pixel: thisView.pixelGridBelong)
+				const auto& thisView = v.second;
+				for (const auto& pixel : thisView.pixelGridBelong)
 				{
 					const std::uint32_t& pixelId = pixel.first;
-					const std::vector<std::uint32_t>& gridsId = pixel.second;
-					for (size_t i = 0; i < gridsId.size(); i++)
+					const std::vector<std::uint32_t>& gridsId = pixel.second;					
+					std::uint32_t maxColorScoreGrid = gridsId[0];
+					float maxColorScoreGridColorScore = gridColorScore[maxColorScoreGrid];
+					for (size_t i = 1; i < gridsId.size(); i++)
 					{
-						const std::vector<std::uint8_t>&inWhichViews = gridInViews.at(gridsId[i]);
-						if (inWhichViews.size()!= this->views.size())
+						const std::uint32_t& thisGridId = gridsId[i];
+						const float& thisGridColorScore = gridColorScore[thisGridId];
+						if (thisGridColorScore> maxColorScoreGridColorScore)
 						{
-							LOG_ERR_OUT << "inWhichViews.size()!= this->views.size()";
-							exit(-1);
+							maxColorScoreGridColorScore = thisGridColorScore;
+							maxColorScoreGrid = thisGridId;
 						}
-						float  colorScore = getColorScore(inWhichViews, gridRgbset.at(gridsId[i]));
-					}					
-				}				
+					}
+					pickedMaxColorScoreGrids.insert(maxColorScoreGrid);
+				}
 			}
+			std::fstream fout("../surf/123.txt", std::ios::out);
+			for (const auto&d: pickedMaxColorScoreGrids)
+			{
+				PosEncodeToGridXyz(d, this->resolutionX, this->resolutionXY, gridX, gridY, gridZ);
+				float x = (0.5 + gridX) * this->gridResolution + this->targetMinBorderX;
+				float y = (0.5 + gridY) * this->gridResolution + this->targetMinBorderY;
+				float z = (0.5 + gridZ) * this->gridResolution + this->targetMinBorderZ;
+				fout << x << " " << y << " " << z << std::endl;
+			}
+			fout.close();
 			return 0;
-		}
+		} 
 
-		static std::pair<float, float> calVarStdev(std::vector<float> vecNums) {
-			std::pair<float, float> res;
-			float sumNum = accumulate(vecNums.begin(), vecNums.end(), 0.0);
-			float mean = sumNum / vecNums.size(); // 计算均值
-			float accum = 0.0;
-			for_each(vecNums.begin(), vecNums.end(), [&](const float d) {
-				accum += (d - mean) * (d - mean);
-				});
-			float variance = accum / vecNums.size(); // 计算方差
-			res.first = mean;
-			res.second = variance;
-			return res;
-		}
+		 
 		static float getColorScore(const std::vector<std::uint8_t>& inWhichViews, const std::vector<cv::Vec3b>& rgbSet)
 		{
 			std::vector<float>redSet;
@@ -1079,7 +1105,7 @@ namespace mrf
 			std::pair<float, float>greenMeanVar = calVarStdev(greenSet);
 			std::pair<float, float>blueMeanVar = calVarStdev(blueSet);
 
-			return 0;
+			return redMeanVar.second + greenMeanVar.second + blueMeanVar.second ;
 		}
 	private:
 		std::filesystem::path dataDir;
@@ -1115,6 +1141,7 @@ int test_mrf()
 	//asd.serialization("../surf/d.dat");
 	mrf::Mrf asd2;
 	asd2.reload("../surf/d.dat");
-	asd2.pickColorScoreMax();
+
+	asd2.figurePixelColorScore(mrf::Mrf::getColorScore);
 	return 0;
 }
