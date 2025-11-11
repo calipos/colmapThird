@@ -208,6 +208,7 @@ namespace mrf
 		res.second = variance;
 		return res;
 	}
+
 	struct Camera
 	{
 		Camera() {}
@@ -478,6 +479,7 @@ namespace mrf
 		}
 		cv::Mat imgWorldDir;
 	};
+
 	class Mrf
 	{
 #define XyzToGridXYZ(x,y,z,xStart,yStart,zStart,gridUnitInv,gridX,gridY,gridZ) \
@@ -1026,11 +1028,36 @@ namespace mrf
 			}
 			return true;
 		}
-		int figurePixelColorScore(const std::function<float(const std::vector<std::uint8_t>& inWhichViews, const std::vector<cv::Vec3b>& rgbSet)>&scoreFun)const
+		bool saveGrid(const std::filesystem::path& path, std::unordered_map<std::uint32_t, float>& gridScores)
 		{
-			
-
-
+			std::vector<std::uint32_t>gridIds(gridScores.size());
+			std::vector<float>scores(gridScores.size());
+			std::uint32_t i = 0;
+			for (const auto& d : gridScores)
+			{
+				gridIds[i] = d.first;
+				scores[i] = d.second;
+				++i;
+			}
+			std::fstream fout(path, std::ios::out | std::ios::binary);
+			fout.write((char*)&i, sizeof(std::uint32_t));
+			fout.write((char*)&gridIds[0], sizeof(std::uint32_t) * gridIds.size());
+			fout.write((char*)&scores[0], sizeof(float) * gridIds.size());
+			fout.close();
+			std::fstream fPtsout(path.parent_path()/"123.txt", std::ios::out);
+			for (const auto& d : gridScores)
+			{
+				PosEncodeToGridXyz(d.first, this->resolutionX, this->resolutionXY, gridX, gridY, gridZ);
+				float x = (0.5 + gridX) * this->gridResolution + this->targetMinBorderX;
+				float y = (0.5 + gridY) * this->gridResolution + this->targetMinBorderY;
+				float z = (0.5 + gridZ) * this->gridResolution + this->targetMinBorderZ;
+				fPtsout << x << " " << y << " " << z <<" "<<d.second << std::endl;
+			}
+			fPtsout.close();
+			return true;
+		}
+		int figurePixelColorScore(const std::function<float(const std::vector<std::uint8_t>& inWhichViews, const std::vector<cv::Vec3b>& rgbSet)>&scoreFun)const
+		{			
 			std::unordered_map<std::uint32_t, float>gridColorScore;
 			for (const auto&d:this->gridInViews)
 			{
@@ -1076,7 +1103,210 @@ namespace mrf
 			fout.close();
 			return 0;
 		} 
+		int findNeightDist(std::unordered_map<std::uint32_t, std::unordered_map<std::uint32_t, unsigned char>>&neightDist, const int& distThre)const
+		{
+			if (distThre>3)
+			{
+				LOG_ERR_OUT << "not support";
+				return -1;
+			}
+			std::vector<int> shifts;
+			std::vector<unsigned char> shiftDists;
+			shifts.reserve(32);
+			shiftDists.reserve(32);
+			switch (distThre)
+			{
+			case 1:
+				shifts.emplace_back(-this->resolutionXY);	   shiftDists.emplace_back(1);
+				shifts.emplace_back(-1);					   shiftDists.emplace_back(1);
+				shifts.emplace_back(-this->resolutionX);	   shiftDists.emplace_back(1);
+				shifts.emplace_back(1);						   shiftDists.emplace_back(1);
+				shifts.emplace_back(this->resolutionX);		   shiftDists.emplace_back(1);
+				shifts.emplace_back(this->resolutionXY);	   shiftDists.emplace_back(1);
+				break;
+			case 2:
+				shifts.emplace_back(-this->resolutionXY - this->resolutionX);	  shiftDists.emplace_back(3-2);
+				shifts.emplace_back(-this->resolutionXY - 1);					  shiftDists.emplace_back(3-2);
+				shifts.emplace_back(-this->resolutionXY);						  shiftDists.emplace_back(3-1);
+				shifts.emplace_back(-this->resolutionXY + 1);					  shiftDists.emplace_back(3-2);
+				shifts.emplace_back(-this->resolutionXY + this->resolutionX);	  shiftDists.emplace_back(3-2);
+				shifts.emplace_back(-1 - this->resolutionX);					  shiftDists.emplace_back(3-2);
+				shifts.emplace_back(-this->resolutionX);						  shiftDists.emplace_back(3-1);
+				shifts.emplace_back(-this->resolutionX + 1);					  shiftDists.emplace_back(3-2);
+				shifts.emplace_back(-1);										  shiftDists.emplace_back(3-1);
+				shifts.emplace_back(1);											  shiftDists.emplace_back(3-1);
+				shifts.emplace_back(-1 + this->resolutionX);					  shiftDists.emplace_back(3-2);
+				shifts.emplace_back(this->resolutionX);							  shiftDists.emplace_back(3-1);
+				shifts.emplace_back(this->resolutionX + 1);						  shiftDists.emplace_back(3-2);
+				shifts.emplace_back(this->resolutionXY - this->resolutionX);	  shiftDists.emplace_back(3-2);
+				shifts.emplace_back(this->resolutionXY - 1);					  shiftDists.emplace_back(3-2);
+				shifts.emplace_back(this->resolutionXY);						  shiftDists.emplace_back(3-1);
+				shifts.emplace_back(this->resolutionXY + 1);					  shiftDists.emplace_back(3-2);
+				shifts.emplace_back(this->resolutionXY + this->resolutionX);	  shiftDists.emplace_back(3-2);
+				break;
+			case 3:
+				shifts.emplace_back(-this->resolutionXY - 1 - this->resolutionX);	shiftDists.emplace_back(4-3);
+				shifts.emplace_back(-this->resolutionXY - this->resolutionX);		shiftDists.emplace_back(4-2);
+				shifts.emplace_back(-this->resolutionXY - this->resolutionX + 1);	shiftDists.emplace_back(4-3);
+				shifts.emplace_back(-this->resolutionXY - 1);						shiftDists.emplace_back(4-2);
+				shifts.emplace_back(-this->resolutionXY);							shiftDists.emplace_back(4-1);
+				shifts.emplace_back(-this->resolutionXY + 1);						shiftDists.emplace_back(4-2);
+				shifts.emplace_back(-this->resolutionXY - 1 + this->resolutionX);	shiftDists.emplace_back(4-3);
+				shifts.emplace_back(-this->resolutionXY + this->resolutionX);		shiftDists.emplace_back(4-2);
+				shifts.emplace_back(-this->resolutionXY + this->resolutionX + 1);	shiftDists.emplace_back(4-3);
+				shifts.emplace_back(-1 - this->resolutionX);						shiftDists.emplace_back(4-2);
+				shifts.emplace_back(-this->resolutionX);							shiftDists.emplace_back(4-1);
+				shifts.emplace_back(-this->resolutionX + 1);						shiftDists.emplace_back(4-2);
+				shifts.emplace_back(-1);											shiftDists.emplace_back(4-1);
+				shifts.emplace_back(1);												shiftDists.emplace_back(4-1);
+				shifts.emplace_back(-1 + this->resolutionX);						shiftDists.emplace_back(4-2);
+				shifts.emplace_back(this->resolutionX);								shiftDists.emplace_back(4-1);
+				shifts.emplace_back(this->resolutionX + 1);							shiftDists.emplace_back(4-2);
+				shifts.emplace_back(this->resolutionXY - 1 - this->resolutionX);	shiftDists.emplace_back(4-3);
+				shifts.emplace_back(this->resolutionXY - this->resolutionX);		shiftDists.emplace_back(4-2);
+				shifts.emplace_back(this->resolutionXY - this->resolutionX + 1);	shiftDists.emplace_back(4-3);
+				shifts.emplace_back(this->resolutionXY - 1);						shiftDists.emplace_back(4-2);
+				shifts.emplace_back(this->resolutionXY);							shiftDists.emplace_back(4-1);
+				shifts.emplace_back(this->resolutionXY + 1);						shiftDists.emplace_back(4-2);
+				shifts.emplace_back(this->resolutionXY - 1 + this->resolutionX);	shiftDists.emplace_back(4-3);
+				shifts.emplace_back(this->resolutionXY + this->resolutionX);		shiftDists.emplace_back(4-2);
+				shifts.emplace_back(this->resolutionXY + this->resolutionX + 1);	shiftDists.emplace_back(4-3);
+				break;
+			default:
+				break;
+			}
 
+
+			for (const auto&d:this->gridInViews)
+			{
+				const std::uint32_t& thisGridId = d.first;
+				for (int i = 0; i < shifts.size(); i++)
+				{
+					std::uint32_t neightId = thisGridId;
+					if (shifts[i]<0 && thisGridId> abs(shifts[i]))
+					{
+						neightId = thisGridId - abs(shifts[i]);
+					}
+					else if (shifts[i]>= 0 && thisGridId< thisGridId + shifts[i])
+					{
+						neightId = thisGridId + shifts[i];
+					} 
+					if (thisGridId!= neightId)
+					{
+						neightDist[thisGridId][neightId] = shiftDists[i];
+					}
+				}
+			}
+
+
+
+			return 0;
+		}
+		int mrf1()
+		{
+			std::filesystem::path outDir = "../surf";
+			const auto& scoreFun = mrf::Mrf::getColorScore;
+			std::unordered_map<std::uint32_t, float>gridColorScore;
+			for (const auto& d : this->gridInViews)
+			{
+				const auto& gridId = d.first;
+				const std::vector<std::uint8_t>& inWhichViews = gridInViews.at(gridId);
+				const std::vector<cv::Vec3b>& rgbSet = gridRgbset.at(gridId);
+				gridColorScore[gridId] = scoreFun(inWhichViews, rgbSet);
+			}
+ 
+
+			std::unordered_map<std::uint32_t, std::unordered_map<std::uint32_t, unsigned char>> neightDist;
+			findNeightDist(neightDist,3);
+			std::unordered_map<std::uint32_t, float>gridAccumScore;
+			{
+				//init
+				for (const auto&d: neightDist)
+				{
+					gridAccumScore[d.first] = 0.;
+				}
+			}
+			int iterCnt = 10;
+			for (int iter = 0; iter < iterCnt; iter++)
+			{
+				LOG_OUT << "iter = " << iter;
+				for (auto& v : this->views)
+				{
+					const auto& cameraId = v.second.cameraId;
+					auto& thisCamera = this->cameras.at(cameraId);
+					const auto& thisView = v.second;
+					for (const auto& pixel : thisView.pixelGridBelong)
+					{
+						const std::uint32_t& pixelId = pixel.first;
+						const std::vector<std::uint32_t>& gridsId = pixel.second;
+						std::uint32_t maxColorScoreGrid = gridsId[0];
+						float maxColorScoreGridColorScore = gridColorScore[maxColorScoreGrid] + gridAccumScore[maxColorScoreGrid];
+						for (size_t i = 1; i < gridsId.size(); i++)
+						{
+							const std::uint32_t& thisGridId = gridsId[i];
+							const float& thisGridColorScore = gridColorScore[thisGridId] + gridAccumScore[thisGridId];
+							if (thisGridColorScore > maxColorScoreGridColorScore)
+							{
+								maxColorScoreGridColorScore = thisGridColorScore;
+								maxColorScoreGrid = thisGridId;
+							}
+						}
+						const std::unordered_map<std::uint32_t, unsigned char>& neighbs = neightDist[maxColorScoreGrid];
+						for (const auto& neighb: neighbs)
+						{
+							if (thisView.pixelGridBelong.find(neighb.first)== thisView.pixelGridBelong.end())
+							{
+								gridAccumScore[maxColorScoreGrid] += neighb.second * 0.01;
+							}
+						}
+					}
+				}
+			}
+			for (const auto& d : neightDist)
+			{
+				gridAccumScore[d.first] += gridColorScore[d.first];
+			}
+
+
+
+			
+			for (const auto& v : this->views)
+			{				
+				const auto& cameraId = v.second.cameraId;
+				auto& thisCamera = this->cameras.at(cameraId);
+				const auto& thisView = v.second;
+				std::fstream fout1(outDir / (std::to_string(thisView.viewId) + ".txt"), std::ios::out);
+				for (const auto& pixel : thisView.pixelGridBelong)
+				{
+					const std::uint32_t& pixelId = pixel.first;
+					const std::vector<std::uint32_t>& gridsId = pixel.second;
+					std::uint32_t maxColorScoreGrid = gridsId[0];
+					float maxColorScoreGridColorScore = gridAccumScore[maxColorScoreGrid];
+					for (size_t i = 1; i < gridsId.size(); i++)
+					{
+						const std::uint32_t& thisGridId = gridsId[i];
+						const float& thisGridColorScore = gridAccumScore[thisGridId];
+						if (thisGridColorScore > maxColorScoreGridColorScore)
+						{
+							maxColorScoreGridColorScore = thisGridColorScore;
+							maxColorScoreGrid = thisGridId;
+						}
+					}
+					PosEncodeToGridXyz(maxColorScoreGrid, this->resolutionX, this->resolutionXY, gridX, gridY, gridZ);
+					float x = (0.5 + gridX) * this->gridResolution + this->targetMinBorderX;
+					float y = (0.5 + gridY) * this->gridResolution + this->targetMinBorderY;
+					float z = (0.5 + gridZ) * this->gridResolution + this->targetMinBorderZ;
+					fout1 << x << " " << y << " " << z << " " << maxColorScoreGridColorScore << std::endl;
+				}
+				fout1.close();
+			}
+
+
+			saveGrid(outDir /"grid.g", gridAccumScore);
+
+
+			return 0;
+		}
 		 
 		static float getColorScore(const std::vector<std::uint8_t>& inWhichViews, const std::vector<cv::Vec3b>& rgbSet)
 		{
@@ -1142,6 +1372,7 @@ int test_mrf()
 	mrf::Mrf asd2;
 	asd2.reload("../surf/d.dat");
 
-	asd2.figurePixelColorScore(mrf::Mrf::getColorScore);
+	//asd2.figurePixelColorScore(mrf::Mrf::getColorScore);
+	asd2.mrf1();
 	return 0;
 }
