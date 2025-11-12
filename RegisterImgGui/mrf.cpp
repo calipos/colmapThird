@@ -1226,7 +1226,7 @@ namespace mrf
 					gridAccumScore[d.first] = 0.;
 				}
 			}
-			int iterCnt = 10;
+			int iterCnt = 1;
 			for (int iter = 0; iter < iterCnt; iter++)
 			{
 				LOG_OUT << "iter = " << iter;
@@ -1275,7 +1275,9 @@ namespace mrf
 				const auto& cameraId = v.second.cameraId;
 				auto& thisCamera = this->cameras.at(cameraId);
 				const auto& thisView = v.second;
-				std::fstream fout1(outDir / (std::to_string(thisView.viewId) + ".txt"), std::ios::out);
+				cv::Mat mask = tools::loadMask(thisView.maskPath.string());
+				cv::Mat maskPts = cv::Mat::zeros(mask.size(), CV_32FC3);
+				//std::fstream fout1(outDir / (std::to_string(thisView.viewId) + ".txt"), std::ios::out);
 				for (const auto& pixel : thisView.pixelGridBelong)
 				{
 					const std::uint32_t& pixelId = pixel.first;
@@ -1293,12 +1295,17 @@ namespace mrf
 						}
 					}
 					PosEncodeToGridXyz(maxColorScoreGrid, this->resolutionX, this->resolutionXY, gridX, gridY, gridZ);
+					ImgPixelEncodeToImgXy(pixelId, x_2d, y_2d, mask.cols);
 					float x = (0.5 + gridX) * this->gridResolution + this->targetMinBorderX;
 					float y = (0.5 + gridY) * this->gridResolution + this->targetMinBorderY;
 					float z = (0.5 + gridZ) * this->gridResolution + this->targetMinBorderZ;
-					fout1 << x << " " << y << " " << z << " " << maxColorScoreGridColorScore << std::endl;
+					//fout1 << x << " " << y << " " << z << " " << maxColorScoreGridColorScore << std::endl;
+					maskPts.at<cv::Vec3f>(y_2d, x_2d)[0] = x;
+					maskPts.at<cv::Vec3f>(y_2d, x_2d)[1] = y;
+					maskPts.at<cv::Vec3f>(y_2d, x_2d)[2] = z;
 				}
-				fout1.close();
+				//fout1.close();
+				LOG_OUT;
 			}
 
 
@@ -1371,8 +1378,6 @@ int test_mrf()
 	//asd.serialization("../surf/d.dat");
 	mrf::Mrf asd2;
 	asd2.reload("../surf/d.dat");
-
-	//asd2.figurePixelColorScore(mrf::Mrf::getColorScore);
 	asd2.mrf1();
 	return 0;
 }
