@@ -208,7 +208,174 @@ namespace mrf
 		res.second = variance;
 		return res;
 	}
+	bool generThinMesh(const cv::Mat& mask, const cv::Mat& ptsMat, std::vector<cv::Point3f>& pts, std::vector<cv::Point3i>& faces,const float&thin=0.1)
+	{
+		if (mask.size() !=ptsMat.size())
+		{
+			LOG_ERR_OUT << "mask.size() !=ptsMat.size()";
+			return false;
+		}
+		if (mask.type() != CV_8UC1&& mask.type() != CV_32FC3)
+		{ 
+			LOG_ERR_OUT << "mask.type() != CV_8UC1&& mask.type() != CV_32FC3";
+			return false;
+		}
+		int height = mask.rows;
+		int width = mask.cols;
+		int height_1 = height - 1;
+		int width_1 = width - 1;
+		int fontPtsCnt = cv::countNonZero(mask);
+		pts.clear();
+		pts.reserve(fontPtsCnt*2);
+		std::list<cv::Point3i>faces_;
+		std::list<cv::Point2i>borders;
+		cv::Mat indexMat = cv::Mat::ones(ptsMat.size(), CV_32SC1)*-1;
+		int idx = 0;
+		for (int r = 0; r < height_1; r++)
+		{
+			for (int c = 0; c < width_1; c++)
+			{
+				int r_1 = r + 1;
+				int c_1 = c + 1;
+				const uchar& m_0 = mask.ptr<uchar>(r)[c];
+				const uchar& m_1 = mask.ptr<uchar>(r)[c + 1];
+				const uchar& m_2 = mask.ptr<uchar>(r + 1)[c];
+				const uchar& m_3 = mask.ptr<uchar>(r + 1)[c + 1];
+				if (3 > m_0 + m_1 + m_2 + m_3)
+				{
+					continue;
+				}
+				int& i_0 = indexMat.ptr<int>(r)[c];
+				int& i_1 = indexMat.ptr<int>(r)[c + 1];
+				int& i_2 = indexMat.ptr<int>(r + 1)[c];
+				int& i_3 = indexMat.ptr<int>(r + 1)[c + 1];
+				if (m_0)
+				{
+					if (i_0 < 0)i_0 = idx;
+					pts.emplace_back(ptsMat.at<cv::Vec3f>(r, c));
+					idx += 1;
+				}
+				if (m_1)
+				{
+					if (i_1 < 0)i_1 = idx;
+					pts.emplace_back(ptsMat.at<cv::Vec3f>(r, c + 1)); 
+					idx += 1;
+				}
+				if (m_2)
+				{
+					if (i_2 < 0)i_2 = idx;
+					pts.emplace_back(ptsMat.at<cv::Vec3f>(r + 1, c));
+					idx += 1;
+				}
+				if (m_3)
+				{
+					if (i_3 < 0)i_3 = idx;
+					pts.emplace_back(ptsMat.at<cv::Vec3f>(r + 1, c + 1));
+					idx += 1;
+				}
+				if (!m_0 && m_1 & m_2 && m_3)
+				{
+					faces_.emplace_back(i_1, i_3, i_2);
+					borders.emplace_back(i_2, i_1);
+					if (c_1 == width_1 || 0 == mask.ptr<uchar>(r)[c + 2] + mask.ptr<uchar>(r + 1)[c + 2])
+					{
+						borders.emplace_back(i_1, i_3);
+					}
+					if (r_1 == height_1 || 0 == mask.ptr<uchar>(r + 2)[c] + mask.ptr<uchar>(r + 2)[c + 1])
+					{
+						borders.emplace_back(i_3, i_2);
+					}
+					continue;
+				}
+				if (m_0 && !m_1 & m_2 && m_3)
+				{
+					faces_.emplace_back(i_0, i_3, i_2);
+					borders.emplace_back(i_0, i_3);
+					if (c == 0 || 0 == mask.ptr<uchar>(r)[c - 1] + mask.ptr<uchar>(r + 1)[c - 1])
+					{
+						borders.emplace_back(i_2, i_0);
+					}
+					if (r_1 == height_1 || 0 == mask.ptr<uchar>(r + 2)[c] + mask.ptr<uchar>(r + 2)[c + 1])
+					{
+						borders.emplace_back(i_3, i_2);
+					}
+					continue;
+				}
+				if (m_0 && m_1 & !m_2 && m_3)
+				{
+					faces_.emplace_back(i_0, i_1, i_3);
+					borders.emplace_back(i_3, i_0);
+					if (c_1 == width_1 || 0 == mask.ptr<uchar>(r)[c + 2] + mask.ptr<uchar>(r + 1)[c + 2])
+					{
+						borders.emplace_back(i_1, i_3);
+					}
+					if (r == 0 || 0 == mask.ptr<uchar>(r - 1)[c] + mask.ptr<uchar>(r - 1)[c + 1])
+					{
+						borders.emplace_back(i_0, i_1);
+					}
+					continue;
+				}
+				if (m_0 && m_1 & m_2 && !m_3)
+				{
+					faces_.emplace_back(i_0, i_1, i_2);
+					borders.emplace_back(i_1, i_2);
+					if (c == 0 || 0 == mask.ptr<uchar>(r)[c - 1] + mask.ptr<uchar>(r + 1)[c - 1])
+					{
+						borders.emplace_back(i_2, i_0);
+					}
+					if (r == 0 || 0 == mask.ptr<uchar>(r - 1)[c] + mask.ptr<uchar>(r - 1)[c + 1])
+					{
+						borders.emplace_back(i_0, i_1);
+					}
+					continue;
+				}
+				if (m_0 && m_1 & m_2 && m_3)
+				{
+					faces_.emplace_back(i_0, i_1, i_2);
+					faces_.emplace_back(i_1, i_3, i_2);
+					if (c == 0 || 0 == mask.ptr<uchar>(r)[c - 1] + mask.ptr<uchar>(r + 1)[c - 1])
+					{
+						borders.emplace_back(i_2, i_0);
+					}
+					if (r == 0 || 0 == mask.ptr<uchar>(r - 1)[c] + mask.ptr<uchar>(r - 1)[c + 1])
+					{
+						borders.emplace_back(i_0, i_1);
+					}
+					if (c_1 == width_1 || 0 == mask.ptr<uchar>(r)[c + 2] + mask.ptr<uchar>(r + 1)[c + 2])
+					{
+						borders.emplace_back(i_1, i_3);
+					}
+					if (r_1 == height_1 || 0 == mask.ptr<uchar>(r + 2)[c] + mask.ptr<uchar>(r + 2)[c + 1])
+					{
+						borders.emplace_back(i_3, i_2);
+					}
+					continue;
+				}
+			}
+		}
 
+
+		faces.clear();
+		faces.reserve(faces_.size());
+		for (const auto&d:faces_)
+		{
+			faces.emplace_back(d);
+		}
+
+
+
+		std::fstream fout("../surf/p.obj", std::ios::out);
+		for (int i = 0; i < pts.size(); i++)
+		{
+			fout << "v " << pts[i].x << " " << pts[i].y << " " << pts[i].z << std::endl;
+		}
+		for (int i = 0; i < faces.size(); i++)
+		{
+			fout << "f " << faces[i].x+1 << " " << faces[i].y + 1 << " " << faces[i].z + 1 << std::endl;
+		}
+		fout.close();
+		return true;
+	}
 	struct Camera
 	{
 		Camera() {}
@@ -1226,7 +1393,7 @@ namespace mrf
 					gridAccumScore[d.first] = 0.;
 				}
 			}
-			int iterCnt = 1;
+			int iterCnt = 20;
 			for (int iter = 0; iter < iterCnt; iter++)
 			{
 				LOG_OUT << "iter = " << iter;
@@ -1276,7 +1443,8 @@ namespace mrf
 				auto& thisCamera = this->cameras.at(cameraId);
 				const auto& thisView = v.second;
 				cv::Mat mask = tools::loadMask(thisView.maskPath.string());
-				cv::Mat maskPts = cv::Mat::zeros(mask.size(), CV_32FC3);
+				cv::Mat ptsMatMask = cv::Mat::zeros(mask.size(), CV_8UC1);
+				cv::Mat ptsMat = cv::Mat::zeros(mask.size(), CV_32FC3);
 				//std::fstream fout1(outDir / (std::to_string(thisView.viewId) + ".txt"), std::ios::out);
 				for (const auto& pixel : thisView.pixelGridBelong)
 				{
@@ -1300,12 +1468,18 @@ namespace mrf
 					float y = (0.5 + gridY) * this->gridResolution + this->targetMinBorderY;
 					float z = (0.5 + gridZ) * this->gridResolution + this->targetMinBorderZ;
 					//fout1 << x << " " << y << " " << z << " " << maxColorScoreGridColorScore << std::endl;
-					maskPts.at<cv::Vec3f>(y_2d, x_2d)[0] = x;
-					maskPts.at<cv::Vec3f>(y_2d, x_2d)[1] = y;
-					maskPts.at<cv::Vec3f>(y_2d, x_2d)[2] = z;
+					ptsMat.at<cv::Vec3f>(y_2d, x_2d)[0] = x;
+					ptsMat.at<cv::Vec3f>(y_2d, x_2d)[1] = y;
+					ptsMat.at<cv::Vec3f>(y_2d, x_2d)[2] = z;
+					ptsMatMask.ptr<uchar>(y_2d)[x_2d] = 1;
 				}
 				//fout1.close();
-				LOG_OUT;
+
+				cv::FileStorage fs("../surf/test" + std::to_string(thisView.viewId) + ".yml", cv::FileStorage::WRITE);
+				fs << "ptsMatMask" << ptsMatMask;
+				fs << "ptsMat" << ptsMat;
+				fs.release(); 
+
 			}
 
 
@@ -1372,6 +1546,18 @@ namespace mrf
 
 int test_mrf()
 {
+	cv::Mat ptsMatMask, ptsMat;
+	cv::FileStorage fs( "../surf/test0.yml",cv::FileStorage::READ);
+	fs["ptsMatMask"] >> ptsMatMask;
+	fs["ptsMat"] >> ptsMat;
+	fs.release();
+	std::vector<cv::Point3f> pts;
+	std::vector<cv::Point3i> faces;
+	mrf::generThinMesh(ptsMatMask, ptsMat, pts,faces);
+	LOG_OUT;
+
+
+
 	float gridResolution = 0.03;//need measured before
 	mrf::GridConfig gridConfig = { 8,gridResolution };
 	//mrf::Mrf asd("../data/a/result", "../data/a/result/dense.obj", gridConfig);
