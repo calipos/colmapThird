@@ -208,7 +208,7 @@ namespace mrf
 		res.second = variance;
 		return res;
 	}
-	bool generThinMesh(const cv::Mat& mask, const cv::Mat& ptsMat, std::vector<cv::Point3f>& pts, std::vector<cv::Point3i>& faces,const float&thin=0.1)
+	bool generThinMesh(const cv::Mat& mask, const cv::Mat& ptsMat, std::vector<cv::Point3f>& pts, std::vector<cv::Point3i>& faces, const cv::Point3f& backDir = cv::Point3f(0, 0, 1),const float&thin=0.1)
 	{
 		if (mask.size() !=ptsMat.size())
 		{
@@ -353,17 +353,28 @@ namespace mrf
 				}
 			}
 		}
-
-
+		fontPtsCnt = pts.size();
+		cv::Point3f backDirUnit = backDir / cv::norm(backDir) * thin;
+		for (int i = 0; i < fontPtsCnt; i++)
+		{
+			pts.emplace_back(pts[i]+ backDirUnit);
+		}
 		faces.clear();
-		faces.reserve(faces_.size());
-		for (const auto&d:faces_)
+		faces.reserve(faces_.size() * 2 + 2 * borders.size());
+		for (const auto& d : faces_)
 		{
 			faces.emplace_back(d);
+			faces.emplace_back(d.x + fontPtsCnt, d.z + fontPtsCnt, d.y + fontPtsCnt);
 		}
-
-
-
+		for (const auto&b: borders)
+		{
+			const int& i_0 = b.x;
+			const int& i_1 = b.y;
+			const int& i_2 = b.x+ fontPtsCnt;
+			const int& i_3 = b.y+ fontPtsCnt;
+			faces.emplace_back(i_0, i_2, i_1);
+			faces.emplace_back(i_1, i_2, i_3);
+		}  
 		std::fstream fout("../surf/p.obj", std::ios::out);
 		for (int i = 0; i < pts.size(); i++)
 		{
@@ -1423,7 +1434,7 @@ namespace mrf
 						{
 							if (thisView.pixelGridBelong.find(neighb.first)== thisView.pixelGridBelong.end())
 							{
-								gridAccumScore[maxColorScoreGrid] += neighb.second * 0.01;
+								gridAccumScore[maxColorScoreGrid] += neighb.second * 0.03* gridColorScore[neighb.first];
 							}
 						}
 					}
@@ -1554,8 +1565,8 @@ int test_mrf()
 	std::vector<cv::Point3f> pts;
 	std::vector<cv::Point3i> faces;
 	mrf::generThinMesh(ptsMatMask, ptsMat, pts,faces);
-	LOG_OUT;
-
+	LOG_OUT; 
+	return 0;
 
 
 	float gridResolution = 0.03;//need measured before
@@ -1565,5 +1576,16 @@ int test_mrf()
 	mrf::Mrf asd2;
 	asd2.reload("../surf/d.dat");
 	asd2.mrf1();
+
+	//cv::Mat ptsMatMask, ptsMat;
+	//cv::FileStorage fs("../surf/test0.yml", cv::FileStorage::READ);
+	//fs["ptsMatMask"] >> ptsMatMask;
+	//fs["ptsMat"] >> ptsMat;
+	//fs.release();
+	//std::vector<cv::Point3f> pts;
+	//std::vector<cv::Point3i> faces;
+	//mrf::generThinMesh(ptsMatMask, ptsMat, pts, faces);
+	//LOG_OUT;
+
 	return 0;
 }
