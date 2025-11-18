@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 import load_mats
 import save
-import h5py
+# import h5py
 
 class SH:
     def __init__(self):
@@ -331,6 +331,7 @@ class Bfm2019:
                  defaultFaceFile='model2019_bfm(47439p94464f).h5',
                  defaultHeadFile='model2019_fullHead(58203p116160f).h5',
                  defaultFaceLmIdxFile='index_mp468_from_model2019_47439p.npy'):
+        self.bfm_folder=bfm_folder
         faceH5Path = os.path.join(bfm_folder, defaultFaceFile)
         headH5Path = os.path.join(bfm_folder, defaultHeadFile)
         faceLmIdxFile = os.path.join(bfm_folder, defaultFaceLmIdxFile)
@@ -396,7 +397,7 @@ if __name__ == '__main__':
 
     facemodel2019 = Bfm2019('Deep3d/BFM')
 
-    facemodel = ParametricFaceModel()
+    facemodel = ParametricFaceModel(facemodel2019.bfm_folder)
     shape_base = facemodel.id_base.reshape(-1,3,80)
     expression_base = facemodel.exp_base.reshape(-1,3,64)
     mean_base = facemodel.mean_shape.reshape(-1,3)
