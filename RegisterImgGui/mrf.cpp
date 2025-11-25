@@ -357,7 +357,7 @@ namespace mrf
 		cv::Point3f backDirUnit = backDir / cv::norm(backDir) * thin;
 		for (int i = 0; i < fontPtsCnt; i++)
 		{
-			pts.emplace_back(pts[i]+ backDirUnit);
+			//pts.emplace_back(pts[i]+ backDirUnit);
 		}
 		faces.clear();
 		faces.reserve(faces_.size() * 2 + 2 * borders.size());
@@ -1394,7 +1394,7 @@ namespace mrf
 					gridAccumScore[d.first] = 0.;
 				}
 			}
-			int iterCnt = 1;
+			int iterCnt = 100;
 			for (int iter = 0; iter < iterCnt; iter++)
 			{
 				LOG_OUT << "iter = " << iter;
@@ -1403,6 +1403,11 @@ namespace mrf
 					const auto& cameraId = v.second.cameraId;
 					auto& thisCamera = this->cameras.at(cameraId);
 					const auto& thisView = v.second;
+					int viewId = thisView.viewId;
+					if (viewId != 0 && viewId != 1 && viewId != 42 )
+					{
+						continue;
+					}
 					for (const auto& pixel : thisView.pixelGridBelong)
 					{
 						const std::uint32_t& pixelId = pixel.first;
@@ -1424,11 +1429,11 @@ namespace mrf
 						{
 							if (thisView.pixelGridBelong.find(neighb.first)== thisView.pixelGridBelong.end())
 							{
-								gridAccumScore[maxColorScoreGrid] += neighb.second * 0.03* gridColorScore[neighb.first];
+								gridAccumScore[maxColorScoreGrid] += neighb.second * 0.1* gridColorScore[neighb.first];
 							}
 						}
 					}
-					int viewId = thisView.viewId;
+					
 					const Eigen::Matrix4f& Rt = thisView.Rt;
 					cv::Mat mask = tools::loadMask(thisView.maskPath.string());
 					cv::Mat ptsMatMask = cv::Mat::zeros(mask.size(), CV_8UC1);
