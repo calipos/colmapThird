@@ -208,7 +208,7 @@ namespace mrf
 		res.second = variance;
 		return res;
 	}
-	bool generThinMesh(const cv::Mat& mask, const cv::Mat& ptsMat, std::vector<cv::Point3f>& pts, std::vector<cv::Point3i>& faces, const cv::Point3f& backDir = cv::Point3f(0, 0, 1),const float&thin=0.1)
+	bool generThinMesh(const cv::Mat& mask, const cv::Mat& ptsMat, std::vector<cv::Point3f>& pts, std::vector<cv::Point3i>& faces, const cv::Point3f& backDir = cv::Point3f(0, 0, 1),const float&thin=0.5)
 	{
 		if (mask.size() !=ptsMat.size())
 		{
@@ -357,34 +357,24 @@ namespace mrf
 		cv::Point3f backDirUnit = backDir / cv::norm(backDir) * thin;
 		for (int i = 0; i < fontPtsCnt; i++)
 		{
-			pts.emplace_back(pts[i]+ backDirUnit);
+			//pts.emplace_back(pts[i]+ backDirUnit);
 		}
 		faces.clear();
 		faces.reserve(faces_.size() * 2 + 2 * borders.size());
 		for (const auto& d : faces_)
 		{
 			faces.emplace_back(d);
-			faces.emplace_back(d.x + fontPtsCnt, d.z + fontPtsCnt, d.y + fontPtsCnt);
+			//faces.emplace_back(d.x + fontPtsCnt, d.z + fontPtsCnt, d.y + fontPtsCnt);
 		}
-		for (const auto&b: borders)
-		{
-			const int& i_0 = b.x;
-			const int& i_1 = b.y;
-			const int& i_2 = b.x+ fontPtsCnt;
-			const int& i_3 = b.y+ fontPtsCnt;
-			faces.emplace_back(i_0, i_2, i_1);
-			faces.emplace_back(i_1, i_2, i_3);
-		}  
-		std::fstream fout("../surf/p.obj", std::ios::out);
-		for (int i = 0; i < pts.size(); i++)
-		{
-			fout << "v " << pts[i].x << " " << pts[i].y << " " << pts[i].z << std::endl;
-		}
-		for (int i = 0; i < faces.size(); i++)
-		{
-			fout << "f " << faces[i].x+1 << " " << faces[i].y + 1 << " " << faces[i].z + 1 << std::endl;
-		}
-		fout.close();
+		//for (const auto&b: borders)
+		//{
+		//	const int& i_0 = b.x;
+		//	const int& i_1 = b.y;
+		//	const int& i_2 = b.x+ fontPtsCnt;
+		//	const int& i_3 = b.y+ fontPtsCnt;
+		//	faces.emplace_back(i_0, i_2, i_1);
+		//	faces.emplace_back(i_1, i_2, i_3);
+		//}  
 		return true;
 	}
 	struct Camera
@@ -1404,7 +1394,7 @@ namespace mrf
 					gridAccumScore[d.first] = 0.;
 				}
 			}
-			int iterCnt = 20;
+			int iterCnt = 100;
 			for (int iter = 0; iter < iterCnt; iter++)
 			{
 				LOG_OUT << "iter = " << iter;
@@ -1413,6 +1403,11 @@ namespace mrf
 					const auto& cameraId = v.second.cameraId;
 					auto& thisCamera = this->cameras.at(cameraId);
 					const auto& thisView = v.second;
+					int viewId = thisView.viewId;
+					if (viewId != 0 && viewId != 1 && viewId != 42 )
+					{
+						continue;
+					}
 					for (const auto& pixel : thisView.pixelGridBelong)
 					{
 						const std::uint32_t& pixelId = pixel.first;
@@ -1434,67 +1429,58 @@ namespace mrf
 						{
 							if (thisView.pixelGridBelong.find(neighb.first)== thisView.pixelGridBelong.end())
 							{
-								gridAccumScore[maxColorScoreGrid] += neighb.second * 0.03* gridColorScore[neighb.first];
+								gridAccumScore[maxColorScoreGrid] += neighb.second * 0.1* gridColorScore[neighb.first];
 							}
 						}
 					}
-				}
-			}
-			for (const auto& d : neightDist)
-			{
-				gridAccumScore[d.first] += gridColorScore[d.first];
-			}
-
-
-
-			
-			for (const auto& v : this->views)
-			{				
-				const auto& cameraId = v.second.cameraId;
-				auto& thisCamera = this->cameras.at(cameraId);
-				const auto& thisView = v.second;
-				cv::Mat mask = tools::loadMask(thisView.maskPath.string());
-				cv::Mat ptsMatMask = cv::Mat::zeros(mask.size(), CV_8UC1);
-				cv::Mat ptsMat = cv::Mat::zeros(mask.size(), CV_32FC3);
-				//std::fstream fout1(outDir / (std::to_string(thisView.viewId) + ".txt"), std::ios::out);
-				for (const auto& pixel : thisView.pixelGridBelong)
-				{
-					const std::uint32_t& pixelId = pixel.first;
-					const std::vector<std::uint32_t>& gridsId = pixel.second;
-					std::uint32_t maxColorScoreGrid = gridsId[0];
-					float maxColorScoreGridColorScore = gridAccumScore[maxColorScoreGrid];
-					for (size_t i = 1; i < gridsId.size(); i++)
+					
+					const Eigen::Matrix4f& Rt = thisView.Rt;
+					cv::Mat mask = tools::loadMask(thisView.maskPath.string());
+					cv::Mat ptsMatMask = cv::Mat::zeros(mask.size(), CV_8UC1);
+					cv::Mat ptsMat = cv::Mat::zeros(mask.size(), CV_32FC3);
+					for (const auto& pixel : thisView.pixelGridBelong)
 					{
-						const std::uint32_t& thisGridId = gridsId[i];
-						const float& thisGridColorScore = gridAccumScore[thisGridId];
-						if (thisGridColorScore > maxColorScoreGridColorScore)
+						const std::uint32_t& pixelId = pixel.first;
+						const std::vector<std::uint32_t>& gridsId = pixel.second;
+						std::uint32_t maxColorScoreGrid = gridsId[0];
+						float maxColorScoreGridColorScore = gridAccumScore[maxColorScoreGrid] + gridColorScore[maxColorScoreGrid];
+						for (size_t i = 1; i < gridsId.size(); i++)
 						{
-							maxColorScoreGridColorScore = thisGridColorScore;
-							maxColorScoreGrid = thisGridId;
+							const std::uint32_t& thisGridId = gridsId[i];
+							const float& thisGridColorScore = gridAccumScore[thisGridId] + gridColorScore[thisGridId];
+							if (thisGridColorScore > maxColorScoreGridColorScore)
+							{
+								maxColorScoreGridColorScore = thisGridColorScore;
+								maxColorScoreGrid = thisGridId;
+							}
 						}
+						PosEncodeToGridXyz(maxColorScoreGrid, this->resolutionX, this->resolutionXY, gridX, gridY, gridZ);
+						ImgPixelEncodeToImgXy(pixelId, x_2d, y_2d, mask.cols);
+						float x = (0.5 + gridX) * this->gridResolution + this->targetMinBorderX;
+						float y = (0.5 + gridY) * this->gridResolution + this->targetMinBorderY;
+						float z = (0.5 + gridZ) * this->gridResolution + this->targetMinBorderZ;
+						ptsMat.at<cv::Vec3f>(y_2d, x_2d)[0] = x;
+						ptsMat.at<cv::Vec3f>(y_2d, x_2d)[1] = y;
+						ptsMat.at<cv::Vec3f>(y_2d, x_2d)[2] = z;
+						ptsMatMask.ptr<uchar>(y_2d)[x_2d] = 1;
 					}
-					PosEncodeToGridXyz(maxColorScoreGrid, this->resolutionX, this->resolutionXY, gridX, gridY, gridZ);
-					ImgPixelEncodeToImgXy(pixelId, x_2d, y_2d, mask.cols);
-					float x = (0.5 + gridX) * this->gridResolution + this->targetMinBorderX;
-					float y = (0.5 + gridY) * this->gridResolution + this->targetMinBorderY;
-					float z = (0.5 + gridZ) * this->gridResolution + this->targetMinBorderZ;
-					//fout1 << x << " " << y << " " << z << " " << maxColorScoreGridColorScore << std::endl;
-					ptsMat.at<cv::Vec3f>(y_2d, x_2d)[0] = x;
-					ptsMat.at<cv::Vec3f>(y_2d, x_2d)[1] = y;
-					ptsMat.at<cv::Vec3f>(y_2d, x_2d)[2] = z;
-					ptsMatMask.ptr<uchar>(y_2d)[x_2d] = 1;
+					std::vector<cv::Point3f> pts;
+					std::vector<cv::Point3i> faces;
+					mrf::generThinMesh(ptsMatMask, ptsMat, pts, faces,cv::Point3f(Rt(0, 2), Rt(1, 2), Rt(2, 2)));
+
+					std::fstream fout(outDir/(std::to_string(viewId)+"iter"+std::to_string(iter)+".obj"), std::ios::out);
+					for (int i = 0; i < pts.size(); i++)
+					{
+						fout << "v " << pts[i].x << " " << pts[i].y << " " << pts[i].z << std::endl;
+					}
+					for (int i = 0; i < faces.size(); i++)
+					{
+						fout << "f " << faces[i].x + 1 << " " << faces[i].z + 1 << " " << faces[i].y + 1 << std::endl;
+					}
+					fout.close();
 				}
-				//fout1.close();
-
-				cv::FileStorage fs("../surf/test" + std::to_string(thisView.viewId) + ".yml", cv::FileStorage::WRITE);
-				fs << "ptsMatMask" << ptsMatMask;
-				fs << "ptsMat" << ptsMat;
-				fs.release(); 
-
 			}
-
-
-			saveGrid(outDir /"grid.g", gridAccumScore);
+			//saveGrid(outDir /"grid.g", gridAccumScore);
 
 
 			return 0;
@@ -1557,16 +1543,16 @@ namespace mrf
 
 int test_mrf()
 {
-	cv::Mat ptsMatMask, ptsMat;
-	cv::FileStorage fs( "../surf/test0.yml",cv::FileStorage::READ);
-	fs["ptsMatMask"] >> ptsMatMask;
-	fs["ptsMat"] >> ptsMat;
-	fs.release();
-	std::vector<cv::Point3f> pts;
-	std::vector<cv::Point3i> faces;
-	mrf::generThinMesh(ptsMatMask, ptsMat, pts,faces);
-	LOG_OUT; 
-	return 0;
+	//cv::Mat ptsMatMask, ptsMat;
+	//cv::FileStorage fs( "../surf/test0.yml",cv::FileStorage::READ);
+	//fs["ptsMatMask"] >> ptsMatMask;
+	//fs["ptsMat"] >> ptsMat;
+	//fs.release();
+	//std::vector<cv::Point3f> pts;
+	//std::vector<cv::Point3i> faces;
+	//mrf::generThinMesh(ptsMatMask, ptsMat, pts,faces);
+	//LOG_OUT; 
+	//return 0;
 
 
 	float gridResolution = 0.03;//need measured before
