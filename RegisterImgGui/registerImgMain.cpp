@@ -34,8 +34,10 @@ extern int test_writelabel();
 extern int test_sdf();
 extern int test_surf();
 extern int test_mrf();
+extern int test_bfm();
 int main(int, char**)
 {
+    return test_bfm();
     return test_mrf();
     //return test_pips2();
     //return test_sam2();

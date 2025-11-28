@@ -159,6 +159,9 @@
     <ClCompile Include="mrf.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="bfm2019.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">

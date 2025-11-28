@@ -353,6 +353,14 @@ class Bfm2019:
             expression_mean = h5_file['expression/model/mean'][:]
             expression_pcaBasis = h5_file['expression/model/pcaBasis'][:]
 
+        randomShape = (shape_pcaBasis@np.random.rand(199,1)+shape_mean.reshape(-1,1)).reshape(47439,3)
+        randomExpression = (expression_pcaBasis@np.random.rand(100, 1) +
+                            expression_mean.reshape(-1, 1)).reshape(47439, 3)
+        np.savetxt('randomShape.txt', randomShape, delimiter=' ')
+        np.savetxt('randomExpression.txt', randomExpression, delimiter=' ')
+        np.savetxt('randomFace.txt', randomExpression +
+                   randomShape, delimiter=' ')
+
         # mean face shape. [3*N,1]
         self.mean_shape = (shape_mean+expression_mean).astype(np.float32)
         # identity basis. [3*N,80]
@@ -392,8 +400,18 @@ class Bfm2019:
             mean_486part[3*i+2, ...] = self.mean_shape[3*I+2, ...]
         return id_486part, exp_486part, mean_486part
 
-if __name__ == '__main__':
 
+def print_objects(name):
+    """打印所有对象的名称（路径）"""
+    print(name)
+
+
+
+if __name__ == '__main__':
+    with h5py.File('models/model2019_face12.h5', 'r') as f:
+        print("文件中的所有对象 (路径):")
+        f.visit(print_objects)
+        print(1)
     facemodel2019 = Bfm2019('Deep3d/BFM')
 
     facemodel = ParametricFaceModel()
