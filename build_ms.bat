@@ -299,7 +299,7 @@ if not exist %pwd%\install\hdf5-hdf5-1_14_3 (
     TIMEOUT /T 1
     msbuild %pwd%\build\hdf5-hdf5-1_14_3\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
 )
-
+pause
 rem =======================================================================
 
 

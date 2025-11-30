@@ -1,11 +1,14 @@
 #include <iostream>
+#include <fstream>
 #include <filesystem>
 #include <string>
 #include "H5Cpp.h"
 #include "log.h"
 #include "opencv2/opencv.hpp"
 using namespace H5;
-/* bfm2019
+namespace bfm
+{
+    /* bfm2019
 catalog
 catalog/MorphableModel
 catalog/MorphableModel/modelPath
@@ -72,6 +75,17 @@ version
 version/majorVersion
 version/minorVersion
 */
+    void savePts(const std::filesystem::path&path  ,const cv::Mat&pts)
+    {
+        std::fstream fout(path, std::ios::out);
+        for (int i = 0; i < pts.cols; i++)
+        {
+            fout << pts.ptr<float>(0)[i] << " " << pts.ptr<float>(1)[i] << " " << pts.ptr<float>(2)[i] << std::endl;
+        }
+        fout.close();
+        return;
+    }
+}
 int test_bfm(void)
 {  
     
@@ -81,21 +95,11 @@ int test_bfm(void)
         LOG_ERR_OUT << "need models/model2019_face12.h5";
         return -1;
     } 
-    cv::Mat shape_mean,shape_points, shape_cells, shape_pcaBasis;
+    cv::Mat shape_points, shape_cells, shape_mean, shape_pcaBasis, shape_pcaVariance;
     cv::Mat expression_mean, expression_points,  expression_pcaBasis;
     cv::Mat color_mean, color_points,  color_pcaBasis;
     { 
         H5File file(bfmFacePath.c_str(), H5F_ACC_RDONLY);
-        {
-            DataSet dataset = file.openDataSet("shape/model/mean");
-            DataSpace dataspace = dataset.getSpace();
-            H5S_class_t type = dataspace.getSimpleExtentType();
-            int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
-            hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
-            dataspace.getSimpleExtentDims(dims, NULL);
-            shape_mean = cv::Mat(dims[0], dims[1], CV_32FC1);
-            dataset.read(shape_mean.data, H5::PredType::NATIVE_FLOAT);
-        }
         {
             DataSet dataset = file.openDataSet("shape/representer/points");
             DataSpace dataspace = dataset.getSpace();
@@ -116,6 +120,37 @@ int test_bfm(void)
             shape_cells = cv::Mat(dims[0], dims[1], CV_32SC1);
             dataset.read(shape_cells.data, H5::PredType::NATIVE_INT);
         }
+        {
+            DataSet dataset = file.openDataSet("shape/model/mean");
+            DataSpace dataspace = dataset.getSpace();
+            H5S_class_t type = dataspace.getSimpleExtentType();
+            int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
+            hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
+            dataspace.getSimpleExtentDims(dims, NULL);
+            shape_mean = cv::Mat(dims[0], dims[1], CV_32FC1);
+            dataset.read(shape_mean.data, H5::PredType::NATIVE_FLOAT);
+        }
+        {
+            DataSet dataset = file.openDataSet("shape/model/pcaBasis");
+            DataSpace dataspace = dataset.getSpace();
+            H5S_class_t type = dataspace.getSimpleExtentType();
+            int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
+            hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
+            dataspace.getSimpleExtentDims(dims, NULL);
+            shape_pcaBasis = cv::Mat(dims[0], dims[1], CV_32FC1);
+            dataset.read(shape_pcaBasis.data, H5::PredType::NATIVE_FLOAT);
+        }
+        {
+            DataSet dataset = file.openDataSet("shape/model/pcaVariance");
+            DataSpace dataspace = dataset.getSpace();
+            H5S_class_t type = dataspace.getSimpleExtentType();
+            int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
+            hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
+            dataspace.getSimpleExtentDims(dims, NULL);
+            shape_pcaVariance = cv::Mat(dims[0], dims[1], CV_32FC1);
+            dataset.read(shape_pcaVariance.data, H5::PredType::NATIVE_FLOAT);
+        }
+
         {
             DataSet dataset = file.openDataSet("shape/model/pcaBasis");
             DataSpace dataspace = dataset.getSpace();
@@ -187,11 +222,19 @@ int test_bfm(void)
             dataset.read(color_pcaBasis.data, H5::PredType::NATIVE_FLOAT);
         }
         file.close();
-        shape_mean.reshape(1, shape_points.rows);
-        expression_mean.reshape(1, expression_points.rows);
-        color_mean.reshape(1, color_points.rows);
+        shape_mean= shape_mean.reshape(1, shape_points.rows);
+        expression_mean= expression_mean.reshape(1, expression_points.rows);
+        color_mean= color_mean.reshape(1, color_points.rows);
     }
-
+    //bfm::savePts("../surf/shape_mean.txt", shape_mean);
+    //bfm::savePts("../surf/expression_mean.txt", expression_mean);
+    //bfm::savePts("../surf/color_mean.txt", color_mean);
+    //bfm::savePts("../surf/shape_points.txt", shape_points);
+    //bfm::savePts("../surf/expression_points.txt", expression_points);
+    //bfm::savePts("../surf/color_points.txt", color_points);
+    //bfm::savePts("../surf/shape_mean_points.txt", shape_mean+shape_points);
+    //bfm::savePts("../surf/expression_mean_points.txt", expression_mean+expression_points);
+    //bfm::savePts("../surf/color_mean_points.txt", color_mean+color_points);
 
     return 0; // successfully terminated
 }
