@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 import load_mats
 import save
-# import h5py
+import h5py
 
 class SH:
     def __init__(self):
