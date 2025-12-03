@@ -1,3 +1,4 @@
+#include <map>
 #include <fstream>
 #include <iostream>
 #include <random>
@@ -140,8 +141,9 @@ version/minorVersion
                 int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
                 hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
                 dataspace.getSimpleExtentDims(dims, NULL);
-                points = cv::Mat(dims[0], dims[1], CV_32FC1);
-                dataset.read(points.data, H5::PredType::NATIVE_FLOAT);
+                cv::Mat points_ = cv::Mat(dims[0], dims[1], CV_32FC1);
+                dataset.read(points_.data, H5::PredType::NATIVE_FLOAT);
+                cv::transpose(points_, points);
             }
             {
                 cv::Mat cells;
@@ -278,34 +280,98 @@ version/minorVersion
             }
             {
                 //metadata/landmarks/json
-                H5::DataSet dataset = file.openDataSet("/metadata/landmarks/json");
-                std::string json_string;
-                dataset.read(json_string, dataset.getStrType());
-                JSONCPP_STRING err;
-                Json::Value newRoot;
-                int rawJsonLength = json_string.capacity();
-                Json::CharReaderBuilder newBuilder;
-                const std::unique_ptr<Json::CharReader> newReader(newBuilder.newCharReader());
-                bool parseRet = newReader->parse(json_string.c_str(), json_string.c_str() + rawJsonLength, &newRoot,
-                    &err);
-                if (!parseRet)
-                { 
-                    LOG_ERR_OUT << err;
+                landmarks.clear();
+                landmarkIdx.clear();
+                H5::DataSet dataset = file.openDataSet("/metadata/landmarks/json");   
+                H5::DataType datatype = dataset.getDataType();
+                H5T_class_t typeClass = datatype.getClass();
+                DataSpace dataspace = dataset.getSpace();
+                int rank = dataspace.getSimpleExtentNdims();
+                hsize_t dims[1];
+                dataspace.getSimpleExtentDims(dims, NULL);
+                int numStrings = dims[0];
+                if (typeClass == H5T_STRING) {
+                    if (datatype.isVariableStr()) {
+                        LOG_OUT << 1;
+                    }
+                    else {
+                        // 读取固定长度字符串
+                        size_t typeSize = datatype.getSize();
+                        char* buffer = new char[numStrings * typeSize];
+                        dataset.read(buffer, datatype);
+                        JSONCPP_STRING err;
+                        Json::Value newRoot;
+                        Json::CharReaderBuilder newBuilder;
+                        const std::unique_ptr<Json::CharReader> newReader(newBuilder.newCharReader());
+                        if (!newReader->parse(buffer, buffer + typeSize, &newRoot,
+                            &err)) {
+                            LOG_ERR_OUT << "newReader->parse error";
+                            delete[] buffer;
+                            return;
+                        }
+                        else
+                        {
+                            delete[] buffer;
+                            LOG_OUT << newRoot.size();
+                            for (int i = 0; i < newRoot.size(); i++)
+                            {                                
+                                auto newMemberNames = newRoot[i].getMemberNames();
+                                if (std::find(newMemberNames.begin(), newMemberNames.end(),"id")!= newMemberNames.end())
+                                {
+                                    std::string landmarkName = newRoot[i]["id"].asString();
+                                    landmarks[landmarkName] = cv::Point3f();
+                                    landmarks[landmarkName].x = newRoot[i]["coordinates"][0].asFloat();
+                                    landmarks[landmarkName].y = newRoot[i]["coordinates"][1].asFloat();
+                                    landmarks[landmarkName].z = newRoot[i]["coordinates"][2].asFloat();
+                                }
+                            }
+                        }
+                    }
                 }
-                auto newMemberNames = newRoot.getMemberNames();
- 
-                LOG_OUT<< json_string;
-                //json parsed_json = json::parse(json_string);
-                //for (const auto& item : parsed_json) {
-                //    Landmark lm;
-                //    lm.name = item["id"];
-                //    lm.coordinates.x = item["coordinates"][0];
-                //    lm.coordinates.y = item["coordinates"][1];
-                //    lm.coordinates.z = item["coordinates"][2];
-                //    landmarks.push_back(lm);
+                std::vector<std::string>landmarksNameVect(landmarks.size());
+                cv::Mat landmarksPos(landmarks.size(), 3, CV_32FC1);
+                int i = 0;
+                for (const auto& d : landmarks)
+                {
+                    landmarksNameVect[i] = d.first;
+                    landmarksPos.ptr<float>(i)[0] = d.second.x;
+                    landmarksPos.ptr<float>(i)[1] = d.second.y;
+                    landmarksPos.ptr<float>(i)[2] = d.second.z;
+                    i+=1;
+                }
+                std::map<std::string, std::pair<int, float>>nearesetMatch;
+                cv::flann::KDTreeIndexParams indexParams(4);
+                int k = 1;
+                cv::flann::Index tree(this->points, indexParams);//此处用target构建k-d树
+                cv::Mat ldIdx(landmarks.size(), k, CV_32SC1);   //装载搜索到的对应点的索引（即neibours在target这个矩阵的行数）
+                cv::Mat ldDists(landmarks.size(), k, CV_32F);         //搜索到的最近邻的距离
+                tree.knnSearch(landmarksPos, ldIdx, ldDists, k, cv::flann::SearchParams(32));
+              
+                for (int i = 0; i < landmarksNameVect.size(); i++)
+                {
+                    landmarkIdx[landmarksNameVect[i]] = ldIdx.ptr<int>(i)[0];
+                }
+                //std::fstream fout("../surf/1.txt", std::ios::out);
+                //for (int i = 0; i < this->points.rows; i++)
+                //{
+                //    fout << this->points.ptr<float>(i)[0] << " "
+                //        << this->points.ptr<float>(i)[1] << " "
+                //        << this->points.ptr<float>(i)[2] << std::endl;
                 //}
-                LOG_OUT;
+                //fout.close();
+                //std::fstream fout2("../surf/2.txt", std::ios::out);
+                //for (int i = 0; i < landmarksPos.rows; i++)
+                //{
+                //    fout2 << landmarksPos.ptr<float>(i)[0] << " "
+                //        << landmarksPos.ptr<float>(i)[1] << " "
+                //        << landmarksPos.ptr<float>(i)[2] << std::endl;
+                //}
+                //fout2.close();
+                //LOG_OUT;
             }
+
+
+
             file.close();
             shapeDim = shape_pcaBasis.cols;
             expressionDim = expression_pcaBasis.cols;
@@ -316,6 +382,8 @@ version/minorVersion
         int colorDim{ 0 };
         cv::Mat points;
         Eigen::MatrixXi F;
+        std::map<std::string, cv::Point3f>landmarks;
+        std::map<std::string, int>landmarkIdx;
         cv::Mat shape_mean, shape_pcaBasis, shape_pcaStandardDeviation;
         cv::Mat expression_mean, expression_pcaBasis, expression_pcaStandardDeviation;
         cv::Mat color_mean, color_pcaBasis, color_pcaStandardDeviation;
