@@ -162,6 +162,9 @@
     <ClCompile Include="bfm2019.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="meshRender.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">
@@ -291,6 +294,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="mrf.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="meshRender.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

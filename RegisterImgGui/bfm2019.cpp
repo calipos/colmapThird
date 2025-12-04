@@ -10,6 +10,7 @@
 #include "Eigen/Core"
 #include "igl/writeOBJ.h"
 #include "json/json.h"
+
 using namespace H5;
 namespace bfm
 {
@@ -497,6 +498,7 @@ version/minorVersion
         }
  
     };
+    
 }
 int test_bfm(void)
 {  
