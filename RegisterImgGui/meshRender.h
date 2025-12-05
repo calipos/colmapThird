@@ -79,16 +79,16 @@ namespace currender
     };
     struct Mesh
     {
-        std::vector<Eigen::Vector3f> vertices_;
-        std::vector<Eigen::Vector3f> vertex_colors_;   // optional, RGB order
-        std::vector<Eigen::Vector3i> vertex_indices_;  // face
+        Eigen::MatrixX3f vertices_;
+        Eigen::MatrixX3f vertex_colors_;   // optional, RGB order
+        Eigen::MatrixX3i vertex_indices_;  // face
 
-        std::vector<Eigen::Vector3f> normals_;       // normal per vertex
-        std::vector<Eigen::Vector3f> face_normals_;  // normal per face
-        std::vector<Eigen::Vector3i> normal_indices_;
+        Eigen::MatrixX3f normals_;       // normal per vertex
+        Eigen::MatrixX3f face_normals_;  // normal per face
+        Eigen::MatrixX3i normal_indices_;
 
-        std::vector<Eigen::Vector2f> uv_;
-        std::vector<Eigen::Vector3i> uv_indices_;
+        Eigen::MatrixX2f uv_;
+        Eigen::MatrixX3i uv_indices_;
 
         std::vector<ObjMaterial> materials_;
 
@@ -118,30 +118,29 @@ namespace currender
         void Transform(const Eigen::Matrix3f& R, const Eigen::Vector3f& t);
         void Scale(float scale);
         void Scale(float x_scale, float y_scale, float z_scale);
-        const std::vector<Eigen::Vector3f>& vertices() const;
-        const std::vector<Eigen::Vector3f>& vertex_colors() const;
-        const std::vector<Eigen::Vector3i>& vertex_indices() const;
-        const std::vector<Eigen::Vector3f>& normals() const;
-        const std::vector<Eigen::Vector3f>& face_normals() const;
-        const std::vector<Eigen::Vector3i>& normal_indices() const;
-        const std::vector<Eigen::Vector2f>& uv() const;
-        const std::vector<Eigen::Vector3i>& uv_indices() const;
+        const Eigen::MatrixX3f& vertices() const;
+        const Eigen::MatrixX3f& vertex_colors() const;
+        const Eigen::MatrixX3i& vertex_indices() const;
+        const Eigen::MatrixX3f& normals() const;
+        const Eigen::MatrixX3f& face_normals() const;
+        const Eigen::MatrixX3i& normal_indices() const;
+        const Eigen::MatrixX2f& uv() const;
+        const Eigen::MatrixX3i& uv_indices() const;
         const MeshStats& stats() const;
         const std::vector<int>& material_ids() const;
         const std::vector<ObjMaterial>& materials() const;
 
-        bool set_vertices(const std::vector<Eigen::Vector3f>& vertices);
-        bool set_vertex_colors(const std::vector<Eigen::Vector3f>& vertex_colors);
-        bool set_vertex_indices(const std::vector<Eigen::Vector3i>& vertex_indices);
-        bool set_normals(const std::vector<Eigen::Vector3f>& normals);
-        bool set_face_normals(const std::vector<Eigen::Vector3f>& face_normals);
-        bool set_normal_indices(const std::vector<Eigen::Vector3i>& normal_indices);
-        bool set_uv(const std::vector<Eigen::Vector2f>& uv);
-        bool set_uv_indices(const std::vector<Eigen::Vector3i>& uv_indices);
+        bool set_vertices(const Eigen::MatrixX3f& vertices);
+        bool set_vertex_colors(const Eigen::MatrixX3f& vertex_colors);
+        bool set_vertex_indices(const Eigen::MatrixX3i& vertex_indices);
+        bool set_normals(const Eigen::MatrixX3f& normals);
+        bool set_face_normals(const Eigen::MatrixX3f& face_normals);
+        bool set_normal_indices(const Eigen::MatrixX3i& normal_indices);
+        bool set_uv(const Eigen::MatrixX2f& uv);
+        bool set_uv_indices(const Eigen::MatrixX3i& uv_indices);
         bool set_material_ids(const std::vector<int>& material_ids);
         bool set_materials(const std::vector<ObjMaterial>& materials);
 
-        bool LoadObj(const std::string& obj_path, const std::string& mtl_dir);
         bool LoadPly(const std::string& ply_path);
         bool WritePly(const std::string& ply_path) const;
         // not const since this will update texture name and path
@@ -171,12 +170,14 @@ namespace currender
 
         virtual int width() const = 0;
         virtual int height() const = 0;
-        virtual const Eigen::Affine3d& c2w() const = 0;
-        virtual const Eigen::Affine3d& w2c() const = 0;
+        virtual const Eigen::Affine3f& c2w() const = 0;
+        virtual const Eigen::Affine3f& w2c() const = 0;
         virtual void set_size(int width, int height) = 0;
-        virtual void set_c2w(const Eigen::Affine3d& c2w) = 0;
+        virtual void set_c2w(const Eigen::Affine3f& c2w) = 0;
 
         // camera -> image conversion
+        virtual void Project(const Eigen::MatrixX3f& camera_p,
+            Eigen::MatrixX3f& image_p)const = 0;
         virtual void Project(const Eigen::Vector3f& camera_p,
             Eigen::Vector3f* image_p) const = 0;
         virtual void Project(const Eigen::Vector3f& camera_p,
@@ -215,8 +216,8 @@ namespace currender
         int width_;
         int height_;
 
-        Eigen::Affine3d c2w_;  // camera -> world, sometimes called as "pose"
-        Eigen::Affine3d w2c_;
+        Eigen::Affine3f c2w_;  // camera -> world, sometimes called as "pose"
+        Eigen::Affine3f w2c_;
 
         Eigen::Matrix3f c2w_R_f_;
         Eigen::Vector3f c2w_t_f_;
@@ -236,25 +237,25 @@ namespace currender
         void InitRayTable();
 
         void set_size_no_raytable_update(int width, int height);
-        void set_c2w_no_raytable_update(const Eigen::Affine3d& c2w);
+        void set_c2w_no_raytable_update(const Eigen::Affine3f& c2w);
         void set_fov_y_no_raytable_update(float fov_y_deg);
 
     public:
         PinholeCamera();
         ~PinholeCamera();
         PinholeCamera(int width, int height, float fov_y_deg);
-        PinholeCamera(int width, int height, const Eigen::Affine3d& c2w,
+        PinholeCamera(int width, int height, const Eigen::Affine3f& c2w,
             float fov_y_deg);
-        PinholeCamera(int width, int height, const Eigen::Affine3d& c2w,
+        PinholeCamera(int width, int height, const Eigen::Affine3f& c2w,
             const Eigen::Vector2f& principal_point,
             const Eigen::Vector2f& focal_length);
 
         int width() const override;
         int height() const override;
-        const Eigen::Affine3d& c2w() const override;
-        const Eigen::Affine3d& w2c() const override;
+        const Eigen::Affine3f& c2w() const override;
+        const Eigen::Affine3f& w2c() const override;
         void set_size(int width, int height) override;
-        void set_c2w(const Eigen::Affine3d& c2w) override;
+        void set_c2w(const Eigen::Affine3f& c2w) override;
 
         // FoV (Field of View) in degree interface is provided for convenience
         float fov_x() const;
@@ -267,7 +268,8 @@ namespace currender
         const Eigen::Vector2f& focal_length() const;
         void set_principal_point(const Eigen::Vector2f& principal_point);
         void set_focal_length(const Eigen::Vector2f& focal_length);
-
+        void Project(const Eigen::MatrixX3f& camera_p,
+            Eigen::MatrixX3f& image_p)const override;
         void Project(const Eigen::Vector3f& camera_p,
             Eigen::Vector3f* image_p) const override;
         void Project(const Eigen::Vector3f& camera_p,
@@ -296,8 +298,8 @@ namespace currender
         int width_;
         int height_;
 
-        Eigen::Affine3d c2w_;  // camera -> world, sometimes called as "pose"
-        Eigen::Affine3d w2c_;
+        Eigen::Affine3f c2w_;  // camera -> world, sometimes called as "pose"
+        Eigen::Affine3f w2c_;
 
         Eigen::Matrix3f c2w_R_f_;
         Eigen::Vector3f c2w_t_f_;
@@ -314,17 +316,18 @@ namespace currender
         void InitRayTable();
 
         void set_size_no_raytable_update(int width, int height);
-        void set_c2w_no_raytable_update(const Eigen::Affine3d& c2w);
+        void set_c2w_no_raytable_update(const Eigen::Affine3f& c2w);
 
     public:
         OrthoCamera();
         ~OrthoCamera();
         OrthoCamera(int width, int height);
-        OrthoCamera(int width, int height, const Eigen::Affine3d& c2w);
+        OrthoCamera(int width, int height, const Eigen::Affine3f& c2w);
 
         void set_size(int width, int height) override;
-        void set_c2w(const Eigen::Affine3d& c2w) override;
-
+        void set_c2w(const Eigen::Affine3f& c2w) override;
+        void Project(const Eigen::MatrixX3f& camera_p,
+            Eigen::MatrixX3f& image_p)const override;
         void Project(const Eigen::Vector3f& camera_p,
             Eigen::Vector3f* image_p) const override;
         void Project(const Eigen::Vector3f& camera_p,
@@ -346,17 +349,17 @@ namespace currender
         void ray_w(int x, int y, Eigen::Vector3f* dir) const override;
     };
 
-    void WriteTumFormat(const std::vector<Eigen::Affine3d>& poses,
+    void WriteTumFormat(const std::vector<Eigen::Affine3f>& poses,
         const std::string& path);
     bool LoadTumFormat(const std::string& path,
-        std::vector<Eigen::Affine3d>* poses);
+        std::vector<Eigen::Affine3f>* poses);
     bool LoadTumFormat(const std::string& path,
-        std::vector<std::pair<int, Eigen::Affine3d>>* poses);
+        std::vector<std::pair<int, Eigen::Affine3f>>* poses);
 
     inline PinholeCamera::PinholeCamera()
         : principal_point_(-1, -1), focal_length_(-1, -1) {
         set_size_no_raytable_update(-1, -1);
-        set_c2w_no_raytable_update(Eigen::Affine3d::Identity());
+        set_c2w_no_raytable_update(Eigen::Affine3f::Identity());
     }
 
     inline PinholeCamera::~PinholeCamera() {}
@@ -365,9 +368,9 @@ namespace currender
 
     inline int PinholeCamera::height() const { return height_; }
 
-    inline const Eigen::Affine3d& PinholeCamera::c2w() const { return c2w_; }
+    inline const Eigen::Affine3f& PinholeCamera::c2w() const { return c2w_; }
 
-    inline const Eigen::Affine3d& PinholeCamera::w2c() const { return w2c_; }
+    inline const Eigen::Affine3f& PinholeCamera::w2c() const { return w2c_; }
 
     inline PinholeCamera::PinholeCamera(int width, int height, float fov_y_deg) {
         set_size_no_raytable_update(width, height);
@@ -377,13 +380,13 @@ namespace currender
 
         set_fov_y_no_raytable_update(fov_y_deg);
 
-        set_c2w_no_raytable_update(Eigen::Affine3d::Identity());
+        set_c2w_no_raytable_update(Eigen::Affine3f::Identity());
 
         InitRayTable();
     }
 
     inline PinholeCamera::PinholeCamera(int width, int height,
-        const Eigen::Affine3d& c2w,
+        const Eigen::Affine3f& c2w,
         float fov_y_deg) {
         set_size_no_raytable_update(width, height);
 
@@ -398,7 +401,7 @@ namespace currender
     }
 
     inline PinholeCamera::PinholeCamera(int width, int height,
-        const Eigen::Affine3d& c2w,
+        const Eigen::Affine3f& c2w,
         const Eigen::Vector2f& principal_point,
         const Eigen::Vector2f& focal_length)
         : principal_point_(principal_point), focal_length_(focal_length) {
@@ -413,7 +416,7 @@ namespace currender
     }
 
     inline void PinholeCamera::set_c2w_no_raytable_update(
-        const Eigen::Affine3d& c2w) {
+        const Eigen::Affine3f& c2w) {
         c2w_ = c2w;
         w2c_ = c2w_.inverse();
 
@@ -440,7 +443,7 @@ namespace currender
         InitRayTable();
     }
 
-    inline void PinholeCamera::set_c2w(const Eigen::Affine3d& c2w) {
+    inline void PinholeCamera::set_c2w(const Eigen::Affine3f& c2w) {
         set_c2w_no_raytable_update(c2w);
 
         InitRayTable();
@@ -498,6 +501,18 @@ namespace currender
         (*image_p)[1] =
             focal_length_[1] / camera_p[2] * camera_p[1] + principal_point_[1];
         (*image_p)[2] = camera_p[2];
+    }
+
+    inline void PinholeCamera::Project(const Eigen::MatrixX3f& camera_p,
+        Eigen::MatrixX3f& image_p) const {
+        image_p = (camera_p.array().colwise() / camera_p.col(2).array()).matrix().eval();
+        Eigen::Matrix3f intr = Eigen::Matrix3f::Identity();
+        intr(0, 0) = focal_length_[0];
+        intr(1, 1) = focal_length_[1];
+        intr(0, 2) = principal_point_[0];
+        intr(1, 2) = principal_point_[1];
+        Eigen::Matrix3f intr_T = intr.transpose();
+        image_p = image_p * intr_T;   
     }
 
     inline void PinholeCamera::Project(const Eigen::Vector3f& camera_p,
@@ -598,17 +613,17 @@ namespace currender
 
     inline OrthoCamera::OrthoCamera() {
         set_size_no_raytable_update(-1, -1);
-        set_c2w_no_raytable_update(Eigen::Affine3d::Identity());
+        set_c2w_no_raytable_update(Eigen::Affine3f::Identity());
     }
     inline OrthoCamera::~OrthoCamera() {}
     inline OrthoCamera::OrthoCamera(int width, int height) {
         set_size_no_raytable_update(width, height);
-        set_c2w_no_raytable_update(Eigen::Affine3d::Identity());
+        set_c2w_no_raytable_update(Eigen::Affine3f::Identity());
 
         InitRayTable();
     }
     inline OrthoCamera::OrthoCamera(int width, int height,
-        const Eigen::Affine3d& c2w) {
+        const Eigen::Affine3f& c2w) {
         set_size_no_raytable_update(width, height);
 
         set_c2w_no_raytable_update(c2w);
@@ -622,7 +637,7 @@ namespace currender
     }
 
     inline void OrthoCamera::set_c2w_no_raytable_update(
-        const Eigen::Affine3d& c2w) {
+        const Eigen::Affine3f& c2w) {
         c2w_ = c2w;
         w2c_ = c2w_.inverse();
 
@@ -641,12 +656,15 @@ namespace currender
         InitRayTable();
     }
 
-    inline void OrthoCamera::set_c2w(const Eigen::Affine3d& c2w) {
+    inline void OrthoCamera::set_c2w(const Eigen::Affine3f& c2w) {
         set_c2w_no_raytable_update(c2w);
 
         InitRayTable();
     }
-
+    inline void OrthoCamera::Project(const Eigen::MatrixX3f& camera_p,
+        Eigen::MatrixX3f& image_p) const {
+        image_p = camera_p;
+    }
     inline void OrthoCamera::Project(const Eigen::Vector3f& camera_p,
         Eigen::Vector3f* image_p) const {
         *image_p = camera_p;
@@ -749,9 +767,7 @@ namespace currender
 
 
 }
-namespace currender {
-     
-
+namespace currender {    
     // Diffuse color
     enum class DiffuseColor {
         kNone = 0,     // Default white color
@@ -844,7 +860,7 @@ namespace currender {
     };
 
 }  // namespace currender
-
+//Renderer
 namespace currender {
 
     class Rasterizer : public Renderer {
@@ -1130,9 +1146,9 @@ namespace currender {
         const auto& faces = mesh->vertex_indices();
         Eigen::Vector3f interp_color;
         // barycentric interpolation of vertex color
-        interp_color = (1.0f - u - v) * vertex_colors[faces[face_index][0]] +
-            u * vertex_colors[faces[face_index][1]] +
-            v * vertex_colors[faces[face_index][2]];
+        interp_color = (1.0f - u - v) * vertex_colors.row(faces(face_index,0)) +
+            u * vertex_colors.row(faces(face_index,1)) +
+            v * vertex_colors.row(faces(face_index,2));
 
         cv::Vec3b& c = color->at<cv::Vec3b>(y, x);
         for (int k = 0; k < 3; k++) {
@@ -1159,9 +1175,9 @@ namespace currender {
 
         Eigen::Vector3f interp_color;
         // barycentric interpolation of uv
-        Eigen::Vector2f interp_uv = (1.0f - u - v) * uv[uv_indices[face_index][0]] +
-            u * uv[uv_indices[face_index][1]] +
-            v * uv[uv_indices[face_index][2]];
+        Eigen::Vector2f interp_uv = (1.0f - u - v) * uv.row(uv_indices(face_index,0)) +
+            u * uv.row(uv_indices(face_index,1)) +
+            v * uv.row(uv_indices(face_index,2));
         float f_tex_pos[2];
         f_tex_pos[0] = interp_uv[0] * (diffuse_texture.cols - 1);
         f_tex_pos[1] = (1.0f - interp_uv[1]) * (diffuse_texture.rows - 1);
@@ -1202,9 +1218,9 @@ namespace currender {
         Eigen::Vector3f interp_color;
 
         // barycentric interpolation of uv
-        Eigen::Vector2f interp_uv = (1.0f - u - v) * uv[uv_indices[face_index][0]] +
-            u * uv[uv_indices[face_index][1]] +
-            v * uv[uv_indices[face_index][2]];
+        Eigen::Vector2f interp_uv = (1.0f - u - v) * uv.row(uv_indices(face_index,0)) +
+            u * uv.row(uv_indices(face_index,1)) +
+            v * uv.row(uv_indices(face_index,2));
         float f_tex_pos[2];
         f_tex_pos[0] = interp_uv[0] * (diffuse_texture.cols - 1);
         f_tex_pos[1] = (1.0f - interp_uv[1]) * (diffuse_texture.rows - 1);

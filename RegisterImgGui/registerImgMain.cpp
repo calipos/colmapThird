@@ -35,8 +35,10 @@ extern int test_sdf();
 extern int test_surf();
 extern int test_mrf();
 extern int test_bfm();
+extern int test_re();
 int main(int, char**)
 {
+    return test_re();;
     return test_bfm();
     return test_mrf();
     //return test_pips2();
