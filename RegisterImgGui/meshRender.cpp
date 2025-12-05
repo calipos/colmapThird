@@ -1049,7 +1049,7 @@ namespace currender {
 
 }  // namespace currender
 
-int test_re()
+int test_render()
 { 
     using namespace currender;
     std::shared_ptr<Mesh>msh(new Mesh()); 

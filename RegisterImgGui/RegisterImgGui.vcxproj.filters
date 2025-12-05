@@ -165,6 +165,9 @@
     <ClCompile Include="meshRender.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="meshOrthoDraw.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">

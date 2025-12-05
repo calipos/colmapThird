@@ -190,6 +190,7 @@
     <ClCompile Include="log.cpp" />
     <ClCompile Include="MarchCube.cpp" />
     <ClCompile Include="maskSynthesis.cpp" />
+    <ClCompile Include="meshOrthoDraw.cpp" />
     <ClCompile Include="meshRender.cpp" />
     <ClCompile Include="misc.cpp" />
     <ClCompile Include="mrf.cpp" />
