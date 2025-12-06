@@ -162,10 +162,7 @@
     <ClCompile Include="bfm2019.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="meshRender.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="meshOrthoDraw.cpp">
+    <ClCompile Include="meshCurrRender.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -299,8 +296,16 @@
     <ClInclude Include="mrf.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="meshRender.h">
+    <ClInclude Include="meshCurrRender.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="meshDraw.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="meshDraw.cpp">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

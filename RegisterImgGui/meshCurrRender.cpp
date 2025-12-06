@@ -7,7 +7,7 @@
 #include <memory>
 #include <fstream>
 #include <list>
-#include "meshRender.h"
+#include "meshCurrRender.h"
 #include "Eigen/Core"
 #include <cassert>
 #include "log.h"
@@ -55,7 +55,7 @@ namespace currender {
     }
 
 
-    bool readFromPureObj(const std::filesystem::path& path,
+    bool readFromSimpleObj(const std::filesystem::path& path,
         Eigen::MatrixX3f& pts,
         Eigen::MatrixX3i& faces)
     {
@@ -1055,7 +1055,7 @@ int test_render()
     std::shared_ptr<Mesh>msh(new Mesh()); 
     Eigen::MatrixX3f V;
     Eigen::MatrixX3i F;
-    bool readRet = readFromPureObj("D:/ucl360/UCL360Calib/CameraCalibGui/pro80/in/scan_1027-023915.pts.obj", V, F);
+    bool readRet = readFromSimpleObj("D:/ucl360/UCL360Calib/CameraCalibGui/pro80/in/scan_1027-023915.pts.obj", V, F);
     if (!readRet)
     {
         return -1;

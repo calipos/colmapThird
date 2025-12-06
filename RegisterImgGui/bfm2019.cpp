@@ -10,7 +10,7 @@
 #include "Eigen/Core"
 #include "igl/writeOBJ.h"
 #include "json/json.h"
-
+#include "meshDraw.h"
 using namespace H5;
 namespace bfm
 {
@@ -142,27 +142,23 @@ version/minorVersion
                 int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
                 hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
                 dataspace.getSimpleExtentDims(dims, NULL);
-                cv::Mat points_ = cv::Mat(dims[0], dims[1], CV_32FC1);
-                dataset.read(points_.data, H5::PredType::NATIVE_FLOAT);
-                cv::transpose(points_, points);
+                std::vector<float>rawdata(dims[1] * dims[0]);
+                dataset.read(&rawdata[0], H5::PredType::NATIVE_FLOAT);
+                points = Eigen::MatrixX3f(dims[1], dims[0]);
+                points = Eigen::Map<Eigen::MatrixX3f>(&rawdata[0], dims[1], dims[0]); 
             }
-            {
-                cv::Mat cells;
+            { 
                 DataSet dataset = file.openDataSet("shape/representer/cells");
                 DataSpace dataspace = dataset.getSpace();
                 H5S_class_t type = dataspace.getSimpleExtentType();
                 int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
                 hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
-                dataspace.getSimpleExtentDims(dims, NULL);
-                cells = cv::Mat(dims[0], dims[1], CV_32SC1);
-                dataset.read(cells.data, H5::PredType::NATIVE_INT);
-                F = Eigen::MatrixXi(cells.cols, cells.rows);
-                for (int c = 0; c < cells.cols; c++)
-                {
-                    F(c, 0) = cells.ptr<int>(0)[c];
-                    F(c, 1) = cells.ptr<int>(1)[c];
-                    F(c, 2) = cells.ptr<int>(2)[c];
-                }
+                dataspace.getSimpleExtentDims(dims, NULL); 
+                std::vector<int>rawdata(dims[1] * dims[0]);
+                dataset.read(&rawdata[0], H5::PredType::NATIVE_INT);
+                F = Eigen::MatrixX3i(dims[1], dims[0]);
+                F = Eigen::Map<Eigen::MatrixX3i>(&rawdata[0], dims[1], dims[0]);
+                 
             }
 
 
@@ -172,9 +168,11 @@ version/minorVersion
                 H5S_class_t type = dataspace.getSimpleExtentType();
                 int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
                 hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
-                dataspace.getSimpleExtentDims(dims, NULL);
-                shape_mean = cv::Mat(dims[0], dims[1], CV_32FC1);
-                dataset.read(shape_mean.data, H5::PredType::NATIVE_FLOAT);
+                dataspace.getSimpleExtentDims(dims, NULL); 
+                std::vector<float>rawdata(dims[1] * dims[0]);
+                dataset.read(&rawdata[0], H5::PredType::NATIVE_FLOAT);
+                shape_mean = Eigen::VectorXf(dims[1] * dims[0]);
+                shape_mean = Eigen::Map<Eigen::VectorXf>(&rawdata[0], dims[1]*dims[0]); 
             }
             {
                 DataSet dataset = file.openDataSet("shape/model/pcaBasis");
@@ -182,9 +180,12 @@ version/minorVersion
                 H5S_class_t type = dataspace.getSimpleExtentType();
                 int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
                 hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
-                dataspace.getSimpleExtentDims(dims, NULL);
-                shape_pcaBasis = cv::Mat(dims[0], dims[1], CV_32FC1);
-                dataset.read(shape_pcaBasis.data, H5::PredType::NATIVE_FLOAT);
+                dataspace.getSimpleExtentDims(dims, NULL); 
+                std::vector<float>rawdata(dims[1] * dims[0]);
+                dataset.read(&rawdata[0], H5::PredType::NATIVE_FLOAT);
+                shape_pcaBasis = Eigen::MatrixXf(dims[0] , dims[1]);
+                shape_pcaBasis = Eigen::Map<Eigen::MatrixXf>(&rawdata[0], dims[1] , dims[0]);
+                shape_pcaBasis.transposeInPlace();
             }
             {
                 DataSet dataset = file.openDataSet("shape/model/pcaVariance");
@@ -193,16 +194,15 @@ version/minorVersion
                 int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
                 hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
                 dataspace.getSimpleExtentDims(dims, NULL);
-                shape_pcaStandardDeviation = cv::Mat(dims[0], dims[1], CV_32FC1);
-                dataset.read(shape_pcaStandardDeviation.data, H5::PredType::NATIVE_FLOAT);
-                for (int r = 0; r < shape_pcaStandardDeviation.rows; r++)
-                {
-                    for (int c = 0; c < shape_pcaStandardDeviation.cols; c++)
-                    {
-                        shape_pcaStandardDeviation.ptr<float>(r)[c] = sqrt(shape_pcaStandardDeviation.ptr<float>(r)[c]);
-                    }
-                }
+                std::vector<float>rawdata(dims[1] * dims[0]);
+                dataset.read(&rawdata[0], H5::PredType::NATIVE_FLOAT);
+                shape_pcaStandardDeviation = Eigen::VectorXf(dims[1] * dims[0]);
+                shape_pcaStandardDeviation = Eigen::Map<Eigen::VectorXf>(&rawdata[0], dims[1] * dims[0]);
+                shape_pcaStandardDeviation = shape_pcaStandardDeviation.cwiseSqrt();
             }
+
+             
+
 
             {
                 DataSet dataset = file.openDataSet("expression/model/mean");
@@ -211,8 +211,10 @@ version/minorVersion
                 int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
                 hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
                 dataspace.getSimpleExtentDims(dims, NULL);
-                expression_mean = cv::Mat(dims[0], dims[1], CV_32FC1);
-                dataset.read(expression_mean.data, H5::PredType::NATIVE_FLOAT);
+                std::vector<float>rawdata(dims[1] * dims[0]);
+                dataset.read(&rawdata[0], H5::PredType::NATIVE_FLOAT);
+                expression_mean = Eigen::VectorXf(dims[1] * dims[0]);
+                expression_mean = Eigen::Map<Eigen::VectorXf>(&rawdata[0], dims[1] * dims[0]);
             }
             {
                 DataSet dataset = file.openDataSet("expression/model/pcaBasis");
@@ -221,8 +223,11 @@ version/minorVersion
                 int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
                 hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
                 dataspace.getSimpleExtentDims(dims, NULL);
-                expression_pcaBasis = cv::Mat(dims[0], dims[1], CV_32FC1);
-                dataset.read(expression_pcaBasis.data, H5::PredType::NATIVE_FLOAT);
+                std::vector<float>rawdata(dims[1] * dims[0]);
+                dataset.read(&rawdata[0], H5::PredType::NATIVE_FLOAT);
+                expression_pcaBasis = Eigen::MatrixXf(dims[0], dims[1]);
+                expression_pcaBasis = Eigen::Map<Eigen::MatrixXf>(&rawdata[0], dims[1], dims[0]);
+                expression_pcaBasis.transposeInPlace();
             }
             {
                 DataSet dataset = file.openDataSet("expression/model/pcaVariance");
@@ -231,16 +236,14 @@ version/minorVersion
                 int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
                 hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
                 dataspace.getSimpleExtentDims(dims, NULL);
-                expression_pcaStandardDeviation = cv::Mat(dims[0], dims[1], CV_32FC1);
-                dataset.read(expression_pcaStandardDeviation.data, H5::PredType::NATIVE_FLOAT);
-                for (int r = 0; r < expression_pcaStandardDeviation.rows; r++)
-                {
-                    for (int c = 0; c < expression_pcaStandardDeviation.cols; c++)
-                    {
-                        expression_pcaStandardDeviation.ptr<float>(r)[c] = sqrt(expression_pcaStandardDeviation.ptr<float>(r)[c]);
-                    }
-                }
+                std::vector<float>rawdata(dims[1] * dims[0]);
+                dataset.read(&rawdata[0], H5::PredType::NATIVE_FLOAT);
+                expression_pcaStandardDeviation = Eigen::VectorXf(dims[1] * dims[0]);
+                expression_pcaStandardDeviation = Eigen::Map<Eigen::VectorXf>(&rawdata[0], dims[1] * dims[0]);
+                expression_pcaStandardDeviation = expression_pcaStandardDeviation.cwiseSqrt();
             }
+            
+            
 
             {
                 DataSet dataset = file.openDataSet("color/model/mean");
@@ -249,8 +252,10 @@ version/minorVersion
                 int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
                 hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
                 dataspace.getSimpleExtentDims(dims, NULL);
-                color_mean = cv::Mat(dims[0], dims[1], CV_32FC1);
-                dataset.read(color_mean.data, H5::PredType::NATIVE_FLOAT);
+                std::vector<float>rawdata(dims[1] * dims[0]);
+                dataset.read(&rawdata[0], H5::PredType::NATIVE_FLOAT);
+                color_mean = Eigen::VectorXf(dims[1] * dims[0]);
+                color_mean = Eigen::Map<Eigen::VectorXf>(&rawdata[0], dims[1] * dims[0]);
             }
             {
                 DataSet dataset = file.openDataSet("color/model/pcaBasis");
@@ -259,8 +264,11 @@ version/minorVersion
                 int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
                 hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
                 dataspace.getSimpleExtentDims(dims, NULL);
-                color_pcaBasis = cv::Mat(dims[0], dims[1], CV_32FC1);
-                dataset.read(color_pcaBasis.data, H5::PredType::NATIVE_FLOAT);
+                std::vector<float>rawdata(dims[1] * dims[0]);
+                dataset.read(&rawdata[0], H5::PredType::NATIVE_FLOAT);
+                color_pcaBasis = Eigen::MatrixXf(dims[0], dims[1]);
+                color_pcaBasis = Eigen::Map<Eigen::MatrixXf>(&rawdata[0], dims[1], dims[0]);
+                color_pcaBasis.transposeInPlace();
             }
             {
                 DataSet dataset = file.openDataSet("color/model/pcaVariance");
@@ -269,16 +277,14 @@ version/minorVersion
                 int rank = dataspace.getSimpleExtentNdims(); // 获取数据集的维度数量
                 hsize_t dims[2]; dims[1] = rank == 2 ? dims[1] : 1;
                 dataspace.getSimpleExtentDims(dims, NULL);
-                color_pcaStandardDeviation = cv::Mat(dims[0], dims[1], CV_32FC1);
-                dataset.read(color_pcaStandardDeviation.data, H5::PredType::NATIVE_FLOAT);
-                for (int r = 0; r < color_pcaStandardDeviation.rows; r++)
-                {
-                    for (int c = 0; c < color_pcaStandardDeviation.cols; c++)
-                    {
-                        color_pcaStandardDeviation.ptr<float>(r)[c] = sqrt(color_pcaStandardDeviation.ptr<float>(r)[c]);
-                    }
-                }
+                std::vector<float>rawdata(dims[1] * dims[0]);
+                dataset.read(&rawdata[0], H5::PredType::NATIVE_FLOAT);
+                color_pcaStandardDeviation = Eigen::VectorXf(dims[1] * dims[0]);
+                color_pcaStandardDeviation = Eigen::Map<Eigen::VectorXf>(&rawdata[0], dims[1] * dims[0]);
+                color_pcaStandardDeviation = color_pcaStandardDeviation.cwiseSqrt();
             }
+            
+            
             {
                 //metadata/landmarks/json
                 landmarks.clear();
@@ -343,7 +349,17 @@ version/minorVersion
                 std::map<std::string, std::pair<int, float>>nearesetMatch;
                 cv::flann::KDTreeIndexParams indexParams(4);
                 int k = 1;
-                cv::flann::Index tree(this->points, indexParams);//此处用target构建k-d树
+                cv::Mat pointMat;
+                {
+                    pointMat = cv::Mat(points.rows(), points.cols(),CV_32FC1);
+                    for (int r = 0; r < pointMat.rows; r++)
+                    {
+                        pointMat.ptr<float>(r)[0] = points(r, 0);
+                        pointMat.ptr<float>(r)[1] = points(r, 1);
+                        pointMat.ptr<float>(r)[2] = points(r, 2);
+                    }
+                }
+                cv::flann::Index tree(pointMat, indexParams);//此处用target构建k-d树
                 cv::Mat ldIdx(landmarks.size(), k, CV_32SC1);   //装载搜索到的对应点的索引（即neibours在target这个矩阵的行数）
                 cv::Mat ldDists(landmarks.size(), k, CV_32F);         //搜索到的最近邻的距离
                 tree.knnSearch(landmarksPos, ldIdx, ldDists, k, cv::flann::SearchParams(32));
@@ -374,54 +390,56 @@ version/minorVersion
 
 
             file.close();
-            shapeDim = shape_pcaBasis.cols;
-            expressionDim = expression_pcaBasis.cols;
-            colorDim = color_pcaBasis.cols;
+            shapeDim = shape_pcaBasis.cols();
+            expressionDim = expression_pcaBasis.cols();
+            colorDim = color_pcaBasis.cols();
         }
         int shapeDim{ 0 };
         int expressionDim{ 0 };
         int colorDim{ 0 };
-        cv::Mat points;
-        Eigen::MatrixXi F;
+        Eigen::MatrixX3f points;
+        Eigen::MatrixX3i F;
         std::map<std::string, cv::Point3f>landmarks;
         std::map<std::string, int>landmarkIdx;
-        cv::Mat shape_mean, shape_pcaBasis, shape_pcaStandardDeviation;
-        cv::Mat expression_mean, expression_pcaBasis, expression_pcaStandardDeviation;
-        cv::Mat color_mean, color_pcaBasis, color_pcaStandardDeviation;
+        Eigen::VectorXf shape_mean, expression_mean, color_mean;
+        Eigen::VectorXf shape_pcaStandardDeviation, expression_pcaStandardDeviation, color_pcaStandardDeviation;
+        Eigen::MatrixXf shape_pcaBasis;
+        Eigen::MatrixXf expression_pcaBasis;
+        Eigen::MatrixXf color_pcaBasis;
         void generateRandomFace(Eigen::MatrixXf& V, Eigen::MatrixXf&C)const
         {
             std::default_random_engine e; 
             std::uniform_real_distribution<float> u(-1, 1);
             e.seed(time(0));
-            cv::Mat shapeParam(shapeDim, 1, CV_32FC1);
-            cv::Mat expressionParam(expressionDim, 1, CV_32FC1);
-            cv::Mat colorParam;
+            Eigen::VectorXf shapeParam(shapeDim);
+            Eigen::VectorXf expressionParam(expressionDim);
+            Eigen::VectorXf colorParam;
             for (int i = 0; i < shapeDim; i++) {
-                shapeParam.ptr<float>(0)[i] =   u(e);
+                shapeParam[i] =  u(e);
             }
             for (int i = 0; i < expressionDim; i++) {
-                expressionParam.ptr<float>(0)[i] =   u(e);
+                expressionParam[i] =  u(e);
             }
 
-            colorParam = shapeParam.mul(color_pcaStandardDeviation);
-            shapeParam = shapeParam.mul(shape_pcaStandardDeviation);
-            expressionParam = expressionParam.mul(expression_pcaStandardDeviation);
+            colorParam = shapeParam.cwiseProduct(color_pcaStandardDeviation);
+            shapeParam = shapeParam.cwiseProduct(shape_pcaStandardDeviation);
+            expressionParam = expressionParam.cwiseProduct(expression_pcaStandardDeviation);
             
-            cv::Mat face = shape_mean + shape_pcaBasis * shapeParam +expression_mean + expression_pcaBasis * expressionParam;
-            cv::Mat color = color_mean + color_pcaBasis * colorParam;
-            int ptsCnt = face.rows / 3;
+            Eigen::VectorXf face = shape_mean + shape_pcaBasis * shapeParam + expression_mean + expression_pcaBasis * expressionParam;
+            Eigen::VectorXf color = color_mean + color_pcaBasis * colorParam;
+            int ptsCnt = face.rows() / 3;
             V = Eigen::MatrixXf(ptsCnt, 3);
             C = Eigen::MatrixXf(ptsCnt, 3);
 #pragma omp parallel for
             for (int i = 0; i < ptsCnt; i++)
             {
                 int i3 = 3 * i;
-                V(i, 0) = face.ptr<float>(i3 + 0)[0];
-                V(i, 1) = face.ptr<float>(i3 + 1)[0];
-                V(i, 2) = face.ptr<float>(i3 + 2)[0];
-                C(i, 0) = color.ptr<float>(i3 + 0)[0];
-                C(i, 1) = color.ptr<float>(i3 + 1)[0];
-                C(i, 2) = color.ptr<float>(i3 + 2)[0];
+                V(i, 0) = face[i3 + 0];
+                V(i, 1) = face[i3 + 1];
+                V(i, 2) = face[i3 + 2];
+                C(i, 0) = color[i3 + 0];
+                C(i, 1) = color[i3 + 1];
+                C(i, 2) = color[i3 + 2];
             }
             return;
         }
@@ -512,13 +530,14 @@ int test_bfm(void)
     bfm::Bfm2019 model(bfmFacePath);
     cv::Mat face;
     cv::Mat color;
-    for (int i = 0; i < 20; i++)
+    for (int i = 0; i < 10; i++)
     {
         Eigen::MatrixXf V;
         Eigen::MatrixXf C;
         model.generateRandomFace(V, C);
-        //model.saveObj("../surf/rand"+std::to_string(i)+".obj", V, C);
-        model.capture(V, C);
+        model.saveObj("../surf/rand"+std::to_string(i)+".obj", V, C);
+        //model.capture(V, C);
+        //meshdraw::meshOrthoDraw();
     }
     return 0; // successfully terminated
 }
