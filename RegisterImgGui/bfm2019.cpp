@@ -535,7 +535,24 @@ int test_bfm(void)
         Eigen::MatrixXf V;
         Eigen::MatrixXf C;
         model.generateRandomFace(V, C);
-        model.saveObj("../surf/rand"+std::to_string(i)+".obj", V, C);
+
+
+        meshdraw::Mesh msh(V, model.F, C);
+        msh.figureFacesNomral();
+        meshdraw::Camera cam;
+        cam.R = meshdraw::utils::generRotateMatrix({ 0,0,-1 }, {0,-1,0});
+        cam.t = Eigen::RowVector3f(0,0,300);
+        cam.intr = Eigen::Matrix3f::Identity();
+        cam.intr(0, 0) = 1200;
+        cam.intr(1, 1) = 1200;
+        cam.intr(0, 2) = 800;
+        cam.intr(1, 2) = 600;
+        cam.height = 1200;
+        cam.width = 1600;
+        meshdraw::render(msh, cam);
+
+
+        //model.saveObj("../surf/rand"+std::to_string(i)+".obj", V, C);
         //model.capture(V, C);
         //meshdraw::meshOrthoDraw();
     }
