@@ -35,12 +35,14 @@ namespace meshdraw
 		vertexColor= 1,
 		distance,
 	};
-	bool render(const Mesh&msh,const Camera&cam, const RenderType&renderTpye = RenderType::vertexColor);
+	bool render(const Mesh&msh,const Camera&cam, cv::Mat& rgbMat, cv::Mat& vertexMap, cv::Mat& mask, const RenderType&renderTpye = RenderType::vertexColor);
 
 	namespace utils
 	{
+		meshdraw::Camera generateBfmDefaultCamera();
 		Eigen::Matrix3f generRotateMatrix(const Eigen::Vector3f& direct, const Eigen::Vector3f& upDirect);
 		bool saveFacePickedMesh(const std::filesystem::path&path,const Mesh&msh,const std::vector<bool>&faceValid);
+		bool savePtsMat(const std::filesystem::path& path, const cv::Mat& ptsMat, const cv::Mat& mask);
 	}
 
 }

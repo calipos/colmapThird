@@ -81,6 +81,20 @@ namespace meshdraw
     }
     namespace utils
     {
+        meshdraw::Camera generateBfmDefaultCamera()
+        {
+            meshdraw::Camera cam;
+            cam.R = meshdraw::utils::generRotateMatrix({ 0,0,-1 }, { 0,-1,0 });
+            cam.t = Eigen::RowVector3f(0, 0, 300);
+            cam.intr = Eigen::Matrix3f::Identity();
+            cam.intr(0, 0) = 1200;
+            cam.intr(1, 1) = 1200;
+            cam.intr(0, 2) = 800;
+            cam.intr(1, 2) = 600;
+            cam.height = 1200;
+            cam.width = 1600;
+            return cam;
+        }
         Eigen::Matrix3f generRotateMatrix(const Eigen::Vector3f& direct, const Eigen::Vector3f& upDirect)
         {
             Eigen::Vector3f right = upDirect.cross(direct);
@@ -146,7 +160,27 @@ namespace meshdraw
             fout.close();
             return true;
         }
-
+        bool savePtsMat(const std::filesystem::path& path, const cv::Mat& ptsMat, const cv::Mat& mask)
+        {
+            if (ptsMat.size()!=mask.size())
+            {
+                LOG_ERR_OUT << "ptsMat.size()!=mask.size()";
+                return false;
+            }
+            std::fstream fout(path,std::ios::out);
+            for (int r = 0; r < ptsMat.rows; r++)
+            {
+                for (int c = 0; c < ptsMat.cols; c++)
+                {
+                    if (mask.ptr<uchar>(r)[c]>0)
+                    {
+                        fout << ptsMat.at<cv::Vec3f>(r, c)[0] << " " << ptsMat.at<cv::Vec3f>(r, c)[1] << " " << ptsMat.at<cv::Vec3f>(r, c)[2] << std::endl;
+                    }
+                }
+            }
+            fout.close();
+            return true;
+        }
         std::list<cv::Vec2i> triangle(const cv::Vec2i& p0, const cv::Vec2i& p1, const cv::Vec2i& p2) {
             std::list<cv::Vec2i> ret;
             if (p0[1] == p1[1] && p0[1] == p2[1])
@@ -291,7 +325,7 @@ namespace meshdraw
         return true;
     }
 
-    bool render(const Mesh& msh, const Camera& cam, const RenderType& renderTpye)
+    bool render(const Mesh& msh, const Camera& cam, cv::Mat& rgbMat, cv::Mat& vertexMap, cv::Mat& mask, const RenderType& renderTpye)
     {
         if (renderTpye == RenderType::vertexColor)
         {
@@ -325,10 +359,10 @@ namespace meshdraw
                 igl::barycenter(msh.V, msh.F, barycenter);
                 Eigen::MatrixX3f viewFaceDir = (barycenter.rowwise() - cam.t);// .rowwise().norm();
                 Eigen::VectorXf dots = viewFaceDir.cwiseProduct(msh.facesNormal).rowwise().sum();
-                cv::Mat drawMat = cv::Mat::zeros(cam.height, cam.width, CV_8UC3);
+                rgbMat = cv::Mat::zeros(cam.height, cam.width, CV_8UC3);
                 cv::Mat drawMatDist = cv::Mat::zeros(cam.height, cam.width, CV_32FC1);
-                cv::Mat drawMask = cv::Mat::zeros(cam.height, cam.width, CV_8UC1);
-                cv::Mat ptsMat = cv::Mat::zeros(cam.height, cam.width, CV_32FC3);
+                mask = cv::Mat::zeros(cam.height, cam.width, CV_8UC1);
+                vertexMap = cv::Mat::zeros(cam.height, cam.width, CV_32FC3);
                 for (int f = 0; f < dots.size(); f++)
                 {
                     if (dots[f]<0)
@@ -347,33 +381,33 @@ namespace meshdraw
                             const int& c = pixel[0];
                             if (c >= 0 && r >= 0 && c < cam.width && r < cam.height)
                             {
-                                if (drawMask.ptr<uchar>(r)[c]==0)
+                                if (mask.ptr<uchar>(r)[c]==0)
                                 {
-                                    drawMask.ptr<uchar>(r)[c] = 1;
+                                    mask.ptr<uchar>(r)[c] = 1;
                                     drawMatDist.ptr<float>(r)[c] = distFromCam;
-                                    drawMat.at<cv::Vec3b>(r, c)[0] = colorInt(fa, 2);
-                                    drawMat.at<cv::Vec3b>(r, c)[1] = colorInt(fa, 1);
-                                    drawMat.at<cv::Vec3b>(r, c)[2] = colorInt(fa, 0);
-                                    ptsMat.at<cv::Vec3f>(r, c)[0] = value[0];
-                                    ptsMat.at<cv::Vec3f>(r, c)[1] = value[1];
-                                    ptsMat.at<cv::Vec3f>(r, c)[2] = value[2];
+                                    rgbMat.at<cv::Vec3b>(r, c)[0] = colorInt(fa, 2);
+                                    rgbMat.at<cv::Vec3b>(r, c)[1] = colorInt(fa, 1);
+                                    rgbMat.at<cv::Vec3b>(r, c)[2] = colorInt(fa, 0);
+                                    vertexMap.at<cv::Vec3f>(r, c)[0] = value[0];
+                                    vertexMap.at<cv::Vec3f>(r, c)[1] = value[1];
+                                    vertexMap.at<cv::Vec3f>(r, c)[2] = value[2];
                                     
                                 }
                                 else if (drawMatDist.ptr<float>(r)[c]> distFromCam)
                                 {
                                     drawMatDist.ptr<float>(r)[c] = distFromCam;
-                                    drawMat.at<cv::Vec3b>(r, c)[0] = colorInt(fa, 2);
-                                    drawMat.at<cv::Vec3b>(r, c)[1] = colorInt(fa, 1);
-                                    drawMat.at<cv::Vec3b>(r, c)[2] = colorInt(fa, 0);
-                                    ptsMat.at<cv::Vec3f>(r, c)[0] = value[0];
-                                    ptsMat.at<cv::Vec3f>(r, c)[1] = value[1];
-                                    ptsMat.at<cv::Vec3f>(r, c)[2] = value[2];
+                                    rgbMat.at<cv::Vec3b>(r, c)[0] = colorInt(fa, 2);
+                                    rgbMat.at<cv::Vec3b>(r, c)[1] = colorInt(fa, 1);
+                                    rgbMat.at<cv::Vec3b>(r, c)[2] = colorInt(fa, 0);
+                                    vertexMap.at<cv::Vec3f>(r, c)[0] = value[0];
+                                    vertexMap.at<cv::Vec3f>(r, c)[1] = value[1];
+                                    vertexMap.at<cv::Vec3f>(r, c)[2] = value[2];
                                 } 
                             }
                         }
                     }
                 }
-                utils::saveFacePickedMesh("a.obj",msh, renderFaces);        
+                //utils::saveFacePickedMesh("a.obj",msh, renderFaces);        
             }
             else if(cam.cameraType == CmaeraType::Ortho)
             {

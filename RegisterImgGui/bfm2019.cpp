@@ -539,22 +539,16 @@ int test_bfm(void)
 
         meshdraw::Mesh msh(V, model.F, C);
         msh.figureFacesNomral();
-        meshdraw::Camera cam;
-        cam.R = meshdraw::utils::generRotateMatrix({ 0,0,-1 }, {0,-1,0});
-        cam.t = Eigen::RowVector3f(0,0,300);
-        cam.intr = Eigen::Matrix3f::Identity();
-        cam.intr(0, 0) = 1200;
-        cam.intr(1, 1) = 1200;
-        cam.intr(0, 2) = 800;
-        cam.intr(1, 2) = 600;
-        cam.height = 1200;
-        cam.width = 1600;
-        meshdraw::render(msh, cam);
+        meshdraw::Camera cam = meshdraw::utils::generateBfmDefaultCamera();
+        cv::Mat rgbMat;
+        cv::Mat vertexMap;
+        cv::Mat mask;
+        meshdraw::render(msh, cam, rgbMat, vertexMap, mask);
+        meshdraw::utils::savePtsMat("a.txt", vertexMap, mask);
 
-
-        //model.saveObj("../surf/rand"+std::to_string(i)+".obj", V, C);
+        model.saveObj("../surf/rand"+std::to_string(i)+".obj", V, C);
+        return 0;
         //model.capture(V, C);
-        //meshdraw::meshOrthoDraw();
     }
     return 0; // successfully terminated
 }
