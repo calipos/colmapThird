@@ -14,7 +14,9 @@ mkdir install
 
 if not exist %pwd%\install\opencv480 (
     echo  -----------build opencv480----------
-    cmake  -B %pwd%\build\opencv480  -S %pwd%\opencv480     ^
+    cmake   -G "Visual Studio 16 2019"  -B %pwd%\build\opencv480  -S %pwd%\opencv480     ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/opencv480 ^
+    -DCMAKE_INSTALL_MODE=COPY ^
     -DBUILD_opencv_apps:BOOL="0" ^
     -DBUILD_WITH_DEBUG_INFO:BOOL="0" ^
     -DBUILD_opencv_flann:BOOL="1" ^
@@ -70,10 +72,9 @@ if not exist %pwd%\install\opencv480 (
     -DINSTALL_PDB_COMPONENT_EXCLUDE_FROM_ALL:BOOL="0"  ^
     -DINSTALL_PYTHON_EXAMPLES:BOOL="0"                 ^
     -DINSTALL_TESTS:BOOL="0"                           ^
-    -DCMAKE_BUILD_TYPE="Release"                       ^
-    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/opencv480 
+    -DOPENCV_EXTRA_MODULES_PATH:PATH=%pwd%opencv_contrib-4.8.0/modules  ^
+    -DCMAKE_BUILD_TYPE="Release"                       
     TIMEOUT /T 1
 )
-    rem msbuild %pwd%\build\opencv480\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release    
-    msbuild %pwd%\build\opencv480\INSTALL.vcxproj -p:Configuration=Release
-    msbuild %pwd%\build\opencv480\INSTALL.vcxproj -p:Configuration=Debug
+    msbuild %pwd%\build\opencv480\INSTALL.vcxproj  -t:Rebuild -p:Configuration=Release
+rem    msbuild %pwd%\build\opencv480\INSTALL.vcxproj  -t:Rebuild -p:Configuration=Debug

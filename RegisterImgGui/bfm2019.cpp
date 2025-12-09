@@ -520,7 +520,13 @@ version/minorVersion
 }
 int test_bfm(void)
 {  
-    
+    cv::CascadeClassifier face_cascade;
+    //face_cascade.load(cascade_name);
+    //cv::Mat img = cv::imread(image);
+    //cv::Ptr<cv::Facemark> facemark = cv::createFacemarkKazemi());
+    //facemark->loadModel(filename);
+    //cout << "Loaded model" << endl;
+
     std::filesystem::path bfmFacePath = "../models/model2019_face12.h5";
     if (!std::filesystem::exists(bfmFacePath))
     {
