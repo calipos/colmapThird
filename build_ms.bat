@@ -52,7 +52,7 @@ if not exist %pwd%\install\jsoncpp-1.9.6\Release (
     TIMEOUT /T 1
     msbuild %pwd%\build\jsoncpp-1.9.6\INSTALL.vcxproj  -t:Rebuild -p:Configuration=Debug
 )
-
+pause
 if not exist %pwd%\install\GKlib (
     echo  -----------build gklib----------
     cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\gklib  -S %pwd%\GKlib  -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install 
@@ -166,6 +166,8 @@ rem =======================================================================
 if not exist %pwd%\install\opencv480 (
     echo  -----------build opencv480----------
     cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\opencv480  -S %pwd%\opencv480     ^
+    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/opencv480 ^
+    -DCMAKE_INSTALL_MODE=COPY ^
     -DBUILD_opencv_apps:BOOL="0" ^
     -DBUILD_WITH_DEBUG_INFO:BOOL="0" ^
     -DBUILD_opencv_flann:BOOL="1" ^
@@ -216,10 +218,16 @@ if not exist %pwd%\install\opencv480 (
     -DBUILD_opencv_objdetect:BOOL="1" ^
     -DBUILD_FAT_JAVA_LIB:BOOL="0"     ^
     -DBUILD_opencv_dnn:BOOL="1"       ^
-    -DCMAKE_BUILD_TYPE="Release" ^
-    -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install/opencv480 
+    -DINSTALL_PDB:BOOL="0"                             ^
+    -DINSTALL_C_EXAMPLES:BOOL="0"                      ^
+    -DINSTALL_PDB_COMPONENT_EXCLUDE_FROM_ALL:BOOL="0"  ^
+    -DINSTALL_PYTHON_EXAMPLES:BOOL="0"                 ^
+    -DINSTALL_TESTS:BOOL="0"                           ^
+    -DOPENCV_EXTRA_MODULES_PATH:PATH=%pwd%opencv_contrib-4.8.0/modules  ^
+    -DCMAKE_BUILD_TYPE="Release"           
     TIMEOUT /T 1
     msbuild %pwd%\build\opencv480\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
+    msbuild %pwd%\build\opencv480\INSTALL.vcxproj  -t:Rebuild -p:Configuration=Debug
 )
 rem =======================================================================
 
@@ -299,7 +307,7 @@ if not exist %pwd%\install\hdf5-hdf5-1_14_3 (
     TIMEOUT /T 1
     msbuild %pwd%\build\hdf5-hdf5-1_14_3\INSTALL.vcxproj -t:Rebuild -p:Configuration=Release
 )
-pause
+
 rem =======================================================================
 
 

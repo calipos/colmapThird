@@ -7,6 +7,7 @@
 #include "H5Cpp.h"
 #include "log.h"
 #include "opencv2/opencv.hpp"
+#include "opencv2/face.hpp"
 #include "Eigen/Core"
 #include "igl/writeOBJ.h"
 #include "json/json.h"
@@ -518,15 +519,53 @@ version/minorVersion
     };
     
 }
+cv::Mat resizeImg640(const cv::Mat&image,double& factor)
+{
+    int max = (std::max)(image.rows, image.cols);
+    factor = 640. / max;
+    cv::Mat img;
+    cv::resize(image,img,cv::Size(), factor, factor);
+    cv::Mat ret=cv::Mat::zeros(640,640, img.type());
+    img.copyTo(ret(cv::Rect(0, 0, img.cols, img.rows)));
+    return ret;
+}
 int test_bfm(void)
 {  
-    cv::CascadeClassifier face_cascade;
-    //face_cascade.load(cascade_name);
-    //cv::Mat img = cv::imread(image);
-    //cv::Ptr<cv::Facemark> facemark = cv::createFacemarkKazemi());
-    //facemark->loadModel(filename);
-    //cout << "Loaded model" << endl;
+    {
+        cv::Mat image = cv::imread("image.jpg");
+        double factor = 1;
+        cv::Mat img = resizeImg640(image, factor);
+        cv::Mat facesMat;
+        cv::Ptr<cv::FaceDetectorYN> faceDetector = cv::FaceDetectorYN::create("../models/face_detection_yunet_2023mar.onnx", "", cv::Size(640, 640));
+        faceDetector->detect(img, facesMat);
+        std::vector<cv::Rect>faces(facesMat.rows);
+        std::vector<std::vector<cv::Point2f>>faceLandmarks(facesMat.rows, std::vector<cv::Point2f>(5));
+        std::vector<float>faceScores(facesMat.rows);
+        for (int i = 0; i < facesMat.rows; i++)
+        { 
+            faces[i].x = facesMat.at<float>(i, 0);
+            faces[i].y = facesMat.at<float>(i, 1);
+            faces[i].width = facesMat.at<float>(i, 2);
+            faces[i].height = facesMat.at<float>(i, 3);
 
+            faceLandmarks[i][0].x = facesMat.at<float>(i, 4); faceLandmarks[i][0].x = facesMat.at<float>(i, 5);
+            faceLandmarks[i][1].x = facesMat.at<float>(i, 6); faceLandmarks[i][1].x = facesMat.at<float>(i, 7);
+            faceLandmarks[i][2].x = facesMat.at<float>(i, 8); faceLandmarks[i][2].x = facesMat.at<float>(i, 9);
+            faceLandmarks[i][3].x = facesMat.at<float>(i, 10); faceLandmarks[i][3].x = facesMat.at<float>(i, 11);
+            faceLandmarks[i][4].x = facesMat.at<float>(i, 12); faceLandmarks[i][4].x = facesMat.at<float>(i, 13);
+
+            faceScores[i] = facesMat.at<float>(i, 14); 
+        }
+
+
+        cv::Ptr<cv::face::Facemark> facemark = cv::face::FacemarkLBF::create(); 
+        facemark->loadModel("../models/lbfmodel.yaml"); 
+         
+        std::vector<std::vector<cv::Point2f> > landmarks;
+        facemark->fit(image, faces, landmarks);
+
+        LOG_OUT;
+    }
     std::filesystem::path bfmFacePath = "../models/model2019_face12.h5";
     if (!std::filesystem::exists(bfmFacePath))
     {
