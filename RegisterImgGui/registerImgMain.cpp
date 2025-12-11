@@ -13,6 +13,7 @@
 #include "registerFrame.h"
 #include "segmentFrame.h"
 #include "imgui_annotation.h"
+#include "imgui_bfmIter.h"
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
 #endif 
@@ -24,6 +25,7 @@ bool show_imgRegister_window = false;
 bool show_segment_window = false;
 bool show_annotation_window = false;
 bool show_main_window = true;
+bool show_bfmIter_window = true;
 
 extern int test_sam2();
 extern int test_geometry();
@@ -95,6 +97,10 @@ int main(int, char**)
         {
             show_segment_window = !show_segment_window;
         }
+        if (ImGui::Button("bfmIter") && !show_bfmIter_window)
+        {
+            show_bfmIter_window = !show_bfmIter_window;
+        }
         ImGui::End();
         if (show_imgRegister_window)
         {
@@ -107,6 +113,10 @@ int main(int, char**)
         if (show_annotation_window)
         {
             annotationFrame(&show_annotation_window);
+        }
+        if (show_bfmIter_window)
+        {
+            bfmIterFrame(&show_bfmIter_window);
         }
         
         ImGui::Render();

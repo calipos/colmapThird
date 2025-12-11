@@ -176,6 +176,7 @@
     <ClCompile Include="image.cpp" />
     <ClCompile Include="imgui.cpp" />
     <ClCompile Include="imgui_annotation.cpp" />
+    <ClCompile Include="imgui_bfmIter.cpp" />
     <ClCompile Include="imgui_demo.cpp" />
     <ClCompile Include="imgui_draw.cpp" />
     <ClCompile Include="imgui_impl_glfw.cpp" />
@@ -232,6 +233,7 @@
     <ClInclude Include="face.h" />
     <ClInclude Include="image.h" />
     <ClInclude Include="imgui_annotation.h" />
+    <ClInclude Include="imgui_bfmIter.h" />
     <ClInclude Include="imgui_tools.h" />
     <ClInclude Include="labelme.h" />
     <ClInclude Include="log.h" />

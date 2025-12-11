@@ -13,6 +13,8 @@
 #include "json/json.h"
 #include "meshDraw.h"
 #include "face.h"
+#include "labelme.h"
+#include "misc.h"
 using namespace H5;
 namespace bfm
 {
@@ -414,18 +416,21 @@ version/minorVersion
             std::uniform_real_distribution<float> u(-1, 1);
             e.seed(time(0));
             Eigen::VectorXf shapeParam(shapeDim);
+            Eigen::VectorXf colorParam(colorDim);
             Eigen::VectorXf expressionParam(expressionDim);
-            Eigen::VectorXf colorParam;
             for (int i = 0; i < shapeDim; i++) {
                 shapeParam[i] =  u(e);
             }
             for (int i = 0; i < expressionDim; i++) {
-                expressionParam[i] =  u(e);
+                expressionParam[i] = u(e);
+            }
+            for (int i = 0; i < colorDim; i++) {
+                colorParam[i] = u(e);
             }
 
-            colorParam = shapeParam.cwiseProduct(color_pcaStandardDeviation);
             shapeParam = shapeParam.cwiseProduct(shape_pcaStandardDeviation);
             expressionParam = expressionParam.cwiseProduct(expression_pcaStandardDeviation);
+            colorParam = colorParam.cwiseProduct(color_pcaStandardDeviation);
             
             Eigen::VectorXf face = shape_mean + shape_pcaBasis * shapeParam + expression_mean + expression_pcaBasis * expressionParam;
             Eigen::VectorXf color = color_mean + color_pcaBasis * colorParam;
@@ -516,9 +521,86 @@ version/minorVersion
             fout.close();
             return;
         }
- 
+        bool iterToTarget(const std::filesystem::path&mvsResultDir)
+        {
+            if (!std::filesystem::exists(mvsResultDir))
+            {
+                LOG_ERR_OUT << "not found : "<< mvsResultDir;
+                return false;
+            }
+            std::filesystem::path iterDair = mvsResultDir / "bfmIter";
+            if (std::filesystem::exists(iterDair))
+            {
+                removeDirRecursive(iterDair);
+            }
+            std::filesystem::create_directories(iterDair);
+            face::FaceDet faceDetIns;
+            if (!faceDetIns.init())
+            {
+                return -1;
+            };
+            face::FaceMark FaceMarkIns;
+            if (!FaceMarkIns.init())
+            {
+                return -1;
+            };
+            std::vector<std::vector<cv::Point2f>>facemarks;
+            std::vector<Eigen::Matrix4d> cameraPs;
+            for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ mvsResultDir })
+            {
+                const auto& thisFilename = dir_entry.path();
+                if (thisFilename.has_extension())
+                {
+                    const auto& ext = thisFilename.extension().string();
+                    if (ext.compare(".json") == 0)
+                    {
+                        std::string stem = thisFilename.filename().stem().string();
+                        auto maskPath = thisFilename.parent_path() / ("mask_" + stem + ".dat");
+                        if (std::filesystem::exists(maskPath))
+                        {                            
+                            Eigen::Matrix4d cameraMatrix, Rt;
+                            bool readRet = labelme::readCmaeraFromRegisterJson(thisFilename, cameraMatrix, Rt);
+                            if (!readRet)
+                            {
+                                LOG_WARN_OUT << "read fail : " << thisFilename;
+                                continue;
+                            }
+                            std::string imgPath;
+                            if (!labelme::readJsonStringElement(thisFilename, "imagePath", imgPath))
+                            {
+                                LOG_WARN_OUT << "not found : " << imgPath;
+                                continue;
+                            };
+                            if (!std::filesystem::exists(imgPath))
+                            {
+                                LOG_WARN_OUT << "not found : " << imgPath;
+                            }  
+                            Eigen::Matrix4d  p = cameraMatrix * Rt;
+                            cv::Mat image = cv::imread(imgPath);
+                            std::vector<cv::Rect> rects;
+                            std::vector<std::vector<cv::Point2f>> faceLandmarks;
+                            std::vector<float> scores;
+                            faceDetIns.detect(image, rects, faceLandmarks, scores);
+                            FaceMarkIns.extract(image, rects, faceLandmarks);
+                            if (faceLandmarks.size() == 1 && faceLandmarks[0].size() == 68)
+                            {
+                                facemarks.emplace_back(faceLandmarks[0]);
+                                cameraPs.emplace_back(p);
+                                for (const auto& d2 : faceLandmarks[0])
+                                {
+                                    cv::circle(image, d2, 3, cv::Scalar(255, 255, 255), -1);
+                                } 
+                                auto facemarkResult = iterDair / (stem+".jpg");
+                                cv::imwrite(facemarkResult.string(), image);
+                            }
+                        } 
+                    }
+                }
+            }
+            return true;
+        }
     };
-    
+
 }
 
 int test_bfm(void)
@@ -552,6 +634,8 @@ int test_bfm(void)
         }
         LOG_OUT;
     }
+
+
     std::filesystem::path bfmFacePath = "../models/model2019_face12.h5";
     if (!std::filesystem::exists(bfmFacePath))
     {
@@ -559,6 +643,7 @@ int test_bfm(void)
         return -1;
     }
     bfm::Bfm2019 model(bfmFacePath);
+    model.iterToTarget("../data/a/result");
     cv::Mat face;
     cv::Mat color;
     for (int i = 0; i < 10; i++)
