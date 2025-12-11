@@ -172,6 +172,7 @@
     <ClCompile Include="dnnHelper.cpp" />
     <ClCompile Include="essential_matrix.cpp" />
     <ClCompile Include="estimate.cpp" />
+    <ClCompile Include="face.cpp" />
     <ClCompile Include="image.cpp" />
     <ClCompile Include="imgui.cpp" />
     <ClCompile Include="imgui_annotation.cpp" />
@@ -228,6 +229,7 @@
     <ClInclude Include="essential_matrix_poly.h" />
     <ClInclude Include="estimate.h" />
     <ClInclude Include="essential_matrix.h" />
+    <ClInclude Include="face.h" />
     <ClInclude Include="image.h" />
     <ClInclude Include="imgui_annotation.h" />
     <ClInclude Include="imgui_tools.h" />
