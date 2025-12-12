@@ -15,13 +15,7 @@
 namespace meshdraw
 {
 
-    template <typename T>
-    bool isEmpty(const Eigen::MatrixBase<T>& mat) {
-        if (mat.rows() == 0 || mat.cols() == 0) {
-            return true;
-        }
-        return false;
-    }
+
     bool readFromSimpleObj(const std::filesystem::path& path,
         Eigen::MatrixX3f& pts,
         Eigen::MatrixX3i& faces)
@@ -86,6 +80,20 @@ namespace meshdraw
             meshdraw::Camera cam;
             cam.R = meshdraw::utils::generRotateMatrix({ 0,0,-1 }, { 0,-1,0 });
             cam.t = Eigen::RowVector3f(0, 0, 300);
+            cam.intr = Eigen::Matrix3f::Identity();
+            cam.intr(0, 0) = 1200;
+            cam.intr(1, 1) = 1200;
+            cam.intr(0, 2) = 800;
+            cam.intr(1, 2) = 600;
+            cam.height = 1200;
+            cam.width = 1600;
+            return cam;
+        }
+        meshdraw::Camera generateDefaultCamera()
+        {
+            meshdraw::Camera cam;
+            cam.R = Eigen::Matrix3f::Identity();
+            cam.t = Eigen::RowVector3f(0, 0, 0);
             cam.intr = Eigen::Matrix3f::Identity();
             cam.intr(0, 0) = 1200;
             cam.intr(1, 1) = 1200;
@@ -324,7 +332,17 @@ namespace meshdraw
         igl::per_face_normals(V, F, facesNormal);
         return true;
     }
-
+    bool Mesh::rotate(const Eigen::Matrix3f& R, const Eigen::RowVector3f& t)
+    {
+        if (isEmpty(V))
+        {
+            LOG_ERR_OUT << "empty V";
+            return false;
+        }
+        Eigen::Matrix3f R_inv = R.transpose();
+        V = (V * R_inv).rowwise() + t; 
+        return true;
+    }
     bool render(const Mesh& msh, const Camera& cam, cv::Mat& rgbMat, cv::Mat& vertexMap, cv::Mat& mask, const RenderType& renderTpye)
     {
         if (renderTpye == RenderType::vertexColor)
@@ -339,7 +357,7 @@ namespace meshdraw
                 LOG_ERR_OUT << "empty R";
                 return false;
             }
-            if (cam.cameraType== CmaeraType::Pinhole && isEmpty(cam.t))
+            if (cam.cameraType == CmaeraType::Pinhole && isEmpty(cam.t))
             {
                 LOG_ERR_OUT << "empty t";
                 return false;
@@ -347,12 +365,12 @@ namespace meshdraw
             Eigen::Matrix3f R_T = cam.R.transpose();
             Eigen::MatrixX3i ptsInPic;
             std::vector<bool>renderFaces(msh.F.rows(), false);
-            Eigen::MatrixX3i colorInt= (msh.C*255.f).cast<int>();
+            Eigen::MatrixX3i colorInt = (msh.C * 255.f).cast<int>();
             if (cam.cameraType == CmaeraType::Pinhole)
             {
                 Eigen::MatrixX3f ptsInCam = (msh.V * R_T).rowwise() + cam.t;
-                Eigen::MatrixX3f ptsInPicFloat = (ptsInCam.array().colwise() / ptsInCam.col(2).array()).matrix().eval();       
-                Eigen::Matrix3f intr_T = cam.intr.transpose();    
+                Eigen::MatrixX3f ptsInPicFloat = (ptsInCam.array().colwise() / ptsInCam.col(2).array()).matrix().eval();
+                Eigen::Matrix3f intr_T = cam.intr.transpose();
                 ptsInPicFloat = ptsInPicFloat * intr_T;
                 ptsInPic = ptsInPicFloat.cast<int>();
                 Eigen::MatrixX3f barycenter;
@@ -365,15 +383,15 @@ namespace meshdraw
                 vertexMap = cv::Mat::zeros(cam.height, cam.width, CV_32FC3);
                 for (int f = 0; f < dots.size(); f++)
                 {
-                    if (dots[f]<0)
+                    if (dots[f] < 0)
                     {
                         renderFaces[f] = true;
                         const int& fa = msh.F(f, 0);
                         const int& fb = msh.F(f, 1);
                         const int& fc = msh.F(f, 2);
-                        float distFromCam = (barycenter.row(f)-cam.t).norm(); 
+                        float distFromCam = (barycenter.row(f) - cam.t).norm();
                         std::list<std::pair<cv::Vec2i, Eigen::Vector3f>>trianglePixels = utils::triangle({ ptsInPic(fa,0),ptsInPic(fa,1) }, { ptsInPic(fb,0),ptsInPic(fb,1) }, { ptsInPic(fc,0),ptsInPic(fc,1) }, msh.V.row(fa), msh.V.row(fb), msh.V.row(fc));
-                        for (const auto&d: trianglePixels)
+                        for (const auto& d : trianglePixels)
                         {
                             const cv::Vec2i& pixel = d.first;
                             const Eigen::Vector3f& value = d.second;
@@ -381,7 +399,7 @@ namespace meshdraw
                             const int& c = pixel[0];
                             if (c >= 0 && r >= 0 && c < cam.width && r < cam.height)
                             {
-                                if (mask.ptr<uchar>(r)[c]==0)
+                                if (mask.ptr<uchar>(r)[c] == 0)
                                 {
                                     mask.ptr<uchar>(r)[c] = 1;
                                     drawMatDist.ptr<float>(r)[c] = distFromCam;
@@ -391,9 +409,9 @@ namespace meshdraw
                                     vertexMap.at<cv::Vec3f>(r, c)[0] = value[0];
                                     vertexMap.at<cv::Vec3f>(r, c)[1] = value[1];
                                     vertexMap.at<cv::Vec3f>(r, c)[2] = value[2];
-                                    
+
                                 }
-                                else if (drawMatDist.ptr<float>(r)[c]> distFromCam)
+                                else if (drawMatDist.ptr<float>(r)[c] > distFromCam)
                                 {
                                     drawMatDist.ptr<float>(r)[c] = distFromCam;
                                     rgbMat.at<cv::Vec3b>(r, c)[0] = colorInt(fa, 2);
@@ -402,14 +420,14 @@ namespace meshdraw
                                     vertexMap.at<cv::Vec3f>(r, c)[0] = value[0];
                                     vertexMap.at<cv::Vec3f>(r, c)[1] = value[1];
                                     vertexMap.at<cv::Vec3f>(r, c)[2] = value[2];
-                                } 
+                                }
                             }
                         }
                     }
                 }
                 //utils::saveFacePickedMesh("a.obj",msh, renderFaces);        
             }
-            else if(cam.cameraType == CmaeraType::Ortho)
+            else if (cam.cameraType == CmaeraType::Ortho)
             {
                 ptsInPic = (msh.V * R_T).cast<int>();
             }
@@ -417,7 +435,7 @@ namespace meshdraw
             {
                 LOG_ERR_OUT << "not supported.";
                 return false;
-            } 
+            }
         }
         else
         {
@@ -426,6 +444,8 @@ namespace meshdraw
         }
         return true;
     }
+
+
 }
 
 

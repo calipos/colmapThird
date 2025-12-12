@@ -24,8 +24,8 @@ static void glfw_error_callback(int error, const char* description)
 bool show_imgRegister_window = false;
 bool show_segment_window = false;
 bool show_annotation_window = false;
-bool show_main_window = true;
-bool show_bfmIter_window = true;
+bool show_bfmIter_window = false;
+
 
 extern int test_sam2();
 extern int test_geometry();
@@ -41,7 +41,7 @@ extern int test_draw();
 int main(int, char**)
 {
     //return test_draw();;
-    return test_bfm();
+    //return test_bfm();
     //return test_mrf();
     //return test_pips2();
     //return test_sam2();

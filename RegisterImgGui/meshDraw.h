@@ -4,6 +4,13 @@
 #include "opencv2/opencv.hpp"
 namespace meshdraw
 {
+	template <typename T>
+	bool isEmpty(const Eigen::MatrixBase<T>& mat) {
+		if (mat.rows() == 0 || mat.cols() == 0) {
+			return true;
+		}
+		return false;
+	}
 	enum class CmaeraType
 	{
 		Pinhole=1,
@@ -29,6 +36,7 @@ namespace meshdraw
 		Eigen::MatrixX3f facesNormal;
 		bool figurePtsNomral();
 		bool figureFacesNomral();
+		bool rotate(const Eigen::Matrix3f& R, const Eigen::RowVector3f& t);
 	};
 	enum class RenderType
 	{
@@ -40,6 +48,7 @@ namespace meshdraw
 	namespace utils
 	{
 		meshdraw::Camera generateBfmDefaultCamera();
+		meshdraw::Camera generateDefaultCamera();
 		Eigen::Matrix3f generRotateMatrix(const Eigen::Vector3f& direct, const Eigen::Vector3f& upDirect);
 		bool saveFacePickedMesh(const std::filesystem::path&path,const Mesh&msh,const std::vector<bool>&faceValid);
 		bool savePtsMat(const std::filesystem::path& path, const cv::Mat& ptsMat, const cv::Mat& mask);

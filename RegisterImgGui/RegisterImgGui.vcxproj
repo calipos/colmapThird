@@ -216,6 +216,7 @@
     <ClCompile Include="warp.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="bfm.h" />
     <ClInclude Include="bitmap.h" />
     <ClInclude Include="browser.h" />
     <ClInclude Include="bundle_adjustment.h" />
