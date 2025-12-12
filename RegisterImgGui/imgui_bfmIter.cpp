@@ -57,6 +57,16 @@ namespace draw
 		std::map<std::string, std::vector<std::string>> hasTagFlags;
 		static int tagPickIdx;
 		bool pickedChanged;
+		static void shiftSnap(cv::Mat& img, const ImVec2& shift)
+		{
+			cv::Mat rotation_matix = cv::Mat::eye(2,3,CV_32FC1);
+			rotation_matix.ptr<double>(0)[2] = shift.x;
+			rotation_matix.ptr<double>(1)[2] = shift.y;
+			cv::Mat rotated_image;
+			warpAffine(img, rotated_image, rotation_matix, img.size());
+			img = rotated_image;
+			return;
+		}
 		/*
 		void updata()
 		{
@@ -179,6 +189,8 @@ namespace draw
 		Draw(const Draw&) = delete;
 		Draw& operator=(const Draw&) = delete;
 	public:
+		ImVec2 mouseDownStartPos; 
+
 		static const int tagLengthMax{ 24 };
 		static char tarStr[tagLengthMax];
 		ControlLogic ptsData;
@@ -319,10 +331,43 @@ namespace draw
 			}
 			return true;
 		}
-		ImVec2 control(const ImVec2& mousePosInImage, const float wheel, const bool& mouseLeftDown)
+		ImVec2 control(const ImVec2&canvasPos,cv::Mat&render)
 		{
-			if (abs(wheel) > 0.01)
+			ImVec2 mousePosInImage;
+			mousePosInImage.x = (ImGui::GetIO().MousePos.x - ImGui::GetWindowPos().x - canvasPos.x);
+			mousePosInImage.y = (ImGui::GetIO().MousePos.y - ImGui::GetWindowPos().y - canvasPos.y);
+			float wheel = ImGui::GetIO().MouseWheel;
+			if (ImGui::GetIO().MouseClicked[0])
 			{
+				mouseDownStartPos.x = -900000;
+				if (mousePosInImage.x >= 0 && mousePosInImage.y >= 0 && mousePosInImage.x < canvas.x && mousePosInImage.y < canvas.y)
+				{
+					float x_inRatio = mousePosInImage.x * Draw::canvasInv.x * (Draw::zoom_end.x - Draw::zoom_start.x) + Draw::zoom_start.x;
+					float y_inRatio = mousePosInImage.y * Draw::canvasInv.y * (Draw::zoom_end.y - Draw::zoom_start.y) + Draw::zoom_start.y;
+					float x_inPic = x_inRatio * currentImgWidth;
+					float y_inPic = y_inRatio * currentImgHeight;
+					return ImVec2(x_inPic, y_inPic);
+				}
+			}
+			else if (ImGui::GetIO().MouseDown[0] && mouseDownStartPos.x < -800000)
+			{
+				mouseDownStartPos = mousePosInImage;
+			}
+			else if (ImGui::GetIO().MouseReleased[0])
+			{
+				mouseDownStartPos.x = -900000;
+			}
+			else if (ImGui::GetIO().MouseDown[0])
+			{
+				auto currentPose = mousePosInImage;
+				currentPose.x -= mouseDownStartPos.x;
+				currentPose.y -= mouseDownStartPos.y; 
+				ControlLogic::shiftSnap(render, currentPose);
+				//LOG_OUT << mousePosInImage.x - mouseDownStartPos.x << ", " << mousePosInImage.y - mouseDownStartPos.y;
+			}
+			else if (abs(wheel) > 0.01)
+			{
+				mouseDownStartPos.x = -900000;
 				if (mousePosInImage.x >= 0 && mousePosInImage.y >= 0 && mousePosInImage.x < canvas.x && mousePosInImage.y < canvas.y)
 				{
 					float x_inRatio = mousePosInImage.x * Draw::canvasInv.x * (Draw::zoom_end.x - Draw::zoom_start.x) + Draw::zoom_start.x;
@@ -372,16 +417,11 @@ namespace draw
 					}
 				}
 			}
+			ImGui::GetIO().MouseDown[0];
+			bool mouseLeftDown = ImGui::GetIO().MouseReleased[0];
 			if (mouseLeftDown)
 			{
-				if (mousePosInImage.x >= 0 && mousePosInImage.y >= 0 && mousePosInImage.x < canvas.x && mousePosInImage.y < canvas.y)
-				{
-					float x_inRatio = mousePosInImage.x * Draw::canvasInv.x * (Draw::zoom_end.x - Draw::zoom_start.x) + Draw::zoom_start.x;
-					float y_inRatio = mousePosInImage.y * Draw::canvasInv.y * (Draw::zoom_end.y - Draw::zoom_start.y) + Draw::zoom_start.y;
-					float x_inPic = x_inRatio * currentImgWidth;
-					float y_inPic = y_inRatio * currentImgHeight;
-					return ImVec2(x_inPic, y_inPic);
-				}
+				
 			}
 			return ImVec2(-1, -1);
 		}
@@ -678,13 +718,9 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 			if (BfmIter::imgPickIdx >= 0)
 			{
 				labelControlPtr->draw(BfmIter::imgPickIdx);
-				ImVec2 mousePosInImage;
-				mousePosInImage.x = (ImGui::GetIO().MousePos.x - ImGui::GetWindowPos().x - labelControlPtr->draw_pos.x);
-				mousePosInImage.y = (ImGui::GetIO().MousePos.y - ImGui::GetWindowPos().y - labelControlPtr->draw_pos.y);
-				float wheel = ImGui::GetIO().MouseWheel;
-				//LOG_OUT << "("<<mousePosInImage.x << "," << mousePosInImage.y << ") " << ImGui::GetIO().MouseWheel;
-				bool mouseLeftDown = ImGui::GetIO().MouseReleased[0];
-				ImVec2 maybeClik = labelControlPtr->control(mousePosInImage, wheel, mouseLeftDown);
+				
+			 
+				ImVec2 maybeClik = labelControlPtr->control(labelControlPtr->draw_pos,);
 				if (maybeClik.x >= 0 && labelControlPtr->ptsData.tarStr[0] != '\0')
 				{
 					std::string thisTarName(labelControlPtr->ptsData.tarStr);

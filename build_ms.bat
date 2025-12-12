@@ -52,7 +52,7 @@ if not exist %pwd%\install\jsoncpp-1.9.6\Release (
     TIMEOUT /T 1
     msbuild %pwd%\build\jsoncpp-1.9.6\INSTALL.vcxproj  -t:Rebuild -p:Configuration=Debug
 )
-pause
+
 if not exist %pwd%\install\GKlib (
     echo  -----------build gklib----------
     cmake  -G "Visual Studio 16 2019"  -B %pwd%\build\gklib  -S %pwd%\GKlib  -DCMAKE_INSTALL_PREFIX:PATH=%pwd%install 
