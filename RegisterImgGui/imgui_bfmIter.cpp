@@ -60,8 +60,8 @@ namespace draw
 		static void shiftSnap(cv::Mat& img, const ImVec2& shift)
 		{
 			cv::Mat rotation_matix = cv::Mat::eye(2,3,CV_32FC1);
-			rotation_matix.ptr<double>(0)[2] = shift.x;
-			rotation_matix.ptr<double>(1)[2] = shift.y;
+			rotation_matix.ptr<float>(0)[2] = shift.x;
+			rotation_matix.ptr<float>(1)[2] = shift.y;
 			cv::Mat rotated_image;
 			warpAffine(img, rotated_image, rotation_matix, img.size());
 			img = rotated_image;
@@ -331,7 +331,7 @@ namespace draw
 			}
 			return true;
 		}
-		ImVec2 control(const ImVec2&canvasPos,cv::Mat&render)
+		ImVec2 control(const ImVec2&canvasPos, ImVec2&offset)
 		{
 			ImVec2 mousePosInImage;
 			mousePosInImage.x = (ImGui::GetIO().MousePos.x - ImGui::GetWindowPos().x - canvasPos.x);
@@ -358,11 +358,9 @@ namespace draw
 				mouseDownStartPos.x = -900000;
 			}
 			else if (ImGui::GetIO().MouseDown[0])
-			{
-				auto currentPose = mousePosInImage;
-				currentPose.x -= mouseDownStartPos.x;
-				currentPose.y -= mouseDownStartPos.y; 
-				ControlLogic::shiftSnap(render, currentPose);
+			{ 
+				offset.x += (mousePosInImage.x- mouseDownStartPos.x );
+				offset.y += (mousePosInImage.y - mouseDownStartPos.y);
 				//LOG_OUT << mousePosInImage.x - mouseDownStartPos.x << ", " << mousePosInImage.y - mouseDownStartPos.y;
 			}
 			else if (abs(wheel) > 0.01)
@@ -416,12 +414,6 @@ namespace draw
 
 					}
 				}
-			}
-			ImGui::GetIO().MouseDown[0];
-			bool mouseLeftDown = ImGui::GetIO().MouseReleased[0];
-			if (mouseLeftDown)
-			{
-				
 			}
 			return ImVec2(-1, -1);
 		}
@@ -504,7 +496,8 @@ public:
 							imgPaths.emplace_back(imgPath);
 							imgs.emplace_back(image);
 							renders.emplace_back(cv::Mat());
-							renderPts.emplace_back(cv::Mat());
+							renderPts.emplace_back(cv::Mat()); 
+							shifts.emplace_back(ImVec2(0, 0));
 						}
 						
 					}
@@ -528,7 +521,8 @@ public:
     Eigen::RowVector3f bfm_t;
 	std::vector<cv::Mat>imgs;
 	std::vector<cv::Mat>renders;
-	std::vector<cv::Mat>renderPts;
+	std::vector<cv::Mat>renderPts; 
+	std::vector<ImVec2>shifts;;
 	std::vector<std::filesystem::path>imgPaths;
 	std::vector<std::string>imgNameForlist;
 	std::filesystem::path imgDirPath_;
@@ -551,9 +545,10 @@ int BfmIter::viewWindowHeight = 720;
 int BfmIter::viewWindowWidth = 960;
 int BfmIter::imgPickIdx = -1;
 static float mixFactor = 0.5;
+static cv::Mat showImgMix;
+static cv::Mat ImgShift;
 bool bfmIterFrame(bool* show_bfmIter_window)
-{
-	cv::Mat showImgMix;
+{ 
 	ImGui::SetNextWindowSize(ImVec2(1280, 960));//ImVec2(x, y)
 	ImGui::Begin("bfmIter", show_bfmIter_window, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
 	ImGui::Text("bfmIter");
@@ -693,10 +688,19 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 				}
 				BfmIterManger->imgNameForlist[BfmIter::imgPickIdx][0] = '-';
 				//continue;
-			}
-			 
-			if (BfmIter::imgPickIdx >= 0 && (pickedChanged || mixFactorChanged))
+			} 
+			ImVec2 maybeClik(-1, -1);
+			if (BfmIter::imgPickIdx >= 0)
 			{
+				ImVec2& shift = BfmIterManger->shifts[BfmIter::imgPickIdx];
+				maybeClik = labelControlPtr->control(labelControlPtr->draw_pos, shift);
+			}
+			if (BfmIter::imgPickIdx >= 0 && (pickedChanged || mixFactorChanged || BfmIterManger->shifts[BfmIter::imgPickIdx].x != 0))
+			{
+				if (pickedChanged)
+				{
+					ImgShift.release();
+				}
 				const cv::Mat& img = BfmIterManger->imgs[BfmIter::imgPickIdx];
 				const meshdraw::Camera&cam= BfmIterManger->imgCameras[BfmIter::imgPickIdx];
 				cv::Mat& render3d = BfmIterManger->renders[BfmIter::imgPickIdx];
@@ -709,39 +713,46 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 					}
 					cv::Mat mask; 
 					meshdraw::render(BfmIterManger->msh, cam, render3d, render3dPts, mask);
+				}  
+				if (ImgShift.empty())
+				{
+					render3d.copyTo(ImgShift);
 				}
-				cv::addWeighted(img, mixFactor, render3d, 1 - mixFactor, 0, showImgMix);
-				labelControlPtr->feedImg(showImgMix);
-				bool& mouseLeftDown = ImGui::GetIO().MouseReleased[0];
-				mouseLeftDown = false;
-			}
-			if (BfmIter::imgPickIdx >= 0)
-			{
-				labelControlPtr->draw(BfmIter::imgPickIdx);
-				
-			 
-				ImVec2 maybeClik = labelControlPtr->control(labelControlPtr->draw_pos,);
-				if (maybeClik.x >= 0 && labelControlPtr->ptsData.tarStr[0] != '\0')
+				if (BfmIterManger->shifts[BfmIter::imgPickIdx].x!=0)
+				{
+					render3d.copyTo(ImgShift);
+					draw::ControlLogic::shiftSnap(ImgShift, BfmIterManger->shifts[BfmIter::imgPickIdx]);
+				} 
+				cv::addWeighted(img, mixFactor, ImgShift, 1 - mixFactor, 0, showImgMix);
+				labelControlPtr->feedImg(showImgMix); 
+
+
+				if (labelControlPtr->ptsData.tarStr[0] != '\0')
 				{
 					std::string thisTarName(labelControlPtr->ptsData.tarStr);
-					
+
 					if (labelControlPtr->ptsData.tagsName.end() == std::find(labelControlPtr->ptsData.tagsName.begin(), labelControlPtr->ptsData.tagsName.end(), thisTarName))
 					{
 						labelControlPtr->ptsData.tagsName.emplace_back(thisTarName);
 						labelControlPtr->ptsData.tagsListName.emplace_back("  " + thisTarName);
 						labelControlPtr->ptsData.colors[thisTarName] = (getImguiColor());
-					}					
+					}
 					labelControlPtr->ptsData.controlPtsAndTag[BfmIter::imgPickIdx][thisTarName] = maybeClik;
 				}
-				if (labelControlPtr->ptsData.tagsListName.size() > 0)
-				{
-					labelControlPtr->ptsData.pickedChanged = false;
-					auto pushPos = ImGui::GetCursorPos();
-					ImGui::SetCursorPos(labelControlPtr->ptsData.drawPos);
-					listComponent("tarPick", listPicSize, labelControlPtr->ptsData.tagsListName, labelControlPtr->ptsData.tagPickIdx, labelControlPtr->ptsData.pickedChanged);
-					ImGui::SetCursorPos(pushPos);
-				}
 			}
+			if (BfmIter::imgPickIdx >= 0)
+			{
+				labelControlPtr->draw(BfmIter::imgPickIdx);
+			}
+			if (labelControlPtr->ptsData.tagsListName.size() > 0)
+			{
+				labelControlPtr->ptsData.pickedChanged = false;
+				auto pushPos = ImGui::GetCursorPos();
+				ImGui::SetCursorPos(labelControlPtr->ptsData.drawPos);
+				listComponent("tarPick", listPicSize, labelControlPtr->ptsData.tagsListName, labelControlPtr->ptsData.tagPickIdx, labelControlPtr->ptsData.pickedChanged);
+				ImGui::SetCursorPos(pushPos);
+			}
+			
 			ImGui::InputTextMultiline("<-tag", labelControlPtr->ptsData.tarStr, draw::ControlLogic::tagLengthMax, ImVec2(200, 20), ImGuiTreeNodeFlags_None + ImGuiInputTextFlags_CharsNoBlank);
 
 		}
