@@ -10,6 +10,7 @@
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers canvas
 bool LoadTextureFromMat(const cv::Mat& originalImg, GLuint* out_texture, int* out_width, int* out_height);
 void listComponent(const std::string& listName, const ImVec2& wh, std::vector<std::string>& itemNames, int& pickIdxOut, bool& changedRightNow);
+void listComponentReChoose(std::vector<std::string>& itemNames,const int& pickIdxOut);
 struct ProgressThread
 {
 	std::atomic<int> procRunning{ 0 };

@@ -16,8 +16,8 @@
 #include "bfm.h"
 #include "meshDraw.h"
 static ProgressThread progress;
-enum class IterType
-{};
+ 
+static BfmIter* BfmIterManger = nullptr;
 namespace draw
 {
 	std::string getfullShortName(const std::filesystem::path& path_, const std::filesystem::path& baseDir_)
@@ -48,7 +48,8 @@ namespace draw
 		{
 			memset(tarStr,0, tagLengthMax);
 		}
-		std::vector< std::map<std::string, ImVec2>>controlPtsAndTag;
+		std::vector< std::map<std::string, ImVec2>>controlPts2dAndTag;
+		std::vector< std::map<std::string, cv::Vec3f>>controlPts3dAndTag;
 		//ImVec2 tempPt{ -1,-1 };  // for first track ,the temp point wil be showed on canvas
 
 		std::map<std::string, ImU32> colors;
@@ -57,60 +58,41 @@ namespace draw
 		std::map<std::string, std::vector<std::string>> hasTagFlags;
 		static int tagPickIdx;
 		bool pickedChanged;
-		static void shiftSnap(cv::Mat& img, const ImVec2& shift)
+		static cv::Mat shiftSnap(const cv::Mat& img, const ImVec2& shift)
 		{
 			cv::Mat rotation_matix = cv::Mat::eye(2,3,CV_32FC1);
 			rotation_matix.ptr<float>(0)[2] = shift.x;
 			rotation_matix.ptr<float>(1)[2] = shift.y;
 			cv::Mat rotated_image;
-			warpAffine(img, rotated_image, rotation_matix, img.size());
-			img = rotated_image;
-			return;
+			warpAffine(img, rotated_image, rotation_matix, img.size()); 
+			return rotated_image;
 		}
-		/*
-		void updata()
+		void updataFalgs()
 		{
-			std::string maybePickedTag = (tagPickIdx >= 0) ? tagsName[tagPickIdx] : "";
-			std::string maybePickedTag2 = (tagPickIdx >= 0) ? tagsListName[tagPickIdx] : "";
-			std::unordered_set<std::string>newTagsName;
-			for (const auto& d : controlPtsAndTag)
+			if (draw::ControlLogic::tagPickIdx < 0)
 			{
-				for (const auto& d2 : d)
+				for (auto&d: BfmIterManger->imgNameForlist)
 				{
-					newTagsName.insert(d2.first);
-				}
+					d[1] = ' ';
+				}				
 			}
-			std::vector<std::string>::iterator iter;
-			for (iter = tagsName.begin(); iter != tagsName.end(); iter++)
+			else
 			{
-				std::string tagStr = *iter;
-				if (newTagsName.find(tagStr) == newTagsName.end())
+				const std::string& pickedTagName = this->tagsName[draw::ControlLogic::tagPickIdx];
+				for (int i = 0; i < this->controlPts2dAndTag.size(); i++)
 				{
-					tagsListName.erase(tagsListName.begin() + (iter - tagsName.begin()));
-					iter = tagsName.erase(iter);
-				}
-			}
-			if (maybePickedTag.length() > 0)
-			{
-				if (newTagsName.find(maybePickedTag) == newTagsName.end())
-				{
-					tagPickIdx = -1;
-				}
-			}
-			hasTagFlags.clear();
-			for (const auto& d : colors)
-			{
-				auto& tagAndShortName = hasTagFlags[d.first];
-				tagAndShortName.insert(tagAndShortName.end(), picShortNameForlist.begin(), picShortNameForlist.end());
-				for (int j = 0; j < picShortNameForlist.size(); j++)
-				{
-					if (controlPtsAndTag[j].count(d.first) > 0)
+					if (controlPts2dAndTag[i].count(pickedTagName)!=0)
 					{
-						hasTagFlags[d.first][j][1] = '*';
+						BfmIterManger->imgNameForlist[i][1] = '.';
+					}
+					else
+					{
+						BfmIterManger->imgNameForlist[i][1] = ' ';
 					}
 				}
-			}
+			} 
 		}
+		/*
 		bool save(const std::vector<std::filesystem::path>& picPath)const
 		{
 			if (picShortNameForlist.size() != picPath.size())
@@ -123,7 +105,7 @@ namespace draw
 				std::filesystem::path parentDir = imgPath.parent_path();
 				std::string shortName = imgPath.filename().stem().string();
 				std::map<std::string, Eigen::Vector2d>picLabel;
-				for (const auto& d : controlPtsAndTag[i])
+				for (const auto& d : controlPts2dAndTag[i])
 				{
 					picLabel[d.first] = Eigen::Vector2d(d.second.x, d.second.y);
 				}
@@ -151,10 +133,10 @@ namespace draw
 					std::map<std::string, Eigen::Vector2d> imgPts;
 					Eigen::Vector2i imgSizeWH;
 					labelme::readPtsFromLabelMeJson(jsonPath, imgPts, imgSizeWH);
-					controlPtsAndTag[i].clear();
+					controlPts2dAndTag[i].clear();
 					for (const auto& d : imgPts)
 					{
-						controlPtsAndTag[i][d.first] = ImVec2(d.second[0], d.second[1]);
+						controlPts2dAndTag[i][d.first] = ImVec2(d.second[0], d.second[1]);
 						labelNames.insert(d.first);
 					}
 				}
@@ -174,8 +156,18 @@ namespace draw
 		ImVec2 drawPos;
 		static const int tagLengthMax{ 24 };
 		char tarStr[tagLengthMax];
+		static bool tryFind2d3dPair;
+		static bool figureR;
+		static bool figuret;
+		static bool figureS;
+		static bool figureParam;
 	}; 
 	int ControlLogic::tagPickIdx = -1;
+	bool ControlLogic::tryFind2d3dPair = true;
+	bool ControlLogic::figureR = true;
+	bool ControlLogic::figuret = true;
+	bool ControlLogic::figureS = true;
+	bool ControlLogic::figureParam = true;
 	class Draw
 	{
 	private:
@@ -213,7 +205,8 @@ namespace draw
 			if (Draw::instance == nullptr)
 			{
 				Draw::instance = new Draw();
-				instance->ptsData.controlPtsAndTag.resize(picShortNameForlist.size());
+				instance->ptsData.controlPts2dAndTag.resize(picShortNameForlist.size());
+				instance->ptsData.controlPts3dAndTag.resize(picShortNameForlist.size());
 				//instance->ptsData.loadOnlyOnce(picPaths);
 			}
 			else
@@ -267,7 +260,7 @@ namespace draw
 					pickedTag = ptsData.tagsName[ptsData.tagPickIdx];
 					//if (alignPt)
 					{
-						const std::map<std::string, ImVec2>& tags = ptsData.controlPtsAndTag[imgPickIdx];
+						const std::map<std::string, ImVec2>& tags = ptsData.controlPts2dAndTag[imgPickIdx];
 						if (tags.count(pickedTag) > 0)
 						{
 							const auto p = tags.at(pickedTag);
@@ -311,7 +304,7 @@ namespace draw
 					picktarName = ptsData.tagsName[ptsData.tagPickIdx];
 				}
 				{
-					const std::map<std::string, ImVec2>& tags = ptsData.controlPtsAndTag[imgPickIdx];
+					const std::map<std::string, ImVec2>& tags = ptsData.controlPts2dAndTag[imgPickIdx];
 					if (tags.size() > 0)
 					{
 						for (const auto& d : tags)
@@ -331,23 +324,26 @@ namespace draw
 			}
 			return true;
 		}
-		ImVec2 control(const ImVec2&canvasPos, ImVec2&offset)
+		ImVec2 control(const ImVec2&canvasPos, ImVec2& temporaryOffset, ImVec2& offset)
 		{
 			ImVec2 mousePosInImage;
 			mousePosInImage.x = (ImGui::GetIO().MousePos.x - ImGui::GetWindowPos().x - canvasPos.x);
 			mousePosInImage.y = (ImGui::GetIO().MousePos.y - ImGui::GetWindowPos().y - canvasPos.y);
+			if (mousePosInImage.x < 0 || mousePosInImage.y < 0 || mousePosInImage.x >= canvas.x || mousePosInImage.y >canvas.y)
+			{
+				mouseDownStartPos.x = -900000;
+				return ImVec2(-1, -1);;
+			}
 			float wheel = ImGui::GetIO().MouseWheel;
 			if (ImGui::GetIO().MouseClicked[0])
 			{
 				mouseDownStartPos.x = -900000;
-				if (mousePosInImage.x >= 0 && mousePosInImage.y >= 0 && mousePosInImage.x < canvas.x && mousePosInImage.y < canvas.y)
-				{
-					float x_inRatio = mousePosInImage.x * Draw::canvasInv.x * (Draw::zoom_end.x - Draw::zoom_start.x) + Draw::zoom_start.x;
-					float y_inRatio = mousePosInImage.y * Draw::canvasInv.y * (Draw::zoom_end.y - Draw::zoom_start.y) + Draw::zoom_start.y;
-					float x_inPic = x_inRatio * currentImgWidth;
-					float y_inPic = y_inRatio * currentImgHeight;
-					return ImVec2(x_inPic, y_inPic);
-				}
+				float x_inRatio = mousePosInImage.x * Draw::canvasInv.x * (Draw::zoom_end.x - Draw::zoom_start.x) + Draw::zoom_start.x;
+				float y_inRatio = mousePosInImage.y * Draw::canvasInv.y * (Draw::zoom_end.y - Draw::zoom_start.y) + Draw::zoom_start.y;
+				float x_inPic = x_inRatio * currentImgWidth;
+				float y_inPic = y_inRatio * currentImgHeight;
+				LOG_OUT << x_inPic << " " << y_inPic;
+				return ImVec2(x_inPic, y_inPic);
 			}
 			else if (ImGui::GetIO().MouseDown[0] && mouseDownStartPos.x < -800000)
 			{
@@ -355,13 +351,16 @@ namespace draw
 			}
 			else if (ImGui::GetIO().MouseReleased[0])
 			{
+				offset.x += (mousePosInImage.x - mouseDownStartPos.x);
+				offset.y += (mousePosInImage.y - mouseDownStartPos.y);
+				temporaryOffset.x = 0;
+				temporaryOffset.y = 0;
 				mouseDownStartPos.x = -900000;
 			}
 			else if (ImGui::GetIO().MouseDown[0])
 			{ 
-				offset.x += (mousePosInImage.x- mouseDownStartPos.x );
-				offset.y += (mousePosInImage.y - mouseDownStartPos.y);
-				//LOG_OUT << mousePosInImage.x - mouseDownStartPos.x << ", " << mousePosInImage.y - mouseDownStartPos.y;
+				temporaryOffset.x = (mousePosInImage.x- mouseDownStartPos.x );
+				temporaryOffset.y = (mousePosInImage.y - mouseDownStartPos.y); 
 			}
 			else if (abs(wheel) > 0.01)
 			{
@@ -429,117 +428,98 @@ namespace draw
 	float Draw::resizeFactor = 1;
 	char Draw::tarStr[tagLengthMax] = "\0";
 }
-class BfmIter
+ 
+BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesystem::path& modelDirPath)
 {
-public:
-	bfm::Bfm2019* bfmIns{ nullptr };
-	BfmIter() = default;
-    BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesystem::path& modelDirPath)
-    {
-		std::filesystem::path bfmFacePath = modelDirPath / "model2019_face12.h5";
-		if (!std::filesystem::exists(bfmFacePath))
+	std::filesystem::path bfmFacePath = modelDirPath / "model2019_face12.h5";
+	if (!std::filesystem::exists(bfmFacePath))
+	{
+		LOG_ERR_OUT << "need models/model2019_face12.h5";
+		return;
+	}
+	bfmIns = new bfm::Bfm2019(bfmFacePath);
+	bfmIns->generateRandomFace(msh.V, msh.C);
+	msh.F = bfmIns->F;
+    bfm_R << 1, 0, 0, 0, -1, 0, 0, 0, -1;
+    bfm_t << 0, 0, 300;  
+	msh.rotate(bfm_R, bfm_t);
+	imgPaths.clear();
+	imgNameForlist.clear();
+	imgDirPath_ = mvsResultDir;
+	for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ mvsResultDir })
+	{
+		const auto& thisFilename = dir_entry.path();
+		if (thisFilename.has_extension())
 		{
-			LOG_ERR_OUT << "need models/model2019_face12.h5";
-			return;
-		}
-		bfmIns = new bfm::Bfm2019(bfmFacePath);
-		bfmIns->generateRandomFace(msh.V, msh.C);
-		msh.F = bfmIns->F;
-        bfm_R << 1, 0, 0, 0, -1, 0, 0, 0, -1;
-        bfm_t << 0, 0, 300;  
-		msh.rotate(bfm_R, bfm_t);
-		imgPaths.clear();
-		imgNameForlist.clear();
-		imgDirPath_ = mvsResultDir;
-		for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ mvsResultDir })
-		{
-			const auto& thisFilename = dir_entry.path();
-			if (thisFilename.has_extension())
+			const auto& ext = thisFilename.extension().string();
+			if (ext.compare(".json") == 0)
 			{
-				const auto& ext = thisFilename.extension().string();
-				if (ext.compare(".json") == 0)
+				std::string stem = thisFilename.filename().stem().string();
+				auto maskPath = thisFilename.parent_path() / ("mask_" + stem + ".dat");
+				if (std::filesystem::exists(maskPath))
 				{
-					std::string stem = thisFilename.filename().stem().string();
-					auto maskPath = thisFilename.parent_path() / ("mask_" + stem + ".dat");
-					if (std::filesystem::exists(maskPath))
+					Eigen::Matrix4d cameraMatrix, Rt;
+					bool readRet = labelme::readCmaeraFromRegisterJson(thisFilename, cameraMatrix, Rt);
+					if (!readRet)
 					{
-						Eigen::Matrix4d cameraMatrix, Rt;
-						bool readRet = labelme::readCmaeraFromRegisterJson(thisFilename, cameraMatrix, Rt);
-						if (!readRet)
-						{
-							LOG_WARN_OUT << "read fail : " << thisFilename;
-							continue;
-						}
-						std::string imgPath;
-						if (!labelme::readJsonStringElement(thisFilename, "imagePath", imgPath))
-						{
-							LOG_WARN_OUT << "not found : " << imgPath;
-							continue;
-						};
-						if (!std::filesystem::exists(imgPath))
-						{
-							LOG_WARN_OUT << "not found : " << imgPath;
-						}
-				 
-						cv::Mat image = cv::imread(imgPath);
-						if (!image.empty())
-						{
-							meshdraw::Camera cam;
-							cam.cameraType = meshdraw::CmaeraType::Pinhole;
-							cam.intr = cameraMatrix.cast<float>().block(0, 0, 3, 3);
-							cam.R = Rt.cast<float>().block(0, 0, 3, 3);
-							cam.t = Eigen::RowVector3f(Rt(0, 3), Rt(1, 3), Rt(2, 3));
-							cam.height = image.rows;
-							cam.width = image.cols;
-							imgCameras.emplace_back(cam);
-							imgNameForlist.emplace_back(stem); 
-							imgPaths.emplace_back(imgPath);
-							imgs.emplace_back(image);
-							renders.emplace_back(cv::Mat());
-							renderPts.emplace_back(cv::Mat()); 
-							shifts.emplace_back(ImVec2(0, 0));
-						}
-						
+						LOG_WARN_OUT << "read fail : " << thisFilename;
+						continue;
 					}
+					std::string imgPath;
+					if (!labelme::readJsonStringElement(thisFilename, "imagePath", imgPath))
+					{
+						LOG_WARN_OUT << "not found : " << imgPath;
+						continue;
+					};
+					if (!std::filesystem::exists(imgPath))
+					{
+						LOG_WARN_OUT << "not found : " << imgPath;
+					}
+				 
+					cv::Mat image = cv::imread(imgPath);
+					if (!image.empty())
+					{
+						meshdraw::Camera cam;
+						cam.cameraType = meshdraw::CmaeraType::Pinhole;
+						cam.intr = cameraMatrix.cast<float>().block(0, 0, 3, 3);
+						cam.R = Rt.cast<float>().block(0, 0, 3, 3);
+						cam.t = Eigen::RowVector3f(Rt(0, 3), Rt(1, 3), Rt(2, 3));
+						cam.height = image.rows;
+						cam.width = image.cols;
+						imgCameras.emplace_back(cam);
+						imgNameForlist.emplace_back(stem); 
+						imgPaths.emplace_back(imgPath);
+						imgs.emplace_back(image);
+						renders.emplace_back(cv::Mat());
+						renderPts.emplace_back(cv::Mat()); 
+						renderMasks.emplace_back(cv::Mat());
+						shifts.emplace_back(ImVec2(0, 0));
+					}
+						
 				}
 			}
 		}
-		if (imgNameForlist.size() < 1)
-		{
-			progress.procRunning.store(0);
-			LOG_ERR_OUT << "imgNameForlist.size()<1";
-			return;
-		}
+	}
+	if (imgNameForlist.size() < 1)
+	{
 		progress.procRunning.store(0);
-    }
-    ~BfmIter() {};
-    bool iter(const std::vector<cv::Point3f>& src, const std::vector<cv::Point3f>& tar, const IterType& type)
-    {
-        return false;
-    }
-    Eigen::Matrix3f bfm_R;
-    Eigen::RowVector3f bfm_t;
-	std::vector<cv::Mat>imgs;
-	std::vector<cv::Mat>renders;
-	std::vector<cv::Mat>renderPts; 
-	std::vector<ImVec2>shifts;;
-	std::vector<std::filesystem::path>imgPaths;
-	std::vector<std::string>imgNameForlist;
-	std::filesystem::path imgDirPath_;
-	std::filesystem::path modelDirPath_;
-	static GLuint image_texture;
-	static int viewWindowHeight;
-	static int viewWindowWidth; 
-	static int imgPickIdx;
-	meshdraw::Mesh msh;
-	std::vector<meshdraw::Camera> imgCameras;
-};
+		LOG_ERR_OUT << "imgNameForlist.size()<1";
+		return;
+	}
+	progress.procRunning.store(0);
+}
+BfmIter::~BfmIter() {};
+bool BfmIter::iter(const std::vector<cv::Point3f>& src, const std::vector<cv::Point3f>& tar, const IterType& type)
+{
+    return false;
+}
+ 
 static bool showImgDirBrowser = false;
 static std::filesystem::path imgDirPath;
 static std::filesystem::path modelDirPath;
 static browser::Browser* imgDirPicker = nullptr;
 static browser::Browser* modelDirPicker = nullptr;
-static BfmIter* BfmIterManger = nullptr;
+
 GLuint BfmIter::image_texture = 0;
 int BfmIter::viewWindowHeight = 720;
 int BfmIter::viewWindowWidth = 960;
@@ -550,7 +530,8 @@ static cv::Mat ImgShift;
 bool bfmIterFrame(bool* show_bfmIter_window)
 { 
 	ImGui::SetNextWindowSize(ImVec2(1280, 960));//ImVec2(x, y)
-	ImGui::Begin("bfmIter", show_bfmIter_window, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
+	//ImGui::Begin("bfmIter", show_bfmIter_window, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
+	ImGui::Begin("bfmIter", show_bfmIter_window);
 	ImGui::Text("bfmIter");
 
 	int isProcRunning = progress.procRunning.load();
@@ -583,62 +564,63 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 	ImVec2 deployButtom(-1, -1);
 	while (isProcRunning == 0)
 	{
-		if (ImGui::Button("pick image dir"))
+		if (BfmIterManger == nullptr)
 		{
-			imgDirPath = "";
-			if (imgDirPicker == nullptr)
+			if (ImGui::Button("pick image dir"))
 			{
-				imgDirPicker = new browser::Browser(browser::BrowserPick::PICK_DIR);
-			}
-		}
-		if (imgDirPicker != nullptr && imgDirPath.string().length() == 0)
-		{
-			if (imgDirPicker->pick(imgDirPath))
-			{
-				if (!imgDirPath.empty())
+				imgDirPath = "";
+				if (imgDirPicker == nullptr)
 				{
-					LOG_OUT << imgDirPath;
+					imgDirPicker = new browser::Browser(browser::BrowserPick::PICK_DIR);
 				}
-				delete imgDirPicker;
-				imgDirPicker = nullptr;
 			}
-		}
-		ImGui::SameLine();
-		ImGui::Text(imgDirPath.string().c_str());
-		if (ImGui::Button("pick model dir"))
-		{
-			modelDirPath = "";
-			if (modelDirPicker == nullptr)
+			if (imgDirPicker != nullptr && imgDirPath.string().length() == 0)
 			{
-				modelDirPicker = new browser::Browser(browser::BrowserPick::PICK_DIR);
-			}
-		}
-		if (modelDirPicker != nullptr && modelDirPath.string().length() == 0)
-		{
-			if (modelDirPicker->pick(modelDirPath))
-			{
-				if (!modelDirPath.empty())
+				if (imgDirPicker->pick(imgDirPath))
 				{
-					LOG_OUT << modelDirPath;
+					if (!imgDirPath.empty())
+					{
+						LOG_OUT << imgDirPath;
+					}
+					delete imgDirPicker;
+					imgDirPicker = nullptr;
 				}
-				delete modelDirPicker;
-				modelDirPicker = nullptr;
 			}
-		}
-		ImGui::SameLine();
-		ImGui::Text(modelDirPath.string().c_str());
-
-
-		if (BfmIterManger == nullptr && imgDirPath.string().length() > 0 && modelDirPath.string().length() > 0)
-		{
-			progress.numerator.store(-1);
-			progress.procRunning.fetch_add(1);
-			progress.proc = new std::thread(
-				[&]() {
-					BfmIterManger = new BfmIter(imgDirPath, modelDirPath);
+			ImGui::SameLine();
+			ImGui::Text(imgDirPath.string().c_str());
+			if (ImGui::Button("pick model dir"))
+			{
+				modelDirPath = "";
+				if (modelDirPicker == nullptr)
+				{
+					modelDirPicker = new browser::Browser(browser::BrowserPick::PICK_DIR);
 				}
-			);
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			}
+			if (modelDirPicker != nullptr && modelDirPath.string().length() == 0)
+			{
+				if (modelDirPicker->pick(modelDirPath))
+				{
+					if (!modelDirPath.empty())
+					{
+						LOG_OUT << modelDirPath;
+					}
+					delete modelDirPicker;
+					modelDirPicker = nullptr;
+				}
+			}
+			ImGui::SameLine();
+			ImGui::Text(modelDirPath.string().c_str());
+			if (imgDirPath.string().length() > 0 && modelDirPath.string().length() > 0)
+			{
+				progress.numerator.store(-1);
+				progress.procRunning.fetch_add(1);
+				progress.proc = new std::thread(
+					[&]() {
+						BfmIterManger = new BfmIter(imgDirPath, modelDirPath);
+					}
+				);
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			}
 		}
 		if (BfmIterManger != nullptr && BfmIterManger->imgNameForlist.size() < 1)
 		{
@@ -657,7 +639,7 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 			ImVec2 canvas_location = imgListLocation;
 			canvas_location.x += listPicSize.x;
 			draw::Draw* labelControlPtr = draw::Draw::getDrawIns(canvas_location, 720, BfmIterManger->imgNameForlist, BfmIterManger->imgPaths);
-			labelControlPtr->ptsData.drawPos = ImVec2(canvas_location.x+ draw::Draw::canvasMaxSide, canvas_location.y);
+			labelControlPtr->ptsData.drawPos = ImVec2(canvas_location.x+ draw::Draw::canvas.x+5, canvas_location.y);
 			listComponent("picPick", listPicSize, BfmIterManger->imgNameForlist, BfmIter::imgPickIdx, pickedChanged);
 			
 
@@ -690,12 +672,12 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 				//continue;
 			} 
 			ImVec2 maybeClik(-1, -1);
+			ImVec2 temporaryOffset(0, 0);
 			if (BfmIter::imgPickIdx >= 0)
 			{
-				ImVec2& shift = BfmIterManger->shifts[BfmIter::imgPickIdx];
-				maybeClik = labelControlPtr->control(labelControlPtr->draw_pos, shift);
+				maybeClik = labelControlPtr->control(labelControlPtr->draw_pos, temporaryOffset, BfmIterManger->shifts[BfmIter::imgPickIdx]);
 			}
-			if (BfmIter::imgPickIdx >= 0 && (pickedChanged || mixFactorChanged || BfmIterManger->shifts[BfmIter::imgPickIdx].x != 0))
+			if (BfmIter::imgPickIdx >= 0 && (pickedChanged || mixFactorChanged || BfmIterManger->shifts[BfmIter::imgPickIdx].x != 0 || maybeClik.x>=0))
 			{
 				if (pickedChanged)
 				{
@@ -705,39 +687,75 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 				const meshdraw::Camera&cam= BfmIterManger->imgCameras[BfmIter::imgPickIdx];
 				cv::Mat& render3d = BfmIterManger->renders[BfmIter::imgPickIdx];
 				cv::Mat& render3dPts = BfmIterManger->renderPts[BfmIter::imgPickIdx];
+				cv::Mat& mask = BfmIterManger->renderMasks[BfmIter::imgPickIdx];
 				if (render3d.empty())
 				{ 
 					if (meshdraw::isEmpty(BfmIterManger->msh.facesNormal))
 					{
 						BfmIterManger->msh.figureFacesNomral();
 					}
-					cv::Mat mask; 
 					meshdraw::render(BfmIterManger->msh, cam, render3d, render3dPts, mask);
 				}  
 				if (ImgShift.empty())
 				{
 					render3d.copyTo(ImgShift);
 				}
-				if (BfmIterManger->shifts[BfmIter::imgPickIdx].x!=0)
-				{
-					render3d.copyTo(ImgShift);
-					draw::ControlLogic::shiftSnap(ImgShift, BfmIterManger->shifts[BfmIter::imgPickIdx]);
-				} 
+				if (temporaryOffset.x != 0 || temporaryOffset.y != 0)
+				{ 
+					ImVec2 offset(0, 0);
+					offset.x = BfmIterManger->shifts[BfmIter::imgPickIdx].x + temporaryOffset.x;
+					offset.y = BfmIterManger->shifts[BfmIter::imgPickIdx].y + temporaryOffset.y;					 
+					ImgShift = draw::ControlLogic::shiftSnap(render3d, offset); 
+				}
 				cv::addWeighted(img, mixFactor, ImgShift, 1 - mixFactor, 0, showImgMix);
 				labelControlPtr->feedImg(showImgMix); 
 
-
-				if (labelControlPtr->ptsData.tarStr[0] != '\0')
+				 
+				if (labelControlPtr->ptsData.tarStr[0] != '\0' && maybeClik.x >= 0)
 				{
 					std::string thisTarName(labelControlPtr->ptsData.tarStr);
 
-					if (labelControlPtr->ptsData.tagsName.end() == std::find(labelControlPtr->ptsData.tagsName.begin(), labelControlPtr->ptsData.tagsName.end(), thisTarName))
+					int maybeXint = static_cast<int>(maybeClik.x + 0.5);
+					int maybeYint = static_cast<int>(maybeClik.y + 0.5);
+					if (draw::ControlLogic::tryFind2d3dPair)
 					{
+						if (mask.ptr<uchar>(maybeYint)[maybeXint] != 0)
+						{
+							labelControlPtr->ptsData.controlPts2dAndTag[BfmIter::imgPickIdx][thisTarName] = maybeClik;
+							labelControlPtr->ptsData.controlPts3dAndTag[BfmIter::imgPickIdx][thisTarName] = render3dPts.at<cv::Vec3f>(maybeYint, maybeXint);
+						}
+					}
+					else
+					{
+						labelControlPtr->ptsData.controlPts2dAndTag[BfmIter::imgPickIdx][thisTarName] = maybeClik;
+					}
+
+
+					auto fidExisted = std::find(labelControlPtr->ptsData.tagsName.begin(), labelControlPtr->ptsData.tagsName.end(), thisTarName);
+					if (labelControlPtr->ptsData.tagsName.end() == fidExisted)
+					{ 
+						draw::ControlLogic::tagPickIdx = labelControlPtr->ptsData.tagsName.size();
 						labelControlPtr->ptsData.tagsName.emplace_back(thisTarName);
 						labelControlPtr->ptsData.tagsListName.emplace_back("  " + thisTarName);
 						labelControlPtr->ptsData.colors[thisTarName] = (getImguiColor());
+						labelControlPtr->ptsData.updataFalgs(); 
+						listComponentReChoose(labelControlPtr->ptsData.tagsListName, labelControlPtr->ptsData.tagPickIdx);
+						
 					}
-					labelControlPtr->ptsData.controlPtsAndTag[BfmIter::imgPickIdx][thisTarName] = maybeClik;
+					else
+					{ 
+						draw::ControlLogic::tagPickIdx = fidExisted - labelControlPtr->ptsData.tagsName.begin();
+					}
+
+
+
+					
+				}
+				else if (labelControlPtr->ptsData.tarStr[0] == '\0' && maybeClik.x >= 0)
+				{
+					draw::ControlLogic::tagPickIdx = -1;
+					labelControlPtr->ptsData.updataFalgs();
+					listComponentReChoose(labelControlPtr->ptsData.tagsListName, labelControlPtr->ptsData.tagPickIdx);
 				}
 			}
 			if (BfmIter::imgPickIdx >= 0)
@@ -750,11 +768,41 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 				auto pushPos = ImGui::GetCursorPos();
 				ImGui::SetCursorPos(labelControlPtr->ptsData.drawPos);
 				listComponent("tarPick", listPicSize, labelControlPtr->ptsData.tagsListName, labelControlPtr->ptsData.tagPickIdx, labelControlPtr->ptsData.pickedChanged);
+				if (labelControlPtr->ptsData.pickedChanged)
+				{
+					labelControlPtr->ptsData.updataFalgs();
+				}
 				ImGui::SetCursorPos(pushPos);
 			}
-			
+			if (ImGui::Checkbox("try2D3D", &draw::ControlLogic::tryFind2d3dPair))
+			{
+
+			}
+			ImGui::SameLine();
 			ImGui::InputTextMultiline("<-tag", labelControlPtr->ptsData.tarStr, draw::ControlLogic::tagLengthMax, ImVec2(200, 20), ImGuiTreeNodeFlags_None + ImGuiInputTextFlags_CharsNoBlank);
 
+			bool trigerR = ImGui::Checkbox("figureR", &draw::ControlLogic::figureR); ImGui::SameLine();
+			bool trigert = ImGui::Checkbox("figuret", &draw::ControlLogic::figuret); ImGui::SameLine();
+			bool trigerS = ImGui::Checkbox("figureS", &draw::ControlLogic::figureS); ImGui::SameLine();
+			bool trigerParam = ImGui::Checkbox("figureParam", &draw::ControlLogic::figureParam); ImGui::SameLine();
+			if (trigerR || trigert || trigerS || trigerParam)
+			{
+				if (draw::ControlLogic::figureR || draw::ControlLogic::figuret || draw::ControlLogic::figureS || draw::ControlLogic::figureParam)
+				{
+
+				}
+				else
+				{
+					draw::ControlLogic::figureR = true;
+					draw::ControlLogic::figuret = true;
+					draw::ControlLogic::figureS = true;
+					draw::ControlLogic::figureParam = true;
+				}
+			}
+			if (ImGui::Button("figure"))
+			{
+
+			}
 		}
 		break;
 	}

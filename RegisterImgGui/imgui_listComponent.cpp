@@ -34,3 +34,17 @@ void listComponent(const std::string& listName, const ImVec2& wh, std::vector<st
 		ImGui::EndListBox();
 	}
 }
+void listComponentReChoose(std::vector<std::string>& itemNames, const int& pickIdxOut)
+{
+	for (int i = 0; i < itemNames.size(); i++)
+	{
+		if (i== pickIdxOut)
+		{
+			itemNames[i][0] = '-';
+		}
+		else
+		{
+			itemNames[i][0] = ' ';
+		}
+	}
+}
