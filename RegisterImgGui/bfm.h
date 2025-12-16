@@ -27,5 +27,5 @@ namespace bfm
         void capture(const Eigen::MatrixX3f& V, const Eigen::MatrixX3f& C)const;
         void saveObj(const std::filesystem::path& path, const Eigen::MatrixX3f& V, const Eigen::MatrixX3f& C)const;
     };
-
+    bool figureRTS(const std::vector<Eigen::Vector3f>& src, const std::vector<Eigen::Vector3f>& tar, Eigen::Matrix3f& R, Eigen::RowVector3f& t, float& scale, const bool& doRt = true, const bool& doScale = true);
 }

@@ -505,10 +505,93 @@ version/minorVersion
         fout.close();
         return;
     }
-
-
+    //tar = scale*(R*src+t)
+    bool figureRTS(const std::vector<Eigen::Vector3f>& src, const std::vector<Eigen::Vector3f>& tar, Eigen::Matrix3f& R, Eigen::RowVector3f& t, float& scale, const bool& doRt, const bool& doScale)
+    {
+        scale = 1.;
+        R = Eigen::Matrix3f::Identity();
+        t = Eigen::RowVector3f(0, 0, 0);
+        if (src.size() < 3 || src.size() != tar.size())
+        {
+            LOG_ERR_OUT << "src.size() < 3 || src.size() != tar.size()";
+            return false;
+        }
+        Eigen::MatrixX3f srcMat(src.size(), 3);
+        Eigen::MatrixX3f tarMat(tar.size(), 3);
+        for (int i = 0; i < src.size(); i++)
+        {
+            srcMat(i, 0) = src[i][0];
+            srcMat(i, 1) = src[i][1];
+            srcMat(i, 2) = src[i][2];
+            tarMat(i, 0) = tar[i][0];
+            tarMat(i, 1) = tar[i][1];
+            tarMat(i, 2) = tar[i][2];
+        }
+        Eigen::RowVector3f meanSrc = srcMat.colwise().mean();
+        Eigen::RowVector3f meanTar = tarMat.colwise().mean();
+        if (doScale)
+        {
+            auto src_scale = (srcMat.rowwise() - meanSrc).rowwise().norm().mean();
+            auto tar_mean = (tarMat.rowwise() - meanTar).rowwise().norm().mean();
+            scale = tar_mean / src_scale;
+            float scaleInv = src_scale / tar_mean;
+            tarMat *= scaleInv; 
+        }
+        if (doRt)
+        {
+            Eigen::RowVector3f srcCenter = srcMat.colwise().mean();
+            Eigen::RowVector3f tarCenter = tarMat.colwise().mean(); 
+            Eigen::MatrixX3f srcMat2 = srcMat.rowwise() - srcCenter;//A
+            Eigen::MatrixX3f tarMat2 = tarMat.rowwise() - tarCenter;//B             
+            Eigen::Matrix3f H = srcMat2.transpose() * tarMat2;
+            Eigen::JacobiSVD<Eigen::Matrix3f> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
+            Eigen::Matrix3f U = svd.matrixU();
+            Eigen::Matrix3f V = svd.matrixV();
+            R = V * U.transpose(); 
+            // 步骤6：处理反射情况（确保是纯旋转，行列式=1）
+            if (R.determinant() < 0) {
+                V.col(2) *= -1;  // 将V的最后一列取反
+                R = V * U.transpose();
+            }
+            t = tarCenter - srcCenter * R.transpose();
+        }
+        return true;
+    }
 }
+int test_figureRTS()
+{
+    std::default_random_engine e;
+    std::uniform_real_distribution<float> u(-1, 1);
+    e.seed(time(0));
 
+    float gt_scale = abs(u(e));
+    Eigen::AngleAxisf r(u(e),Eigen::Vector3f(u(e), u(e), u(e)).normalized());
+    Eigen::Matrix3f gt_R = r.matrix();
+    Eigen::RowVector3f gt_t(u(e), u(e), u(e));
+    LOG_OUT << "gt_R=" << gt_R;
+    LOG_OUT << "gt_t=" << gt_t;
+    LOG_OUT << "gt_scale=" << gt_scale;
+    int test_cnt = 10;
+    std::vector<Eigen::Vector3f>src(test_cnt);
+    std::vector<Eigen::Vector3f>tar(test_cnt);
+    for (int i = 0; i < test_cnt; i++)
+    {
+        src[i] = Eigen::Vector3f(u(e), u(e), u(e)); 
+        tar[i] = (gt_R* src[i]+ gt_t.transpose())* gt_scale;
+    }
+    bool figureRt = true;
+    bool figureS = true;
+    float scale = 1;
+    Eigen::Matrix3f R;
+    Eigen::RowVector3f t;
+    if (bfm::figureRTS(src,tar,R,t,scale, figureRt, figureS))
+    {
+        LOG_OUT << "R=" << R;
+        LOG_OUT << "t=" << t;
+        LOG_OUT << "scale=" << scale;
+    }
+    return 0;
+}
 int test_bfm(void)
 {  
     if (0)//test face marks
@@ -540,7 +623,10 @@ int test_bfm(void)
         }
         LOG_OUT;
     }
-
+    if (1)
+    {
+        return test_figureRTS();
+    }
 
     std::filesystem::path bfmFacePath = "../models/model2019_face12.h5";
     if (!std::filesystem::exists(bfmFacePath))

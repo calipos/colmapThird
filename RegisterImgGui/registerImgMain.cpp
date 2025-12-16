@@ -41,7 +41,7 @@ extern int test_draw();
 int main(int, char**)
 {
     //return test_draw();;
-    //return test_bfm();
+    return test_bfm();
     //return test_mrf();
     //return test_pips2();
     //return test_sam2();
