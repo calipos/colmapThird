@@ -16,6 +16,7 @@
 #include "face.h"
 #include "labelme.h"
 #include "misc.h"
+#include "triangulation.h"
 using namespace H5;
 namespace bfm
 {
@@ -592,8 +593,10 @@ int test_figureRTS()
     }
     return 0;
 }
+ 
 int test_bfm(void)
 {  
+ 
     if (0)//test face marks
     {
         face::FaceDet faceDetIns;

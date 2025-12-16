@@ -38,8 +38,10 @@ extern int test_surf();
 extern int test_mrf();
 extern int test_bfm();
 extern int test_draw();
+extern int test_curve_fit();
 int main(int, char**)
 {
+    return test_curve_fit();
     //return test_draw();;
     return test_bfm();
     //return test_mrf();
