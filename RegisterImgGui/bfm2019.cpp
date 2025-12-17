@@ -558,6 +558,76 @@ version/minorVersion
         }
         return true;
     }
+
+    bool figureSharedPoint(const std::vector<Eigen::Vector2f>&imgPts, 
+        const std::vector<Eigen::Vector4f>& camerafxfycxcy, const std::vector<Eigen::Matrix3f>& Rs, const std::vector<Eigen::RowVector3f>& ts,Eigen::Vector3f&pt)
+    {
+        if (imgPts.size() < 2)
+        {
+            LOG_ERR_OUT << "imgPts.size()<2";
+            return false;
+        }
+        if (imgPts.size() != camerafxfycxcy.size() || imgPts.size() != Rs.size() || imgPts.size() != ts.size())
+        {
+            LOG_ERR_OUT << "size not match";
+            return false;
+        }
+
+
+        Eigen::MatrixXf A(2 * imgPts.size(), 4);
+
+        {
+            Eigen::JacobiSVD<Eigen::MatrixXf> svd(A, Eigen::ComputeFullV);
+
+            int rank = svd.rank();
+            int cols = A.cols();
+
+            if (rank < cols) {
+                // 存在非零解
+                Eigen::VectorXf null_vector = svd.matrixV().col(cols - 1); // 取最后一个奇异向量
+
+                std::cout << "null_vector: " << null_vector << std::endl;;
+                // 归一化，方便查看
+                null_vector.normalize();
+
+                // 验证
+                std::cout << "A * null_vector =  " << A * null_vector << std::endl;;
+                std::cout << "范数: " << (A * null_vector).norm() << std::endl;;
+                 
+            }
+            else {
+                std::cout << "只有零解！\n"; 
+            }
+        }
+
+        {
+            Eigen::MatrixXd A(3, 4);
+            A << 1, 2, 3, 4,
+                2, 4, 6, 8,
+                3, 6, 9, 12;
+
+            std::cout << "矩阵 A:\n" << A << std::endl;
+
+            // 方法1：使用SVD分解求零空间
+            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullV);
+            Eigen::MatrixXd V = svd.matrixV(); // 右奇异向量矩阵
+            int rank = svd.rank(); // 矩阵A的秩
+
+            // 零空间的基向量是 V 中后 (cols - rank) 列
+            int cols = A.cols();
+            Eigen::MatrixXd nullspace_basis = V.rightCols(cols - rank);
+
+            std::cout << "\n零空间基向量（列向量形式）:\n"
+                << nullspace_basis << std::endl;
+
+            // 验证：A * nullspace_basis 应接近零矩阵
+            std::cout << "\n验证 A * nullspace_basis:\n"
+                << A * nullspace_basis << std::endl;
+        }
+
+        return true;
+    }
+
 }
 int test_figureRTS()
 {
@@ -593,7 +663,33 @@ int test_figureRTS()
     }
     return 0;
 }
- 
+int test_TriangulateMultiViewPoint()
+{
+    std::vector<Eigen::Vector2f> imgPts;  
+    std::vector<Eigen::Vector4f> camerafxfycxcy;  
+    std::vector<Eigen::Matrix3f> Rs; 
+    std::vector<Eigen::RowVector3f> ts;
+    //0000
+    imgPts.emplace_back(548, 623);
+    camerafxfycxcy.emplace_back(1202.4190359473357, 1202.4190359473357,360.0, 640.0);
+    Rs.emplace_back(Eigen::Quaternionf(1.0, 0.0, 0.0, 0.0).matrix());
+    ts.emplace_back(0.0, 0.0, 0.0);
+    //0021
+    imgPts.emplace_back(515, 595);
+    camerafxfycxcy.emplace_back(1202.4190359473357, 1202.4190359473357, 360.0, 640.0);
+    Rs.emplace_back(Eigen::Quaternionf(0.931089568209165, 0.017631975672877137, .36064097475036161, -0.051955911473586476).matrix());;
+    ts.emplace_back(-7.1564130482621779, 0.6496792304965231, 2.7521496852791203);
+    //0041
+    imgPts.emplace_back(496, 604);
+    camerafxfycxcy.emplace_back(1202.4190359473357, 1202.4190359473357, 360.0, 640.0);
+    Rs.emplace_back(Eigen::Quaternionf(0.99158533075176203, 0.087306421322532773, 0.086367645847644531, -0.040948142625852543).matrix());
+    ts.emplace_back(1.5932503066297834,
+        1.7476895482295607,
+        0.59391886160274243);
+    Eigen::Vector3f  pt;
+    bfm::figureSharedPoint(imgPts, camerafxfycxcy,Rs,ts,pt);
+    return 0;
+}
 int test_bfm(void)
 {  
  
@@ -628,6 +724,7 @@ int test_bfm(void)
     }
     if (1)
     {
+        return test_TriangulateMultiViewPoint();
         return test_figureRTS();
     }
 
