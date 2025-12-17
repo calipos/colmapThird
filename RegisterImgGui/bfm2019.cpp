@@ -575,55 +575,30 @@ version/minorVersion
 
 
         Eigen::MatrixXf A(2 * imgPts.size(), 4);
-
+        for (int i = 0; i < imgPts.size(); i++)
         {
-            Eigen::JacobiSVD<Eigen::MatrixXf> svd(A, Eigen::ComputeFullV);
-
-            int rank = svd.rank();
-            int cols = A.cols();
-
-            if (rank < cols) {
-                // 存在非零解
-                Eigen::VectorXf null_vector = svd.matrixV().col(cols - 1); // 取最后一个奇异向量
-
-                std::cout << "null_vector: " << null_vector << std::endl;;
-                // 归一化，方便查看
-                null_vector.normalize();
-
-                // 验证
-                std::cout << "A * null_vector =  " << A * null_vector << std::endl;;
-                std::cout << "范数: " << (A * null_vector).norm() << std::endl;;
-                 
-            }
-            else {
-                std::cout << "只有零解！\n"; 
-            }
+            Eigen::Matrix4f intr = Eigen::Matrix4f::Identity();
+            Eigen::Matrix4f Rt = Eigen::Matrix4f::Identity();
+            intr(0, 0) = camerafxfycxcy[i][0];
+            intr(1, 1) = camerafxfycxcy[i][1];
+            intr(0, 2) = camerafxfycxcy[i][2];
+            intr(1, 2) = camerafxfycxcy[i][3];
+            Rt.block(0, 0, 3, 3) = Rs[i];
+            Rt(0, 3) = ts[i][0];
+            Rt(1, 3) = ts[i][1];
+            Rt(2, 3) = ts[i][2];
+            Eigen::Matrix4f P = intr * Rt;
+            A.row(2 * i) = imgPts[i][0] * P.row(2) - P.row(0);
+            A.row(2 * i+1) = imgPts[i][0] * P.row(2) - P.row(1);
         }
+        // 使用SVD求解最小二乘意义下的解
+        Eigen::JacobiSVD<Eigen::MatrixXf> svd(A, Eigen::ComputeFullV);
+        Eigen::Vector4f point_homogeneous = svd.matrixV().col(3);
 
-        {
-            Eigen::MatrixXd A(3, 4);
-            A << 1, 2, 3, 4,
-                2, 4, 6, 8,
-                3, 6, 9, 12;
-
-            std::cout << "矩阵 A:\n" << A << std::endl;
-
-            // 方法1：使用SVD分解求零空间
-            Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullV);
-            Eigen::MatrixXd V = svd.matrixV(); // 右奇异向量矩阵
-            int rank = svd.rank(); // 矩阵A的秩
-
-            // 零空间的基向量是 V 中后 (cols - rank) 列
-            int cols = A.cols();
-            Eigen::MatrixXd nullspace_basis = V.rightCols(cols - rank);
-
-            std::cout << "\n零空间基向量（列向量形式）:\n"
-                << nullspace_basis << std::endl;
-
-            // 验证：A * nullspace_basis 应接近零矩阵
-            std::cout << "\n验证 A * nullspace_basis:\n"
-                << A * nullspace_basis << std::endl;
-        }
+        // 将齐次坐标转换为三维欧氏坐标
+        Eigen::Vector3f point_3d = point_homogeneous.head<3>() / point_homogeneous(3);
+        LOG_OUT << point_3d;
+         
 
         return true;
     }
