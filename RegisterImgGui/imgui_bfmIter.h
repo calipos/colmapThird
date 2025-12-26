@@ -22,6 +22,7 @@ public:
 	bool iter(const std::vector<cv::Point3f>& src, const std::vector<cv::Point3f>& tar, const IterType& type);
 	Eigen::Matrix3f bfm_R;
 	Eigen::RowVector3f bfm_t;
+	float bfm_scale;
 	std::vector<cv::Mat>imgs;
 	std::vector<cv::Mat>renders;
 	std::vector<cv::Mat>renderPts;
@@ -37,5 +38,7 @@ public:
 	static int imgPickIdx;
 	meshdraw::Mesh msh;
 	std::vector<meshdraw::Camera> imgCameras;
+	static bool figureSharedPoint(const std::vector<Eigen::Vector2f>& imgPts, const std::vector<meshdraw::Camera>& ts, Eigen::Vector3f& pt);
+	bool updataRts(const Eigen::Matrix3f& R, const  Eigen::RowVector3f& t, const  float& scale);
 };
 #endif // !_ANNOTATION_FRAME_H_

@@ -6,8 +6,15 @@ namespace meshdraw
 {
 	template <typename T>
 	bool isEmpty(const Eigen::MatrixBase<T>& mat) {
-		if (mat.rows() == 0 || mat.cols() == 0) {
-			return true;
+		try
+		{
+			if (mat.rows() == 0 || mat.cols() == 0) {
+				return true;
+			}
+		}
+		catch (...)
+		{
+			return false;
 		}
 		return false;
 	}
@@ -36,7 +43,7 @@ namespace meshdraw
 		Eigen::MatrixX3f facesNormal;
 		bool figurePtsNomral();
 		bool figureFacesNomral();
-		bool rotate(const Eigen::Matrix3f& R, const Eigen::RowVector3f& t);
+		bool rotate(const Eigen::Matrix3f& R, const Eigen::RowVector3f& t, const float& scale);
 	};
 	enum class RenderType
 	{

@@ -332,7 +332,7 @@ namespace meshdraw
         igl::per_face_normals(V, F, facesNormal);
         return true;
     }
-    bool Mesh::rotate(const Eigen::Matrix3f& R, const Eigen::RowVector3f& t)
+    bool Mesh::rotate(const Eigen::Matrix3f& R, const Eigen::RowVector3f& t,const float&scale)
     {
         if (isEmpty(V))
         {
@@ -340,7 +340,7 @@ namespace meshdraw
             return false;
         }
         Eigen::Matrix3f R_inv = R.transpose();
-        V = (V * R_inv).rowwise() + t; 
+        V = (V * R_inv * scale).rowwise() + t;
         return true;
     }
     bool render(const Mesh& msh, const Camera& cam, cv::Mat& rgbMat, cv::Mat& vertexMap, cv::Mat& mask, const RenderType& renderTpye)
@@ -364,7 +364,6 @@ namespace meshdraw
             }
             Eigen::Matrix3f R_T = cam.R.transpose();
             Eigen::MatrixX3i ptsInPic;
-            std::vector<bool>renderFaces(msh.F.rows(), false);
             Eigen::MatrixX3i colorInt = (msh.C * 255.f).cast<int>();
             if (cam.cameraType == CmaeraType::Pinhole)
             {
@@ -381,14 +380,29 @@ namespace meshdraw
                 cv::Mat drawMatDist = cv::Mat::zeros(cam.height, cam.width, CV_32FC1);
                 mask = cv::Mat::zeros(cam.height, cam.width, CV_8UC1);
                 vertexMap = cv::Mat::zeros(cam.height, cam.width, CV_32FC3);
+                std::vector<bool>ptsInCanvas(msh.V.rows(), true);
+#pragma omp parallel for  schedule(dynamic)
+                for (int i = 0; i < ptsInCanvas.size(); i++)
+                {
+                    if (ptsInPic(i, 0) < 0 || ptsInPic(i, 1) < 0 || ptsInPic(i, 0) >= cam.width || ptsInPic(i, 1) >= cam.height)
+                    {
+                        ptsInCanvas[i] = false;
+                    }
+                }
+
+
+
                 for (int f = 0; f < dots.size(); f++)
                 {
                     if (dots[f] < 0)
                     {
-                        renderFaces[f] = true;
                         const int& fa = msh.F(f, 0);
                         const int& fb = msh.F(f, 1);
                         const int& fc = msh.F(f, 2);
+                        if (!ptsInCanvas[fa] || !ptsInCanvas[fb] || !ptsInCanvas[fc] )
+                        {
+                            continue;
+                        }
                         float distFromCam = (barycenter.row(f) - cam.t).norm();
                         std::list<std::pair<cv::Vec2i, Eigen::Vector3f>>trianglePixels = utils::triangle({ ptsInPic(fa,0),ptsInPic(fa,1) }, { ptsInPic(fb,0),ptsInPic(fb,1) }, { ptsInPic(fc,0),ptsInPic(fc,1) }, msh.V.row(fa), msh.V.row(fb), msh.V.row(fc));
                         for (const auto& d : trianglePixels)
@@ -425,7 +439,6 @@ namespace meshdraw
                         }
                     }
                 }
-                //utils::saveFacePickedMesh("a.obj",msh, renderFaces);        
             }
             else if (cam.cameraType == CmaeraType::Ortho)
             {

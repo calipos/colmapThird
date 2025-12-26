@@ -323,7 +323,6 @@ version/minorVersion
                     else
                     {
                         delete[] buffer;
-                        LOG_OUT << newRoot.size();
                         for (int i = 0; i < newRoot.size(); i++)
                         {
                             auto newMemberNames = newRoot[i].getMemberNames();
@@ -666,8 +665,8 @@ int test_TriangulateMultiViewPoint()
     return 0;
 }
 int test_bfm(void)
-{  
- 
+{
+
     if (0)//test face marks
     {
         face::FaceDet faceDetIns;
@@ -724,7 +723,7 @@ int test_bfm(void)
         Eigen::RowVector3f t;
         R << 1, 0, 0, 0, -1, 0, 0, 0, -1;
         t << 0, 0, 300; 
-        msh.rotate(R,t); 
+        msh.rotate(R,t,1.f); 
 
         msh.figureFacesNomral();
         meshdraw::Camera cam = meshdraw::utils::generateDefaultCamera();
