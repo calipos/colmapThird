@@ -624,12 +624,17 @@ bool BfmIter::iter(const std::vector<cv::Point3f>& src, const std::vector<cv::Po
 }
 bool BfmIter::updataRts(const Eigen::Matrix3f& R, const  Eigen::RowVector3f& t, const  float& scale)
 {
-	msh.rotate(R, t, scale);
-	bfm_scale *= scale;
-	bfm_R = R*bfm_R;
-	bfm_t = t + bfm_t * R.transpose() * scale;
+	//(Y=s1XR1'+t1)
+	//X = (Y-t1)R1/s1
+	//Z = s2/s1( Y-t1 )R1*R2' + t2 = s2/s1 Y R1R2' - s2/s1*t*R1R2' +t2
+	bfm_scale = scale/ bfm_scale;
+	bfm_R = R* bfm_R.transpose();
+	bfm_t = t - scale / bfm_scale* bfm_t * bfm_R * R.transpose();
+	msh.rotate(bfm_R, bfm_t, bfm_scale);
+	progress.denominator.fetch_add(this->renders.size());
 	for (int i = 0; i < this->renders.size(); i++)
 	{
+		progress.numerator.fetch_add(1);
 		cv::Mat&render3d = this->renders[i];
 		cv::Mat&render3dPts = this->renderPts[i];
 		cv::Mat&mask = this->renderMasks[i];
@@ -638,7 +643,10 @@ bool BfmIter::updataRts(const Eigen::Matrix3f& R, const  Eigen::RowVector3f& t, 
 			BfmIterManger->msh.figureFacesNomral();
 		}
 		meshdraw::render(BfmIterManger->msh, imgCameras[i], render3d, render3dPts, mask);
-	}
+	} 	 
+	progress.procRunning.store(0);
+	progress.denominator.store(-1);
+	progress.numerator.store(-1);
 	return true;
 }
 bool BfmIter::figureSharedPoint(const std::vector<Eigen::Vector2f>& imgPts, const std::vector<meshdraw::Camera>& cams, Eigen::Vector3f& pt)
@@ -965,18 +973,25 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 				}
 			}
 			if (ImGui::Button("figure"))
-			{
-				float scale = 1;
-				Eigen::Matrix3f R;
-				Eigen::RowVector3f t;
-				if (labelControlPtr->ptsData.figureRts(BfmIterManger->imgCameras, R, t, scale))
-				{ 
-					LOG_OUT << scale;
-					LOG_OUT << R;
-					LOG_OUT << t;
-					BfmIterManger->updataRts(R, t, scale);
-				}
-
+			{ 
+				progress.numerator.store(-1);
+				progress.denominator.store(-1);
+				progress.procRunning.fetch_add(1);
+				progress.proc = new std::thread(
+					[&]() {
+						float scale = 1;
+						Eigen::Matrix3f R;
+						Eigen::RowVector3f t;
+						if (labelControlPtr->ptsData.figureRts(BfmIterManger->imgCameras, R, t, scale))
+						{
+							LOG_OUT << scale;
+							LOG_OUT << R;
+							LOG_OUT << t;
+							BfmIterManger->updataRts(R, t, scale);
+						}
+					}
+				);
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			}
 		}
 		break;
