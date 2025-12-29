@@ -223,9 +223,45 @@ namespace meshdraw
             }
             return ret;
         }
+
+        std::list<std::pair<cv::Vec2i, Eigen::Vector3f>> line(const cv::Vec2i& p0, const cv::Vec2i& p1,
+            const Eigen::Vector3f& value0, const Eigen::Vector3f& value1)
+        {
+            if (p0[0] ==p1[0] && p0[1] == p1[1])
+            {
+                return std::list<std::pair<cv::Vec2i, Eigen::Vector3f>>{ {p0, value0}};
+            }
+            std::list<std::pair<cv::Vec2i, Eigen::Vector3f>> ret;
+            cv::Vec2f d = p1 - p0;
+            int cnt = cv::norm(d) + 1;
+            d /= cv::norm(d);
+            Eigen::Vector3f each = (value1- value0)/ cnt;
+            for (int i = 0; i <= cnt; i++)
+            {
+                cv::Vec2i pixel;
+                pixel[0] = p0[0] + i * d[0];
+                pixel[1] = p0[1] + i * d[1];
+                ret.emplace_back(std::make_pair(pixel, value0 +i* each));
+            }
+            return ret;
+        }
+
         std::list<std::pair<cv::Vec2i, Eigen::Vector3f>> triangle(const cv::Vec2i& p0, const cv::Vec2i& p1, const cv::Vec2i& p2,
             const Eigen::Vector3f& value0, const Eigen::Vector3f& value1, const Eigen::Vector3f& value2) { 
             std::list<std::pair<cv::Vec2i, Eigen::Vector3f>> ret;
+            if (p0[0] == p1[0] && p0[1] == p1[1])
+            {
+                return line(p0,p2, value0, value2);
+            }
+            else if (p2[0] == p1[0] && p2[1] == p1[1])
+            {
+                return line(p0, p2, value0, value2);
+            }
+            else if (p2[0] == p0[0] && p2[1] == p0[1])
+            {
+                return line(p1, p2, value1, value2);
+            }
+
             if (p0[1] == p1[1] && p0[1] == p2[1])
             {
                 int xmin = 0;
@@ -521,7 +557,7 @@ namespace meshdraw
                         const Eigen::Vector3f& value = d.second;
                         const int& r = pixel[1];
                         const int& c = pixel[0];
-                        if (c==207&&r==370)
+                        if (c==197&&r==361)
                         {
                             LOG_OUT;
                         }
