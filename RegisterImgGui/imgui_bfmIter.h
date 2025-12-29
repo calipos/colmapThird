@@ -24,9 +24,10 @@ public:
 	Eigen::RowVector3f bfm_t;
 	float bfm_scale;
 	std::vector<cv::Mat>imgs;
-	std::vector<cv::Mat>renders;
-	std::vector<cv::Mat>renderPts;
-	std::vector<cv::Mat>renderMasks;
+	std::vector<cv::Mat>bfmRenders;
+	std::vector<cv::Mat>bfmRenderPts;
+	std::vector<cv::Mat>borderMshRenderPts;
+	std::vector<cv::Mat>bfmRenderMasks;
 	std::vector<ImVec2>shifts;;
 	std::vector<std::filesystem::path>imgPaths;
 	std::vector<std::string>imgNameForlist;
@@ -36,9 +37,13 @@ public:
 	static int viewWindowHeight;
 	static int viewWindowWidth;
 	static int imgPickIdx;
-	meshdraw::Mesh msh;
+	meshdraw::Mesh bfmMsh;
+	meshdraw::Mesh borderMsh;
 	std::vector<meshdraw::Camera> imgCameras;
 	static bool figureSharedPoint(const std::vector<Eigen::Vector2f>& imgPts, const std::vector<meshdraw::Camera>& ts, Eigen::Vector3f& pt);
+	static bool readObj(const std::filesystem::path& objPath, Eigen::MatrixX3f& vertex, Eigen::MatrixX3i& faces);
 	bool updataRts(const Eigen::Matrix3f& R, const  Eigen::RowVector3f& t, const  float& scale);
+	bool initialSuccess{ false };
+	std::filesystem::path denseObjPath;
 };
 #endif // !_ANNOTATION_FRAME_H_

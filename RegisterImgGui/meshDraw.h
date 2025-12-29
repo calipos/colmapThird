@@ -51,7 +51,7 @@ namespace meshdraw
 		distance,
 	};
 	bool render(const Mesh&msh,const Camera&cam, cv::Mat& rgbMat, cv::Mat& vertexMap, cv::Mat& mask, const RenderType&renderTpye = RenderType::vertexColor);
-
+	bool render(const Mesh& msh, const Camera& cam, cv::Mat& vertexMap, cv::Mat& mask);
 	namespace utils
 	{
 		meshdraw::Camera generateBfmDefaultCamera();

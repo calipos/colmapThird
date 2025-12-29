@@ -721,7 +721,7 @@ bool segmentFrame(bool* show_regist_window)
 				ImGui::DragFloat2("xstart xend", x_start_end, 0.02f, -1.0f, 1.0f);
 				ImGui::DragFloat2("ystart yend", y_start_end, 0.02f, -1.0f, 1.0f);
 				ImGui::DragFloat2("zstart zend", z_start_end, 0.02f, -1.0f, 1.0f);
-				if (ImGui::Button("volmueReconstruct"))
+				if (ImGui::Button("volmueReconstruct(need fix manually)"))
 				{
 					progress.denominator.store(segmentMgr->imgPaths.size());
 					progress.numerator.store(0);

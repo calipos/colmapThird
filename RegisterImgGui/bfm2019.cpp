@@ -666,7 +666,37 @@ int test_TriangulateMultiViewPoint()
 }
 int test_bfm(void)
 {
-
+    if (0)
+    {
+        Json::Value scanParam;
+        scanParam["speed"] = 4.f;
+        scanParam["speed"].setComment(std::string("//float speed"), Json::CommentPlacement::commentAfterOnSameLine);
+        scanParam["rgb"] = true;
+        scanParam["rgb"].setComment(std::string("//true or false"), Json::CommentPlacement::commentAfterOnSameLine);
+        scanParam["mode"] = 0;
+        scanParam["mode"].setComment(std::string("//always=0,0=hscan,1=fscan"), Json::CommentPlacement::commentAfterOnSameLine);
+        scanParam["fullPtsInfo"] = false;
+        scanParam["fullPtsInfo"].setComment(std::string("//save the fullPtsInfo for debug"), Json::CommentPlacement::commentAfterOnSameLine);
+        scanParam["no_imu"] = false;
+        scanParam["no_imu"].setComment(std::string("//scan without imu"), Json::CommentPlacement::commentAfterOnSameLine);
+        scanParam["saveUndistotionImg"] = true;
+        scanParam["saveUndistotionImg"].setComment(std::string("//save Undistorted Img"), Json::CommentPlacement::commentAfterOnSameLine);
+        scanParam["hdrQulity"] = 2;
+        scanParam["hdrQulity"].setComment(std::string("//default=2,int:[0~8]"), Json::CommentPlacement::commentAfterOnSameLine);//""
+        scanParam["searchStrategy"] = 2;
+        scanParam["searchStrategy"].setComment(std::string("//for multi_work, g2 support [2] only."), Json::CommentPlacement::commentAfterOnSameLine);
+        scanParam["debugDataPath"] = "";
+        scanParam["debugDataPath"].setComment(std::string("//debug mode if not null"),
+            Json::CommentPlacement::commentAfterOnSameLine);
+        scanParam["pointSpace"] = 0.04;
+        scanParam["pointSpace"].setComment(std::string("//space downsample param"),
+            Json::CommentPlacement::commentAfterOnSameLine); 
+        Json::StyledWriter sw;
+        std::fstream fout("D:/ucl360/UCL360Calib/IntegratedScan/g2scanParam.json", std::ios::out);
+        fout << sw.write(scanParam);
+        fout.close();
+        return 0;
+    }
     if (0)//test face marks
     {
         face::FaceDet faceDetIns;
@@ -696,12 +726,11 @@ int test_bfm(void)
         }
         LOG_OUT;
     }
-    if (1)
+    if (0)
     {
         return test_TriangulateMultiViewPoint();
         return test_figureRTS();
     }
-
     std::filesystem::path bfmFacePath = "../models/model2019_face12.h5";
     if (!std::filesystem::exists(bfmFacePath))
     {

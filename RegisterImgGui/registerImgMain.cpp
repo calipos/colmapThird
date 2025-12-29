@@ -99,7 +99,7 @@ int main(int, char**)
         {
             show_segment_window = !show_segment_window;
         }
-        if (ImGui::Button("bfmIter") && !show_bfmIter_window)
+        if (ImGui::Button("bfmIter(need dense.obj)") && !show_bfmIter_window)
         {
             show_bfmIter_window = !show_bfmIter_window;
         }

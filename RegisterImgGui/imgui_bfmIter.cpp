@@ -117,6 +117,7 @@ namespace draw
 					objPtsFromImgs.emplace_back(pt);
 					const cv::Vec3f&pt3d = controlPts3dAndTag.at(ptName);
 					objPtsFromBfm.emplace_back(pt3d[0], pt3d[1], pt3d[2]);
+					LOG_OUT <<"img-bfm : " << pt<<pt3d;
 				}
 
 				scale = 1.;
@@ -421,40 +422,33 @@ namespace draw
 			mousePosInImage.y = (ImGui::GetIO().MousePos.y - ImGui::GetWindowPos().y - canvasPos.y);
 			if (mousePosInImage.x < 0 || mousePosInImage.y < 0 || mousePosInImage.x >= canvas.x || mousePosInImage.y >canvas.y)
 			{
-				mouseDownStartPos.x = -900000;
 				return ImVec2(-1, -1);;
 			}
 			float wheel = ImGui::GetIO().MouseWheel;
 			if (ImGui::GetIO().MouseClicked[2])
 			{
-				mouseDownStartPos.x = -900000;
 				float x_inRatio = mousePosInImage.x * Draw::canvasInv.x * (Draw::zoom_end.x - Draw::zoom_start.x) + Draw::zoom_start.x;
 				float y_inRatio = mousePosInImage.y * Draw::canvasInv.y * (Draw::zoom_end.y - Draw::zoom_start.y) + Draw::zoom_start.y;
 				float x_inPic = x_inRatio * currentImgWidth;
 				float y_inPic = y_inRatio * currentImgHeight;
-				LOG_OUT << x_inPic << " " << y_inPic;
 				return ImVec2(x_inPic, y_inPic);
 			}
-			else if (ImGui::GetIO().MouseDown[0] && mouseDownStartPos.x < -800000)
+			else if (ImGui::GetIO().MouseDown[0])
 			{
-				mouseDownStartPos = mousePosInImage;
+				mouseDownStartPos = ImGui::GetIO().MouseClickedPos[0]; 
+ 
+				temporaryOffset.x = (ImGui::GetIO().MousePos.x - mouseDownStartPos.x);
+				temporaryOffset.y = (ImGui::GetIO().MousePos.y - mouseDownStartPos.y);
 			}
 			else if (ImGui::GetIO().MouseReleased[0])
 			{
-				offset.x += (mousePosInImage.x - mouseDownStartPos.x);
-				offset.y += (mousePosInImage.y - mouseDownStartPos.y);
+				offset.x += (ImGui::GetIO().MousePos.x - mouseDownStartPos.x);
+				offset.y += (ImGui::GetIO().MousePos.y - mouseDownStartPos.y);
 				temporaryOffset.x = 0;
 				temporaryOffset.y = 0;
-				mouseDownStartPos.x = -900000;
-			}
-			else if (ImGui::GetIO().MouseDown[0])
-			{ 
-				temporaryOffset.x = (mousePosInImage.x- mouseDownStartPos.x );
-				temporaryOffset.y = (mousePosInImage.y - mouseDownStartPos.y); 
-			}
+			} 
 			else if (abs(wheel) > 0.01)
 			{
-				mouseDownStartPos.x = -900000;
 				if (mousePosInImage.x >= 0 && mousePosInImage.y >= 0 && mousePosInImage.x < canvas.x && mousePosInImage.y < canvas.y)
 				{
 					float x_inRatio = mousePosInImage.x * Draw::canvasInv.x * (Draw::zoom_end.x - Draw::zoom_start.x) + Draw::zoom_start.x;
@@ -518,12 +512,72 @@ namespace draw
 	float Draw::resizeFactor = 1;
 	char Draw::tarStr[tagLengthMax] = "\0";
 }
- 
+bool BfmIter::readObj(const std::filesystem::path& objPath, Eigen::MatrixX3f& vertex, Eigen::MatrixX3i& faces)
+{
+	if (!std::filesystem::exists(objPath))
+	{
+		LOG_ERR_OUT << "not found : " << objPath;
+		return false;
+	}
+	std::fstream fin(objPath, std::ios::in);
+	std::string aline;
+	std::list<Eigen::Vector3f>v;
+	std::list<Eigen::Vector3i>f;
+	while (std::getline(fin, aline))
+	{
+		if (aline.length() > 2 && aline[0] == 'v' && aline[1] == ' ')
+		{
+			std::stringstream ss(aline);
+			char c;
+			float x, y, z;
+			ss >> c >> x >> y >> z;
+			v.emplace_back(x, y, z);
+		}
+		if (aline.length() > 2 && aline[0] == 'f' && aline[1] == ' ')
+		{
+			std::stringstream ss(aline);
+			char c;
+			int x, y, z;
+			ss >> c >> x >> y >> z;
+			f.emplace_back(x - 1, y - 1, z - 1);
+		}
+	}
+	vertex = Eigen::MatrixX3f(v.size(), 3);
+	faces = Eigen::MatrixX3i(f.size(), 3);
+	int i = 0;
+	for (const auto& d : v)
+	{
+		vertex(i, 0) = d.x();
+		vertex(i, 1) = d.y();
+		vertex(i, 2) = d.z();
+		i += 1;
+	}
+	i = 0;
+	for (const auto& d : f)
+	{
+		faces(i, 0) = d.x();
+		faces(i, 1) = d.y();
+		faces(i, 2) = d.z();
+		i += 1;
+	} 
+	return true;
+}
 BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesystem::path& modelDirPath)
 {
+	this->initialSuccess = false;
 	progress.procRunning.fetch_add(1);
 	progress.denominator.store(1);
 	progress.numerator.store(1);
+	this->denseObjPath = mvsResultDir / "dense.obj";
+	if (!std::filesystem::exists(this->denseObjPath))
+	{
+		LOG_ERR_OUT << "need denseObjPath";
+		return;
+	}
+	else
+	{
+		readObj(this->denseObjPath, borderMsh.V, borderMsh.F);
+	}
 	std::filesystem::path bfmFacePath = modelDirPath / "model2019_face12.h5";
 	if (!std::filesystem::exists(bfmFacePath))
 	{
@@ -531,12 +585,12 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 		return;
 	}
 	bfmIns = new bfm::Bfm2019(bfmFacePath);
-	bfmIns->generateRandomFace(msh.V, msh.C);
-	this->msh.F = bfmIns->F;
+	bfmIns->generateRandomFace(bfmMsh.V, bfmMsh.C);
+	this->bfmMsh.F = bfmIns->F;
     bfm_R << 1, 0, 0, 0, -1, 0, 0, 0, -1;
     bfm_t << 0, 0, 300;  
 	bfm_scale = 1.f;
-	this->msh.rotate(bfm_R, bfm_t, bfm_scale);
+	this->bfmMsh.rotate(bfm_R, bfm_t, bfm_scale);
 	imgPaths.clear();
 	imgNameForlist.clear();
 	imgDirPath_ = mvsResultDir;
@@ -588,14 +642,24 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 						cv::Mat render3d;
 						cv::Mat render3dPts;
 						cv::Mat mask;						
-						if (meshdraw::isEmpty(this->msh.facesNormal))
+						if (meshdraw::isEmpty(this->bfmMsh.facesNormal))
 						{
-							this->msh.figureFacesNomral();
+							this->bfmMsh.figureFacesNomral();
 						}
-						meshdraw::render(this->msh, cam, render3d, render3dPts, mask);
-						renders.emplace_back(render3d);
-						renderPts.emplace_back(render3dPts);
-						renderMasks.emplace_back(mask);
+						meshdraw::render(this->bfmMsh, cam, render3d, render3dPts, mask);
+						bfmRenders.emplace_back(render3d);
+						bfmRenderPts.emplace_back(render3dPts);
+						bfmRenderMasks.emplace_back(mask);
+						cv::Mat borderMshRender3dPts;
+						cv::Mat borderMshMask;
+						if (meshdraw::isEmpty(this->borderMsh.facesNormal))
+						{
+							this->borderMsh.figureFacesNomral();
+						}
+						meshdraw::render(this->borderMsh, cam, borderMshRender3dPts, borderMshMask);
+						bfmRenderPts.emplace_back(borderMshRender3dPts);
+
+
 						shifts.emplace_back(ImVec2(0, 0));
 						progress.denominator.fetch_add(1);
 						progress.numerator.fetch_add(1);
@@ -612,6 +676,7 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 		LOG_ERR_OUT << "imgNameForlist.size()<1";
 		return;
 	}
+	this->initialSuccess = true;
 	progress.procRunning.store(0);
 	progress.denominator.store(-1);
 	progress.numerator.store(-1);
@@ -624,25 +689,29 @@ bool BfmIter::iter(const std::vector<cv::Point3f>& src, const std::vector<cv::Po
 }
 bool BfmIter::updataRts(const Eigen::Matrix3f& R, const  Eigen::RowVector3f& t, const  float& scale)
 {
+	//V = (V * R_inv * scale).rowwise() + t;
 	//(Y=s1XR1'+t1)
 	//X = (Y-t1)R1/s1
 	//Z = s2/s1( Y-t1 )R1*R2' + t2 = s2/s1 Y R1R2' - s2/s1*t*R1R2' +t2
-	bfm_scale = scale/ bfm_scale;
+
+	bfmMsh.rotate(R, t, scale);
+
+	bfm_scale = scale* bfm_scale;
 	bfm_R = R* bfm_R.transpose();
 	bfm_t = t - scale / bfm_scale* bfm_t * bfm_R * R.transpose();
-	msh.rotate(bfm_R, bfm_t, bfm_scale);
-	progress.denominator.fetch_add(this->renders.size());
-	for (int i = 0; i < this->renders.size(); i++)
+	
+	progress.denominator.fetch_add(this->bfmRenders.size());
+	for (int i = 0; i < this->bfmRenders.size(); i++)
 	{
 		progress.numerator.fetch_add(1);
-		cv::Mat&render3d = this->renders[i];
-		cv::Mat&render3dPts = this->renderPts[i];
-		cv::Mat&mask = this->renderMasks[i];
-		if (meshdraw::isEmpty(BfmIterManger->msh.facesNormal))
+		cv::Mat&render3d = this->bfmRenders[i];
+		cv::Mat&render3dPts = this->bfmRenderPts[i];
+		cv::Mat&mask = this->bfmRenderMasks[i];
+		if (meshdraw::isEmpty(BfmIterManger->bfmMsh.facesNormal))
 		{
-			BfmIterManger->msh.figureFacesNomral();
+			BfmIterManger->bfmMsh.figureFacesNomral();
 		}
-		meshdraw::render(BfmIterManger->msh, imgCameras[i], render3d, render3dPts, mask);
+		meshdraw::render(BfmIterManger->bfmMsh, imgCameras[i], render3d, render3dPts, mask);
 	} 	 
 	progress.procRunning.store(0);
 	progress.denominator.store(-1);
@@ -799,7 +868,7 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			}
 		}
-		if (BfmIterManger != nullptr && BfmIterManger->imgNameForlist.size() < 1)
+		if (BfmIterManger != nullptr && (BfmIterManger->imgNameForlist.size() < 1 || BfmIterManger->initialSuccess==false))
 		{
 			delete BfmIterManger;
 			BfmIterManger = nullptr;
@@ -854,7 +923,7 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 			{
 				maybeClik = labelControlPtr->control(labelControlPtr->draw_pos, temporaryOffset, BfmIterManger->shifts[BfmIter::imgPickIdx]);
 			}
-			if (BfmIter::imgPickIdx >= 0 && (pickedChanged || mixFactorChanged || BfmIterManger->shifts[BfmIter::imgPickIdx].x != 0 || maybeClik.x>=0))
+			if (BfmIter::imgPickIdx >= 0 && (pickedChanged || mixFactorChanged || (temporaryOffset.x != 0 || temporaryOffset.y != 0) || maybeClik.x>=0))
 			{
 				if (pickedChanged)
 				{
@@ -862,22 +931,22 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 				}
 				const cv::Mat& img = BfmIterManger->imgs[BfmIter::imgPickIdx];
 				const meshdraw::Camera&cam= BfmIterManger->imgCameras[BfmIter::imgPickIdx];
-				cv::Mat& render3d = BfmIterManger->renders[BfmIter::imgPickIdx];
-				cv::Mat& render3dPts = BfmIterManger->renderPts[BfmIter::imgPickIdx];
-				cv::Mat& mask = BfmIterManger->renderMasks[BfmIter::imgPickIdx];
+				cv::Mat& render3d = BfmIterManger->bfmRenders[BfmIter::imgPickIdx];
+				cv::Mat& render3dPts = BfmIterManger->bfmRenderPts[BfmIter::imgPickIdx];
+				cv::Mat& mask = BfmIterManger->bfmRenderMasks[BfmIter::imgPickIdx];
 				if (render3d.empty())
 				{ 
-					if (meshdraw::isEmpty(BfmIterManger->msh.facesNormal))
+					if (meshdraw::isEmpty(BfmIterManger->bfmMsh.facesNormal))
 					{
-						BfmIterManger->msh.figureFacesNomral();
+						BfmIterManger->bfmMsh.figureFacesNomral();
 					}
-					meshdraw::render(BfmIterManger->msh, cam, render3d, render3dPts, mask);
+					meshdraw::render(BfmIterManger->bfmMsh, cam, render3d, render3dPts, mask);
 				}  
 				if (ImgShift.empty())
 				{
 					render3d.copyTo(ImgShift);
 				}
-				if (temporaryOffset.x != 0 || temporaryOffset.y != 0)
+				//if (temporaryOffset.x != 0 || temporaryOffset.y != 0)
 				{ 
 					ImVec2 offset(0, 0);
 					offset.x = BfmIterManger->shifts[BfmIter::imgPickIdx].x + temporaryOffset.x;
