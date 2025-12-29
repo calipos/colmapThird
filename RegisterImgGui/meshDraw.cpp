@@ -249,62 +249,99 @@ namespace meshdraw
         std::list<std::pair<cv::Vec2i, Eigen::Vector3f>> triangle(const cv::Vec2i& p0, const cv::Vec2i& p1, const cv::Vec2i& p2,
             const Eigen::Vector3f& value0, const Eigen::Vector3f& value1, const Eigen::Vector3f& value2) { 
             std::list<std::pair<cv::Vec2i, Eigen::Vector3f>> ret;
-            if (p0[0] == p1[0] && p0[1] == p1[1])
             {
-                return line(p0,p2, value0, value2);
+                cv::Vec2i d1 = p2 - p0;
+                cv::Vec2i d2 = p1 - p0;
+                int a = d1[0] * d2[1];
+                int b = d1[1] * d2[0];
+                if (a == b || a + b == 0)
+                {
+                    int maxx = (std::max)((std::max)(p0[0], p1[0]), p2[0]);
+                    int maxy = (std::max)((std::max)(p0[1], p1[1]), p2[1]);
+                    int minx = (std::min)((std::min)(p0[0], p1[0]), p2[0]);
+                    int miny = (std::min)((std::min)(p0[1], p1[1]), p2[1]);
+                    cv::Vec2i pa(minx, miny);
+                    cv::Vec2i pb(maxx, maxy);
+                    Eigen::Vector3f va, vb;
+                    if (p0[0] == minx && p0[1] == miny)
+                    {
+                        va = value0;
+                        if (p1[0] == maxx && p1[1] == maxy)
+                        {
+                            vb = value1; 
+                        }
+                        else
+                        {
+                            vb = value2;
+                        }
+                    }
+                    else if (p1[0] == minx && p1[1] == miny)
+                    {
+                        va = value1;
+                        if (p0[0] == maxx && p0[1] == maxy)
+                        {
+                            vb = value0;
+                        }
+                        else
+                        {
+                            vb = value2;
+                        }
+                    }
+                    else if (p2[0] == minx && p2[1] == miny)
+                    {
+                        va = value2;
+                        if (p0[0] == maxx && p0[1] == maxy)
+                        {
+                            vb = value0;
+                        }
+                        else
+                        {
+                            vb = value1;
+                        }
+                    }
+                    else if (p0[0] == maxx && p0[1] == miny)
+                    {
+                        std::swap(pa[0], pb[0]);
+                        va = value0;
+                        if (p1[0] == minx && p1[1] == maxy)
+                        {
+                            vb = value1;
+                        }
+                        else
+                        {
+                            vb = value2;
+                        }
+                    }
+                    else if (p1[0] == maxx && p1[1] == miny)
+                    {
+                        std::swap(pa[0], pb[0]);
+                        va = value1;
+                        if (p0[0] == minx && p0[1] == maxy)
+                        {
+                            vb = value0;
+                        }
+                        else
+                        {
+                            vb = value2;
+                        }
+                    }
+                    else
+                    {
+                        std::swap(pa[0], pb[0]);
+                        va = value2;
+                        if (p0[0] == minx && p0[1] == maxy)
+                        {
+                            vb = value0;
+                        }
+                        else
+                        {
+                            vb = value1;
+                        }
+                    }
+                    return line(pa, pb, va, vb);
+                }
             }
-            else if (p2[0] == p1[0] && p2[1] == p1[1])
-            {
-                return line(p0, p2, value0, value2);
-            }
-            else if (p2[0] == p0[0] && p2[1] == p0[1])
-            {
-                return line(p1, p2, value1, value2);
-            }
-
-            if (p0[1] == p1[1] && p0[1] == p2[1])
-            {
-                int xmin = 0;
-                int xmax = 0;
-                Eigen::Vector3f minValue, maxValue;
-                if (p0[0] >= p1[0] && p0[0] >= p2[0])
-                {
-                    xmax = p0[0];
-                    maxValue = value0;
-                }
-                if (p1[0] >= p0[0] && p1[0] >= p2[0])
-                {
-                    xmax = p1[0];
-                    maxValue = value1;
-                }
-                if (p2[0] >= p1[0] && p2[0] >= p0[0])
-                {
-                    xmax = p2[0];
-                    maxValue = value2;
-                }
-                if (p0[0] <= p1[0] && p0[0] <= p2[0])
-                {
-                    xmin = p0[0];
-                    minValue = value0;
-                }
-                if (p1[0] <= p0[0] && p1[0] <= p2[0])
-                {
-                    xmin = p1[0];
-                    minValue = value1;
-                }
-                if (p2[0] <= p1[0] && p2[0] <= p0[0])
-                {
-                    xmin = p2[0];
-                    minValue = value2;
-                }
-                int cnt = xmax - xmin + 1;
-                Eigen::Vector3f each = (maxValue - minValue) / cnt;
-                for (int i = xmin; i <= xmax; i++)
-                {
-                    ret.emplace_back(std::make_pair(cv::Vec2i{ i, p0[1] }, minValue + (i - xmin) * each));
-                }
-                return ret;
-            }
+             
 
             Eigen::Matrix3f A;
             Eigen::Vector3f b(1,1,1);
