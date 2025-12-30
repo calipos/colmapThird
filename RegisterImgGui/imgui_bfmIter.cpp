@@ -15,6 +15,7 @@
 #include "labelme.h"
 #include "bfm.h"
 #include "meshDraw.h"
+
 static ProgressThread progress;
  
 static BfmIter* BfmIterManger = nullptr;
@@ -46,15 +47,13 @@ namespace draw
 	{
 		ControlLogic()
 		{
-			memset(tarStr,0, tagLengthMax);
 		}
-		std::vector< std::map<std::string, ImVec2>>controlPts2dAndTag;
-		std::map<std::string, cv::Vec3f>controlPts3dAndTag;
-		//ImVec2 tempPt{ -1,-1 };  // for first track ,the temp point wil be showed on canvas
-
+		std::vector< std::map<std::string, ImVec2>>borderMeshControlPtsInImg;
+		std::vector< std::map<std::string, cv::Vec3f>>borderMeshControlPts;
+		std::vector< std::map<std::string, cv::Vec3f>>bfmMeshControlPts;
+		int lastControlIdx{ -1 };
 		std::map<std::string, ImU32> colors;
 		std::vector<std::string>tagsListName;
-		std::vector<std::string>tagsName;
 		std::map<std::string, std::vector<std::string>> hasTagFlags;
 		static int tagPickIdx;
 		bool pickedChanged;
@@ -69,71 +68,41 @@ namespace draw
 		}
 		 
 		bool figureRts(const std::vector<meshdraw::Camera>&imgCameras, Eigen::Matrix3f& R, Eigen::RowVector3f& t, float& scale)const
-		{
-			std::map<std::string, std::vector<std::pair<int, ImVec2>>> pts2ds;
-			for (int i = 0; i < controlPts2dAndTag.size(); i++)
+		{ 
+			std::vector<cv::Vec3f>objPtsFromBorderMesh;
+			std::vector<cv::Vec3f>objPtsFromBfm;
+			for (int i = 0; i < borderMeshControlPts.size(); i++)
 			{
-				for (const auto&d: controlPts2dAndTag[i])
+				for (const auto&d: borderMeshControlPts[i])
 				{
-					const std::string& ptName = d.first;
-					const ImVec2& pt = d.second;
-					pts2ds[ptName].emplace_back(i,pt);
+					objPtsFromBorderMesh.emplace_back(d.second);
+					objPtsFromBfm.emplace_back(bfmMeshControlPts[i].at(d.first));
 				}
-			}
-			std::vector<std::string>targetPtsNames;
-			targetPtsNames.reserve(pts2ds.size());
-			for (const auto&d: pts2ds)
-			{
-				if (d.second.size()>1 && controlPts3dAndTag.count(d.first)>0)
-				{
-					targetPtsNames.emplace_back(d.first);
-				}
-			}
-			if (targetPtsNames.size()<4)
+			}			 
+			if (objPtsFromBfm.size()<4)
 			{
 				LOG_WARN_OUT << "insufficient 2d pts";
 				return false;
 			}
 			else
 			{
-				std::vector<Eigen::Vector3f>objPtsFromImgs;
-				std::vector<Eigen::Vector3f>objPtsFromBfm;
-				objPtsFromImgs.reserve(targetPtsNames.size());
-				objPtsFromBfm.reserve(targetPtsNames.size());
-				for (const auto&ptName: targetPtsNames)
-				{
-					std::vector<Eigen::Vector2f>imgPts;
-					std::vector<meshdraw::Camera>cams;
-					imgPts.reserve(pts2ds[ptName].size());
-					cams.reserve(pts2ds[ptName].size());
-					for (int i = 0; i < pts2ds[ptName].size(); i++)
-					{
-						const ImVec2& imgPt = pts2ds[ptName][i].second;
-						imgPts.emplace_back(imgPt.x, imgPt.y);
-						cams.emplace_back(imgCameras[pts2ds[ptName][i].first]);
-					}
-					Eigen::Vector3f pt;
-					BfmIter::figureSharedPoint(imgPts, cams, pt);
-					objPtsFromImgs.emplace_back(pt);
-					const cv::Vec3f&pt3d = controlPts3dAndTag.at(ptName);
-					objPtsFromBfm.emplace_back(pt3d[0], pt3d[1], pt3d[2]);
-					LOG_OUT <<"img-bfm : " << pt<<pt3d;
-				}
-
 				scale = 1.;
 				R = Eigen::Matrix3f::Identity();
 				t = Eigen::RowVector3f(0, 0, 0); 
 				Eigen::MatrixX3f srcMat(objPtsFromBfm.size(), 3);
-				Eigen::MatrixX3f tarMat(objPtsFromImgs.size(), 3);
+				Eigen::MatrixX3f tarMat(objPtsFromBorderMesh.size(), 3);
 				for (int i = 0; i < objPtsFromBfm.size(); i++)
 				{
 					srcMat(i, 0) = objPtsFromBfm[i][0];
 					srcMat(i, 1) = objPtsFromBfm[i][1];
 					srcMat(i, 2) = objPtsFromBfm[i][2];
-					tarMat(i, 0) = objPtsFromImgs[i][0];
-					tarMat(i, 1) = objPtsFromImgs[i][1];
-					tarMat(i, 2) = objPtsFromImgs[i][2];
+					tarMat(i, 0) = objPtsFromBorderMesh[i][0];
+					tarMat(i, 1) = objPtsFromBorderMesh[i][1];
+					tarMat(i, 2) = objPtsFromBorderMesh[i][2];
+					
 				}
+				//LOG_OUT << srcMat;
+				//LOG_OUT << tarMat;
 				Eigen::RowVector3f meanSrc = srcMat.colwise().mean();
 				Eigen::RowVector3f meanTar = tarMat.colwise().mean();
 				{
@@ -152,40 +121,28 @@ namespace draw
 					Eigen::Matrix3f U = svd.matrixU();
 					Eigen::Matrix3f V = svd.matrixV();
 					R = V * U.transpose();
-					// 步骤6：处理反射情况（确保是纯旋转，行列式=1）
 					if (R.determinant() < 0) {
-						V.col(2) *= -1;  // 将V的最后一列取反
+						V.col(2) *= -1;
 						R = V * U.transpose();
 					}
 					t = tarCenter - srcCenter * R.transpose();
 				}
+				//LOG_OUT<< (srcMat* R.transpose()* scale).rowwise()+t;
 				return true;
 			}
+			return true;
 		}
-		void updataFalgs()
+		void updataTagsListName(const int&imgPickedIdx)
 		{
-			if (draw::ControlLogic::tagPickIdx < 0)
+			tagsListName.clear();
+			if (imgPickedIdx>=0 && imgPickedIdx< bfmMeshControlPts.size())
 			{
-				for (auto&d: BfmIterManger->imgNameForlist)
+				tagsListName.reserve(this->borderMeshControlPts[imgPickedIdx].size());
+				for (const auto& d : this->borderMeshControlPts[imgPickedIdx])
 				{
-					d[1] = ' ';
-				}				
-			}
-			else
-			{
-				const std::string& pickedTagName = this->tagsName[draw::ControlLogic::tagPickIdx];
-				for (int i = 0; i < this->controlPts2dAndTag.size(); i++)
-				{
-					if (controlPts2dAndTag[i].count(pickedTagName)!=0)
-					{
-						BfmIterManger->imgNameForlist[i][1] = '.';
-					}
-					else
-					{
-						BfmIterManger->imgNameForlist[i][1] = ' ';
-					}
+					tagsListName.emplace_back("   " + d.first);
 				}
-			} 
+			}
 		}
 		/*
 		bool save(const std::vector<std::filesystem::path>& picPath)const
@@ -200,7 +157,7 @@ namespace draw
 				std::filesystem::path parentDir = imgPath.parent_path();
 				std::string shortName = imgPath.filename().stem().string();
 				std::map<std::string, Eigen::Vector2d>picLabel;
-				for (const auto& d : controlPts2dAndTag[i])
+				for (const auto& d : borderMeshControlPtsInImg[i])
 				{
 					picLabel[d.first] = Eigen::Vector2d(d.second.x, d.second.y);
 				}
@@ -228,10 +185,10 @@ namespace draw
 					std::map<std::string, Eigen::Vector2d> imgPts;
 					Eigen::Vector2i imgSizeWH;
 					labelme::readPtsFromLabelMeJson(jsonPath, imgPts, imgSizeWH);
-					controlPts2dAndTag[i].clear();
+					borderMeshControlPtsInImg[i].clear();
 					for (const auto& d : imgPts)
 					{
-						controlPts2dAndTag[i][d.first] = ImVec2(d.second[0], d.second[1]);
+						borderMeshControlPtsInImg[i][d.first] = ImVec2(d.second[0], d.second[1]);
 						labelNames.insert(d.first);
 					}
 				}
@@ -249,16 +206,14 @@ namespace draw
 		}
 		*/
 		ImVec2 drawPos;
-		static const int tagLengthMax{ 24 };
-		char tarStr[tagLengthMax];
-		static bool tryFind2d3dPair;
+		static bool tryFind3d3dPair;
 		static bool figureRtsFlag; 
 		static bool figureParamFlag;
 	}; 
 	int ControlLogic::tagPickIdx = -1;
-	bool ControlLogic::tryFind2d3dPair = true;
+	bool ControlLogic::tryFind3d3dPair = true;
 	bool ControlLogic::figureRtsFlag = true;
-	bool ControlLogic::figureParamFlag = true;
+	bool ControlLogic::figureParamFlag = false;
 	class Draw
 	{
 	private:
@@ -273,9 +228,6 @@ namespace draw
 		Draw& operator=(const Draw&) = delete;
 	public:
 		ImVec2 mouseDownStartPos; 
-
-		static const int tagLengthMax{ 24 };
-		static char tarStr[tagLengthMax];
 		ControlLogic ptsData;
 		static ImVec2 draw_pos;
 		static ImVec2 canvas;//(w,h)
@@ -296,9 +248,9 @@ namespace draw
 			if (Draw::instance == nullptr)
 			{
 				Draw::instance = new Draw();
-				instance->ptsData.controlPts2dAndTag.resize(picShortNameForlist.size());
-				instance->ptsData.controlPts3dAndTag.clear();
-				//instance->ptsData.loadOnlyOnce(picPaths);
+				instance->ptsData.borderMeshControlPtsInImg.resize(picShortNameForlist.size());
+				instance->ptsData.borderMeshControlPts.resize(picShortNameForlist.size());
+				instance->ptsData.bfmMeshControlPts.resize(picShortNameForlist.size()); 
 			}
 			else
 			{
@@ -345,57 +297,13 @@ namespace draw
 			if (hasImageContext)
 			{
 				ImGui::SetCursorPos(draw_pos);
-				std::string pickedTag;
-				if (ptsData.tagPickIdx >= 0)
-				{
-					pickedTag = ptsData.tagsName[ptsData.tagPickIdx];
-					//if (alignPt)
-					{
-						const std::map<std::string, ImVec2>& tags = ptsData.controlPts2dAndTag[imgPickIdx];
-						if (tags.count(pickedTag) > 0)
-						{
-							const auto p = tags.at(pickedTag);
-							float x_ratio = p.x / currentImgWidth;
-							float y_ratio = p.y / currentImgHeight;
-							float ratioCnterX = (Draw::zoom_end.x + Draw::zoom_start.x) * .5;
-							float ratioCnterY = (Draw::zoom_end.y + Draw::zoom_start.y) * .5;
-							float shiftX = x_ratio - ratioCnterX;
-							float shiftY = y_ratio - ratioCnterY;
-							Draw::zoom_start.x += shiftX;
-							Draw::zoom_end.x += shiftX;
-							Draw::zoom_start.y += shiftY;
-							Draw::zoom_end.y += shiftY;
-							if (Draw::zoom_start.x < 0)
-							{
-								Draw::zoom_end.x -= Draw::zoom_start.x;
-								Draw::zoom_start.x = 0;
-							}
-							if (Draw::zoom_start.y < 0)
-							{
-								Draw::zoom_end.y -= Draw::zoom_start.y;
-								Draw::zoom_start.y = 0;
-							}
-							if (Draw::zoom_end.x > 1)
-							{
-								Draw::zoom_start.x += (1 - Draw::zoom_end.x);
-								Draw::zoom_end.x = 1;
-							}
-							if (Draw::zoom_end.y > 1)
-							{
-								Draw::zoom_start.y += (1 - Draw::zoom_end.y);
-								Draw::zoom_end.y = 1;
-							}
-						}
-					}
-				}
 				ImGui::Image((ImTextureID)(intptr_t)image_texture, Draw::canvas, Draw::zoom_start, Draw::zoom_end, ImVec4(1, 1, 1, 1), ImVec4(.5, .5, .5, .5));
-				std::string picktarName = "";
-				if (ptsData.tagPickIdx >= 0)
+				
+				if (ptsData.tagPickIdx >= 0 && ptsData.tagPickIdx<ptsData.tagsListName.size())
 				{
-					picktarName = ptsData.tagsName[ptsData.tagPickIdx];
-				}
-				{
-					const std::map<std::string, ImVec2>& tags = ptsData.controlPts2dAndTag[imgPickIdx];
+					std::string picktarName = ptsData.tagsListName[ptsData.tagPickIdx];
+			 
+					const std::map<std::string, ImVec2>& tags = ptsData.borderMeshControlPtsInImg[imgPickIdx];
 					if (tags.size() > 0)
 					{
 						for (const auto& d : tags)
@@ -510,7 +418,6 @@ namespace draw
 	GLuint Draw::image_texture = 0;
 	int Draw::canvasMaxSide = 0;
 	float Draw::resizeFactor = 1;
-	char Draw::tarStr[tagLengthMax] = "\0";
 }
 bool BfmIter::readObj(const std::filesystem::path& objPath, Eigen::MatrixX3f& vertex, Eigen::MatrixX3i& faces)
 {
@@ -657,10 +564,13 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 							this->borderMsh.figureFacesNomral();
 						}
 						meshdraw::render(this->borderMsh, cam, borderMshRender3dPts, borderMshMask);
-						bfmRenderPts.emplace_back(borderMshRender3dPts);
-
-
+						this->borderMshRenderPts.emplace_back(borderMshRender3dPts);
+						this->borderMshMasks.emplace_back(borderMshMask);
 						shifts.emplace_back(ImVec2(0, 0));
+						//if (this->borderMshMasks.size()>=1)
+						//{
+						//	break;
+						//}
 						progress.denominator.fetch_add(1);
 						progress.numerator.fetch_add(1);
 					}
@@ -693,12 +603,17 @@ bool BfmIter::updataRts(const Eigen::Matrix3f& R, const  Eigen::RowVector3f& t, 
 	//(Y=s1XR1'+t1)
 	//X = (Y-t1)R1/s1
 	//Z = s2/s1( Y-t1 )R1*R2' + t2 = s2/s1 Y R1R2' - s2/s1*t*R1R2' +t2
+	bfm_scale = scale / bfm_scale;
+	bfm_R = R * bfm_R.transpose();
+	bfm_t = t - scale / bfm_scale * bfm_t * bfm_R * R.transpose();
+	bfmMsh.rotate(bfm_R, bfm_t, bfm_scale);
 
-	bfmMsh.rotate(R, t, scale);
 
-	bfm_scale = scale* bfm_scale;
-	bfm_R = R* bfm_R.transpose();
-	bfm_t = t - scale / bfm_scale* bfm_t * bfm_R * R.transpose();
+	//bfmMsh.rotate(R, t, scale);
+	//bfm_scale = scale* bfm_scale;
+	//bfm_R = R* bfm_R.transpose();
+	//bfm_t = t - scale / bfm_scale* bfm_t * bfm_R * R.transpose();
+
 	
 	progress.denominator.fetch_add(this->bfmRenders.size());
 	for (int i = 0; i < this->bfmRenders.size(); i++)
@@ -931,77 +846,66 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 				}
 				const cv::Mat& img = BfmIterManger->imgs[BfmIter::imgPickIdx];
 				const meshdraw::Camera&cam= BfmIterManger->imgCameras[BfmIter::imgPickIdx];
-				cv::Mat& render3d = BfmIterManger->bfmRenders[BfmIter::imgPickIdx];
-				cv::Mat& render3dPts = BfmIterManger->bfmRenderPts[BfmIter::imgPickIdx];
-				cv::Mat& mask = BfmIterManger->bfmRenderMasks[BfmIter::imgPickIdx];
-				if (render3d.empty())
-				{ 
+				cv::Mat& bfmRender3d = BfmIterManger->bfmRenders[BfmIter::imgPickIdx];
+				cv::Mat& bfmRender3dPts = BfmIterManger->bfmRenderPts[BfmIter::imgPickIdx];
+				cv::Mat& bfmMask = BfmIterManger->bfmRenderMasks[BfmIter::imgPickIdx];
+				cv::Mat& borderMeshRrender3dPts = BfmIterManger->borderMshRenderPts[BfmIter::imgPickIdx];
+				cv::Mat& borderMeshMask = BfmIterManger->borderMshMasks[BfmIter::imgPickIdx];
+				if (bfmRender3d.empty())
+				{
 					if (meshdraw::isEmpty(BfmIterManger->bfmMsh.facesNormal))
 					{
 						BfmIterManger->bfmMsh.figureFacesNomral();
 					}
-					meshdraw::render(BfmIterManger->bfmMsh, cam, render3d, render3dPts, mask);
-				}  
+					meshdraw::render(BfmIterManger->bfmMsh, cam, bfmRender3d, bfmRender3dPts, bfmMask);
+				}
+				if (borderMeshRrender3dPts.empty())
+				{
+					if (meshdraw::isEmpty(BfmIterManger->bfmMsh.facesNormal))
+					{
+						BfmIterManger->bfmMsh.figureFacesNomral();
+					}
+					meshdraw::render(BfmIterManger->borderMsh, cam, borderMeshRrender3dPts, borderMeshMask);
+				}
 				if (ImgShift.empty())
 				{
-					render3d.copyTo(ImgShift);
+					bfmRender3d.copyTo(ImgShift);
 				}
 				//if (temporaryOffset.x != 0 || temporaryOffset.y != 0)
 				{ 
 					ImVec2 offset(0, 0);
 					offset.x = BfmIterManger->shifts[BfmIter::imgPickIdx].x + temporaryOffset.x;
 					offset.y = BfmIterManger->shifts[BfmIter::imgPickIdx].y + temporaryOffset.y;					 
-					ImgShift = draw::ControlLogic::shiftSnap(render3d, offset); 
+					ImgShift = draw::ControlLogic::shiftSnap(bfmRender3d, offset);
 				}
 				cv::addWeighted(img, mixFactor, ImgShift, 1 - mixFactor, 0, showImgMix);
 				labelControlPtr->feedImg(showImgMix); 
 
 				 
-				if (labelControlPtr->ptsData.tarStr[0] != '\0' && maybeClik.x >= 0)
+				if ( maybeClik.x >= 0)
 				{
-					std::string thisTarName(labelControlPtr->ptsData.tarStr);
-
 					int maybeXint = static_cast<int>(maybeClik.x + 0.5);
 					int maybeYint = static_cast<int>(maybeClik.y + 0.5);
-					if (draw::ControlLogic::tryFind2d3dPair)
+					int maybeXinBfmmap = maybeXint - BfmIterManger->shifts[BfmIter::imgPickIdx].x ;
+					int maybeYinBfmmap = maybeYint - BfmIterManger->shifts[BfmIter::imgPickIdx].y ;
+					if (draw::ControlLogic::tryFind3d3dPair)
 					{
-						if (mask.ptr<uchar>(maybeYint)[maybeXint] != 0)
-						{
-							labelControlPtr->ptsData.controlPts2dAndTag[BfmIter::imgPickIdx][thisTarName] = maybeClik;
-							labelControlPtr->ptsData.controlPts3dAndTag[thisTarName] = render3dPts.at<cv::Vec3f>(maybeYint, maybeXint);
+						if (bfmMask.ptr<uchar>(maybeYinBfmmap)[maybeXinBfmmap] != 0 && borderMeshMask.ptr<uchar>(maybeYint)[maybeXint] != 0)
+						{ 
+							labelControlPtr->ptsData.lastControlIdx += 1;
+							const std::string& thisTarName = std::to_string(labelControlPtr->ptsData.lastControlIdx);
+							labelControlPtr->ptsData.borderMeshControlPtsInImg[BfmIter::imgPickIdx][thisTarName] = maybeClik;
+							labelControlPtr->ptsData.bfmMeshControlPts[BfmIter::imgPickIdx][thisTarName] = bfmRender3dPts.at<cv::Vec3f>(maybeYinBfmmap, maybeXinBfmmap);
+							labelControlPtr->ptsData.borderMeshControlPts[BfmIter::imgPickIdx][thisTarName] = borderMeshRrender3dPts.at<cv::Vec3f>(maybeYint, maybeXint);
+							labelControlPtr->ptsData.updataTagsListName(BfmIter::imgPickIdx);
+							labelControlPtr->ptsData.colors[thisTarName] = getImguiColor();
+							draw::ControlLogic::tagPickIdx = std::find(labelControlPtr->ptsData.tagsListName.begin(), labelControlPtr->ptsData.tagsListName.begin(), thisTarName) - labelControlPtr->ptsData.tagsListName.begin();
 						}
 					}
 					else
 					{
-						labelControlPtr->ptsData.controlPts2dAndTag[BfmIter::imgPickIdx][thisTarName] = maybeClik;
-					}
-
-
-					auto fidExisted = std::find(labelControlPtr->ptsData.tagsName.begin(), labelControlPtr->ptsData.tagsName.end(), thisTarName);
-					if (labelControlPtr->ptsData.tagsName.end() == fidExisted)
-					{ 
-						draw::ControlLogic::tagPickIdx = labelControlPtr->ptsData.tagsName.size();
-						labelControlPtr->ptsData.tagsName.emplace_back(thisTarName);
-						labelControlPtr->ptsData.tagsListName.emplace_back("  " + thisTarName);
-						labelControlPtr->ptsData.colors[thisTarName] = (getImguiColor());
-						labelControlPtr->ptsData.updataFalgs(); 
-						listComponentReChoose(labelControlPtr->ptsData.tagsListName, labelControlPtr->ptsData.tagPickIdx);
-						
-					}
-					else
-					{ 
-						draw::ControlLogic::tagPickIdx = fidExisted - labelControlPtr->ptsData.tagsName.begin();
-					}
-
-
-
-					
-				}
-				else if (labelControlPtr->ptsData.tarStr[0] == '\0' && maybeClik.x >= 0)
-				{
-					draw::ControlLogic::tagPickIdx = -1;
-					labelControlPtr->ptsData.updataFalgs();
-					listComponentReChoose(labelControlPtr->ptsData.tagsListName, labelControlPtr->ptsData.tagPickIdx);
+						 
+					} 		
 				}
 			}
 			if (BfmIter::imgPickIdx >= 0)
@@ -1014,19 +918,12 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 				auto pushPos = ImGui::GetCursorPos();
 				ImGui::SetCursorPos(labelControlPtr->ptsData.drawPos);
 				listComponent("tarPick", listPicSize, labelControlPtr->ptsData.tagsListName, labelControlPtr->ptsData.tagPickIdx, labelControlPtr->ptsData.pickedChanged);
-				if (labelControlPtr->ptsData.pickedChanged)
-				{
-					labelControlPtr->ptsData.updataFalgs();
-				}
 				ImGui::SetCursorPos(pushPos);
 			}
-			if (ImGui::Checkbox("try2D3D", &draw::ControlLogic::tryFind2d3dPair))
+			if (ImGui::Checkbox("try3D3D", &draw::ControlLogic::tryFind3d3dPair))
 			{
 
-			}
-			ImGui::SameLine();
-			ImGui::InputTextMultiline("<-tag", labelControlPtr->ptsData.tarStr, draw::ControlLogic::tagLengthMax, ImVec2(200, 20), ImGuiTreeNodeFlags_None + ImGuiInputTextFlags_CharsNoBlank);
-
+			} 
 			bool trigerRts = ImGui::Checkbox("figureRtS", &draw::ControlLogic::figureRtsFlag); ImGui::SameLine();
 			bool trigerParam = ImGui::Checkbox("figureParamFlag", &draw::ControlLogic::figureParamFlag); ImGui::SameLine();
 			if (trigerRts || trigerParam)

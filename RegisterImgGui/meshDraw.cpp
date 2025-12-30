@@ -562,6 +562,19 @@ namespace meshdraw
             Eigen::MatrixX3f barycenter;
             igl::barycenter(msh.V, msh.F, barycenter);
             Eigen::MatrixX3f viewFaceDir = (barycenter.rowwise() - cam.t);// .rowwise().norm();
+            Eigen::VectorXf faceDists = viewFaceDir.rowwise().norm();
+            Eigen::Index minIndex;
+            faceDists.minCoeff(&minIndex);
+            float nearestFaceDot = viewFaceDir.row(minIndex).dot(msh.facesNormal.row(minIndex));
+            if (nearestFaceDot>0)
+            {
+                nearestFaceDot = 1;
+            }
+            else
+            {
+                nearestFaceDot = -1;
+            }
+
             Eigen::VectorXf dots = viewFaceDir.cwiseProduct(msh.facesNormal).rowwise().sum();
             cv::Mat drawMatDist = cv::Mat::zeros(cam.height, cam.width, CV_32FC1);
             mask = cv::Mat::zeros(cam.height, cam.width, CV_8UC1);
@@ -577,7 +590,7 @@ namespace meshdraw
             }
             for (int f = 0; f < dots.size(); f++)
             {
-                if (dots[f] < 0)
+                if (dots[f]* nearestFaceDot > 0)
                 {
                     const int& fa = msh.F(f, 0);
                     const int& fb = msh.F(f, 1);
@@ -594,10 +607,6 @@ namespace meshdraw
                         const Eigen::Vector3f& value = d.second;
                         const int& r = pixel[1];
                         const int& c = pixel[0];
-                        if (c==197&&r==361)
-                        {
-                            LOG_OUT;
-                        }
                         if (c >= 0 && r >= 0 && c < cam.width && r < cam.height)
                         {
                             if (mask.ptr<uchar>(r)[c] == 0)

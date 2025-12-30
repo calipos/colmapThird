@@ -26,8 +26,9 @@ public:
 	std::vector<cv::Mat>imgs;
 	std::vector<cv::Mat>bfmRenders;
 	std::vector<cv::Mat>bfmRenderPts;
-	std::vector<cv::Mat>borderMshRenderPts;
 	std::vector<cv::Mat>bfmRenderMasks;
+	std::vector<cv::Mat>borderMshRenderPts;
+	std::vector<cv::Mat>borderMshMasks;
 	std::vector<ImVec2>shifts;;
 	std::vector<std::filesystem::path>imgPaths;
 	std::vector<std::string>imgNameForlist;
