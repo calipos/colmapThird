@@ -99,22 +99,20 @@ namespace draw
 					tarMat(i, 0) = objPtsFromBorderMesh[i][0];
 					tarMat(i, 1) = objPtsFromBorderMesh[i][1];
 					tarMat(i, 2) = objPtsFromBorderMesh[i][2];
-					
+					LOG_OUT << srcMat(i, 0) << " " << srcMat(i, 1) << " " << srcMat(i, 2) << " "<< tarMat(i, 0) << " " << tarMat(i, 1) << " " << tarMat(i, 2);
 				}
+				LOG_OUT << "----------------------------";
 				//LOG_OUT << srcMat;
 				//LOG_OUT << tarMat;
-				Eigen::RowVector3f meanSrc = srcMat.colwise().mean();
-				Eigen::RowVector3f meanTar = tarMat.colwise().mean();
+				Eigen::RowVector3f srcCenter = srcMat.colwise().mean();
+				Eigen::RowVector3f tarCenter = tarMat.colwise().mean();
 				{
-					auto src_scale = (srcMat.rowwise() - meanSrc).rowwise().norm().mean();
-					auto tar_mean = (tarMat.rowwise() - meanTar).rowwise().norm().mean();
+					auto src_scale = (srcMat.rowwise() - srcCenter).rowwise().norm().mean();
+					auto tar_mean = (tarMat.rowwise() - tarCenter).rowwise().norm().mean();
 					scale = tar_mean / src_scale;
-					srcMat *= scale; 
 				} 
-				{
-					Eigen::RowVector3f srcCenter = srcMat.colwise().mean();
-					Eigen::RowVector3f tarCenter = tarMat.colwise().mean();
-					Eigen::MatrixX3f srcMat2 = srcMat.rowwise() - srcCenter;//A
+				{ 
+					Eigen::MatrixX3f srcMat2 = scale*(srcMat.rowwise() - srcCenter);//A
 					Eigen::MatrixX3f tarMat2 = tarMat.rowwise() - tarCenter;//B             
 					Eigen::Matrix3f H = srcMat2.transpose() * tarMat2;
 					Eigen::JacobiSVD<Eigen::Matrix3f> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
@@ -125,7 +123,7 @@ namespace draw
 						V.col(2) *= -1;
 						R = V * U.transpose();
 					}
-					t = tarCenter - srcCenter * R.transpose();
+					t = tarCenter;// -srcCenter * R.transpose();
 				}
 				//LOG_OUT<< (srcMat* R.transpose()* scale).rowwise()+t;
 				return true;
@@ -567,10 +565,10 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 						this->borderMshRenderPts.emplace_back(borderMshRender3dPts);
 						this->borderMshMasks.emplace_back(borderMshMask);
 						shifts.emplace_back(ImVec2(0, 0));
-						//if (this->borderMshMasks.size()>=1)
-						//{
-						//	break;
-						//}
+						if (this->borderMshMasks.size()>=5)
+						{
+							break;
+						}
 						progress.denominator.fetch_add(1);
 						progress.numerator.fetch_add(1);
 					}
@@ -603,13 +601,13 @@ bool BfmIter::updataRts(const Eigen::Matrix3f& R, const  Eigen::RowVector3f& t, 
 	//(Y=s1XR1'+t1)
 	//X = (Y-t1)R1/s1
 	//Z = s2/s1( Y-t1 )R1*R2' + t2 = s2/s1 Y R1R2' - s2/s1*t*R1R2' +t2
-	bfm_scale = scale / bfm_scale;
-	bfm_R = R * bfm_R.transpose();
-	bfm_t = t - scale / bfm_scale * bfm_t * bfm_R * R.transpose();
-	bfmMsh.rotate(bfm_R, bfm_t, bfm_scale);
 
 
-	//bfmMsh.rotate(R, t, scale);
+	bfmMsh.rotate(R, t, scale);
+
+
+	//meshdraw::utils::savePts("1.txt", bfmMsh.V);
+
 	//bfm_scale = scale* bfm_scale;
 	//bfm_R = R* bfm_R.transpose();
 	//bfm_t = t - scale / bfm_scale* bfm_t * bfm_R * R.transpose();

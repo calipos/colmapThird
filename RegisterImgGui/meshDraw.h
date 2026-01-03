@@ -59,6 +59,7 @@ namespace meshdraw
 		Eigen::Matrix3f generRotateMatrix(const Eigen::Vector3f& direct, const Eigen::Vector3f& upDirect);
 		bool saveFacePickedMesh(const std::filesystem::path&path,const Mesh&msh,const std::vector<bool>&faceValid);
 		bool savePtsMat(const std::filesystem::path& path, const cv::Mat& ptsMat, const cv::Mat& mask);
+		bool savePts(const std::filesystem::path& path, const Eigen::MatrixX3f& ptsMat);
 	}
 
 }

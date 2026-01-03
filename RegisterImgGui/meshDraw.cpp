@@ -189,6 +189,16 @@ namespace meshdraw
             fout.close();
             return true;
         }
+        bool savePts(const std::filesystem::path& path, const Eigen::MatrixX3f& ptsMat)
+        {
+            std::fstream fout(path, std::ios::out);
+            for (int i = 0; i < ptsMat.rows(); i++)
+            {
+                fout << ptsMat(i, 0) << " " << ptsMat(i, 1) << " " << ptsMat(i, 2) << std::endl;
+            }
+            fout.close();
+            return true;
+        }
         std::list<cv::Vec2i> triangle(const cv::Vec2i& p0, const cv::Vec2i& p1, const cv::Vec2i& p2) {
             std::list<cv::Vec2i> ret;
             if (p0[1] == p1[1] && p0[1] == p2[1])
@@ -412,8 +422,10 @@ namespace meshdraw
             LOG_ERR_OUT << "empty V";
             return false;
         }
+        Eigen::RowVector3f center = V.colwise().mean();
+        Eigen::MatrixX3f V0 = V.rowwise() - center;
         Eigen::Matrix3f R_inv = R.transpose();
-        V =( (V * scale) * R_inv ).rowwise() + t;
+        V =(V0 * R_inv* scale).rowwise() + t;
         return true;
     }
     bool render(const Mesh& msh, const Camera& cam, cv::Mat& rgbMat, cv::Mat& vertexMap, cv::Mat& mask, const RenderType& renderTpye)
