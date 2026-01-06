@@ -50,7 +50,7 @@ namespace draw
 		}
 		std::vector< std::map<std::string, ImVec2>>borderMeshControlPtsInImg;
 		std::vector< std::map<std::string, cv::Vec3f>>borderMeshControlPts;
-		std::vector< std::map<std::string, cv::Vec3f>>bfmMeshControlPts;
+		std::vector< std::map<std::string, Eigen::RowVector3f>>bfmMeshControlPts;
 		int lastControlIdx{ -1 };
 		std::map<std::string, ImU32> colors;
 		std::vector<std::string>tagsListName;
@@ -66,20 +66,19 @@ namespace draw
 			warpAffine(img, rotated_image, rotation_matix, img.size()); 
 			return rotated_image;
 		}
-		 
-		bool figureRts(const std::vector<meshdraw::Camera>&imgCameras, Eigen::Matrix3f& R, Eigen::RowVector3f& t, float& scale)const
-		{ 
+		bool figureRts(const std::vector<meshdraw::Camera>& imgCameras, Eigen::Matrix3f& R, Eigen::RowVector3f& t, float& scale)const
+		{
 			std::vector<cv::Vec3f>objPtsFromBorderMesh;
-			std::vector<cv::Vec3f>objPtsFromBfm;
+			std::vector<Eigen::RowVector3f>objPtsFromBfm;
 			for (int i = 0; i < borderMeshControlPts.size(); i++)
 			{
-				for (const auto&d: borderMeshControlPts[i])
+				for (const auto& d : borderMeshControlPts[i])
 				{
 					objPtsFromBorderMesh.emplace_back(d.second);
 					objPtsFromBfm.emplace_back(bfmMeshControlPts[i].at(d.first));
 				}
-			}			 
-			if (objPtsFromBfm.size()<4)
+			}
+			if (objPtsFromBfm.size() < 4)
 			{
 				LOG_WARN_OUT << "insufficient 2d pts";
 				return false;
@@ -88,7 +87,7 @@ namespace draw
 			{
 				scale = 1.;
 				R = Eigen::Matrix3f::Identity();
-				t = Eigen::RowVector3f(0, 0, 0); 
+				t = Eigen::RowVector3f(0, 0, 0);
 				Eigen::MatrixX3f srcMat(objPtsFromBfm.size(), 3);
 				Eigen::MatrixX3f tarMat(objPtsFromBorderMesh.size(), 3);
 				for (int i = 0; i < objPtsFromBfm.size(); i++)
@@ -99,21 +98,21 @@ namespace draw
 					tarMat(i, 0) = objPtsFromBorderMesh[i][0];
 					tarMat(i, 1) = objPtsFromBorderMesh[i][1];
 					tarMat(i, 2) = objPtsFromBorderMesh[i][2];
-					LOG_OUT << srcMat(i, 0) << " " << srcMat(i, 1) << " " << srcMat(i, 2) << " "<< tarMat(i, 0) << " " << tarMat(i, 1) << " " << tarMat(i, 2);
+
 				}
-				LOG_OUT << "----------------------------";
-				//LOG_OUT << srcMat;
-				//LOG_OUT << tarMat;
-				Eigen::RowVector3f srcCenter = srcMat.colwise().mean();
-				Eigen::RowVector3f tarCenter = tarMat.colwise().mean();
+				LOG_OUT << srcMat;
+				LOG_OUT << tarMat;
+				Eigen::RowVector3f meanSrc = srcMat.colwise().mean();
+				Eigen::RowVector3f meanTar = tarMat.colwise().mean();
 				{
-					auto src_scale = (srcMat.rowwise() - srcCenter).rowwise().norm().mean();
-					auto tar_mean = (tarMat.rowwise() - tarCenter).rowwise().norm().mean();
+					auto src_scale = (srcMat.rowwise() - meanSrc).rowwise().norm().mean();
+					auto tar_mean = (tarMat.rowwise() - meanTar).rowwise().norm().mean();
 					scale = tar_mean / src_scale;
-				} 
-				{ 
-					Eigen::MatrixX3f srcMat2 = scale*(srcMat.rowwise() - srcCenter);//A
-					Eigen::MatrixX3f tarMat2 = tarMat.rowwise() - tarCenter;//B             
+					srcMat *= scale;
+				}
+				{
+					Eigen::MatrixX3f srcMat2 = srcMat.rowwise() - meanSrc * scale;//A
+					Eigen::MatrixX3f tarMat2 = tarMat.rowwise() - meanTar;//B             
 					Eigen::Matrix3f H = srcMat2.transpose() * tarMat2;
 					Eigen::JacobiSVD<Eigen::Matrix3f> svd(H, Eigen::ComputeFullU | Eigen::ComputeFullV);
 					Eigen::Matrix3f U = svd.matrixU();
@@ -123,7 +122,7 @@ namespace draw
 						V.col(2) *= -1;
 						R = V * U.transpose();
 					}
-					t = tarCenter;// -srcCenter * R.transpose();
+					t = meanTar - (meanSrc * scale) * R.transpose();
 				}
 				//LOG_OUT<< (srcMat* R.transpose()* scale).rowwise()+t;
 				return true;
@@ -491,6 +490,7 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 	}
 	bfmIns = new bfm::Bfm2019(bfmFacePath);
 	bfmIns->generateRandomFace(bfmMsh.V, bfmMsh.C);
+	meshdraw::utils::savePts("0.txt", bfmMsh.V);
 	this->bfmMsh.F = bfmIns->F;
     bfm_R << 1, 0, 0, 0, -1, 0, 0, 0, -1;
     bfm_t << 0, 0, 300;  
@@ -597,16 +597,19 @@ bool BfmIter::iter(const std::vector<cv::Point3f>& src, const std::vector<cv::Po
 }
 bool BfmIter::updataRts(const Eigen::Matrix3f& R, const  Eigen::RowVector3f& t, const  float& scale)
 {
-	//V = (V * R_inv * scale).rowwise() + t;
+	//V = (V * R' * scale).rowwise() + t;
 	//(Y=s1XR1'+t1)
 	//X = (Y-t1)R1/s1
-	//Z = s2/s1( Y-t1 )R1*R2' + t2 = s2/s1 Y R1R2' - s2/s1*t*R1R2' +t2
+	//Z = s2/s1( Y-t1 )R1R2' + t2 = s2/s1 Y R1R2' - s2/s1*t1*R1R2' +t2
 
 
-	bfmMsh.rotate(R, t, scale);
+	bfm_scale = scale / bfm_scale;
+	bfm_R = R * bfm_R.transpose();
+	bfm_t = t - bfm_scale * bfm_t * bfm_R.transpose();
+	bfmMsh.rotate(bfm_R, bfm_t, bfm_scale);
 
 
-	//meshdraw::utils::savePts("1.txt", bfmMsh.V);
+	meshdraw::utils::savePts("1.txt", bfmMsh.V);
 
 	//bfm_scale = scale* bfm_scale;
 	//bfm_R = R* bfm_R.transpose();
@@ -620,10 +623,7 @@ bool BfmIter::updataRts(const Eigen::Matrix3f& R, const  Eigen::RowVector3f& t, 
 		cv::Mat&render3d = this->bfmRenders[i];
 		cv::Mat&render3dPts = this->bfmRenderPts[i];
 		cv::Mat&mask = this->bfmRenderMasks[i];
-		if (meshdraw::isEmpty(BfmIterManger->bfmMsh.facesNormal))
-		{
-			BfmIterManger->bfmMsh.figureFacesNomral();
-		}
+		BfmIterManger->bfmMsh.figureFacesNomral();		
 		meshdraw::render(BfmIterManger->bfmMsh, imgCameras[i], render3d, render3dPts, mask);
 	} 	 
 	progress.procRunning.store(0);
@@ -893,7 +893,12 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 							labelControlPtr->ptsData.lastControlIdx += 1;
 							const std::string& thisTarName = std::to_string(labelControlPtr->ptsData.lastControlIdx);
 							labelControlPtr->ptsData.borderMeshControlPtsInImg[BfmIter::imgPickIdx][thisTarName] = maybeClik;
-							labelControlPtr->ptsData.bfmMeshControlPts[BfmIter::imgPickIdx][thisTarName] = bfmRender3dPts.at<cv::Vec3f>(maybeYinBfmmap, maybeXinBfmmap);
+
+							const cv::Vec3f&bfmPt = bfmRender3dPts.at<cv::Vec3f>(maybeYinBfmmap, maybeXinBfmmap);
+							Eigen::RowVector3f pickedBfmPt(bfmPt[0], bfmPt[1], bfmPt[2]);
+							pickedBfmPt = (pickedBfmPt- BfmIterManger->bfm_t)*BfmIterManger->bfm_R* (1./BfmIterManger->bfm_scale);
+
+							labelControlPtr->ptsData.bfmMeshControlPts[BfmIter::imgPickIdx][thisTarName] = pickedBfmPt;
 							labelControlPtr->ptsData.borderMeshControlPts[BfmIter::imgPickIdx][thisTarName] = borderMeshRrender3dPts.at<cv::Vec3f>(maybeYint, maybeXint);
 							labelControlPtr->ptsData.updataTagsListName(BfmIter::imgPickIdx);
 							labelControlPtr->ptsData.colors[thisTarName] = getImguiColor();

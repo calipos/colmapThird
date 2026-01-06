@@ -422,10 +422,8 @@ namespace meshdraw
             LOG_ERR_OUT << "empty V";
             return false;
         }
-        Eigen::RowVector3f center = V.colwise().mean();
-        Eigen::MatrixX3f V0 = V.rowwise() - center;
         Eigen::Matrix3f R_inv = R.transpose();
-        V =(V0 * R_inv* scale).rowwise() + t;
+        V =(V * R_inv* scale).rowwise() + t;
         return true;
     }
     bool render(const Mesh& msh, const Camera& cam, cv::Mat& rgbMat, cv::Mat& vertexMap, cv::Mat& mask, const RenderType& renderTpye)
