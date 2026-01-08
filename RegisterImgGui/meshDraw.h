@@ -50,6 +50,8 @@ namespace meshdraw
 		vertexColor= 1,
 		distance,
 	};
+	bool render(const Mesh& msh, const Camera& cam, const Eigen::Matrix3f& R, const Eigen::RowVector3f& t, const float& scale, cv::Mat& rgbMat, cv::Mat& vertexMap, cv::Mat& mask, const RenderType& renderTpye = RenderType::vertexColor);
+	bool render(const Mesh& msh, const Camera& cam, const Eigen::Matrix3f& R, const Eigen::RowVector3f& t, const float& scale, cv::Mat& vertexMap, cv::Mat& mask);
 	bool render(const Mesh&msh,const Camera&cam, cv::Mat& rgbMat, cv::Mat& vertexMap, cv::Mat& mask, const RenderType&renderTpye = RenderType::vertexColor);
 	bool render(const Mesh& msh, const Camera& cam, cv::Mat& vertexMap, cv::Mat& mask);
 	namespace utils

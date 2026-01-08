@@ -490,12 +490,12 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 	}
 	bfmIns = new bfm::Bfm2019(bfmFacePath);
 	bfmIns->generateRandomFace(bfmMsh.V, bfmMsh.C);
-	meshdraw::utils::savePts("0.txt", bfmMsh.V);
+	//meshdraw::utils::savePts("0.txt", bfmMsh.V);
 	this->bfmMsh.F = bfmIns->F;
     bfm_R << 1, 0, 0, 0, -1, 0, 0, 0, -1;
     bfm_t << 0, 0, 300;  
 	bfm_scale = 1.f;
-	this->bfmMsh.rotate(bfm_R, bfm_t, bfm_scale);
+	//this->bfmMsh.rotate(bfm_R, bfm_t, bfm_scale);
 	imgPaths.clear();
 	imgNameForlist.clear();
 	imgDirPath_ = mvsResultDir;
@@ -551,7 +551,7 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 						{
 							this->bfmMsh.figureFacesNomral();
 						}
-						meshdraw::render(this->bfmMsh, cam, render3d, render3dPts, mask);
+						meshdraw::render(this->bfmMsh, cam, bfm_R, bfm_t, bfm_scale,render3d, render3dPts, mask);
 						bfmRenders.emplace_back(render3d);
 						bfmRenderPts.emplace_back(render3dPts);
 						bfmRenderMasks.emplace_back(mask);
@@ -602,14 +602,21 @@ bool BfmIter::updataRts(const Eigen::Matrix3f& R, const  Eigen::RowVector3f& t, 
 	//X = (Y-t1)R1/s1
 	//Z = s2/s1( Y-t1 )R1R2' + t2 = s2/s1 Y R1R2' - s2/s1*t1*R1R2' +t2
 
+	bfm_scale = scale;
+	bfm_R = R;
+	bfm_t = t;
+	//bfm_scale = scale / bfm_scale;
+	//bfm_R = R * bfm_R.transpose();
+	//bfm_t = t - bfm_scale * bfm_t * bfm_R.transpose();
+	//bfmMsh.rotate(bfm_R, bfm_t, bfm_scale);
 
-	bfm_scale = scale / bfm_scale;
-	bfm_R = R * bfm_R.transpose();
-	bfm_t = t - bfm_scale * bfm_t * bfm_R.transpose();
-	bfmMsh.rotate(bfm_R, bfm_t, bfm_scale);
+	{
+		//Eigen::Matrix3f R_inv = R.transpose();
+		//Eigen::MatrixX3f  V2 = (BfmIterManger->bfmMsh.V * R_inv * scale).rowwise() + t;
+		//meshdraw::utils::savePts("1.txt", V2);
+	}
 
-
-	meshdraw::utils::savePts("1.txt", bfmMsh.V);
+	
 
 	//bfm_scale = scale* bfm_scale;
 	//bfm_R = R* bfm_R.transpose();
@@ -623,8 +630,8 @@ bool BfmIter::updataRts(const Eigen::Matrix3f& R, const  Eigen::RowVector3f& t, 
 		cv::Mat&render3d = this->bfmRenders[i];
 		cv::Mat&render3dPts = this->bfmRenderPts[i];
 		cv::Mat&mask = this->bfmRenderMasks[i];
-		BfmIterManger->bfmMsh.figureFacesNomral();		
-		meshdraw::render(BfmIterManger->bfmMsh, imgCameras[i], render3d, render3dPts, mask);
+		//BfmIterManger->bfmMsh.figureFacesNomral();		
+		meshdraw::render(BfmIterManger->bfmMsh, imgCameras[i], bfm_R, bfm_t, bfm_scale, render3d, render3dPts, mask);
 	} 	 
 	progress.procRunning.store(0);
 	progress.denominator.store(-1);
@@ -724,6 +731,8 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 	{
 		if (BfmIterManger == nullptr)
 		{
+#define PRE_FILL 1
+#if PRE_FILL==0
 			if (ImGui::Button("pick image dir"))
 			{
 				imgDirPath = "";
@@ -768,6 +777,10 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 			}
 			ImGui::SameLine();
 			ImGui::Text(modelDirPath.string().c_str());
+#else
+			imgDirPath = "../data/a/result";
+			modelDirPath = "../models";
+#endif // PRE_FILL==0
 			if (imgDirPath.string().length() > 0 && modelDirPath.string().length() > 0)
 			{
 				progress.numerator.store(-1);
@@ -855,7 +868,7 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 					{
 						BfmIterManger->bfmMsh.figureFacesNomral();
 					}
-					meshdraw::render(BfmIterManger->bfmMsh, cam, bfmRender3d, bfmRender3dPts, bfmMask);
+					meshdraw::render(BfmIterManger->bfmMsh, cam, BfmIterManger->bfm_R, BfmIterManger->bfm_t, BfmIterManger->bfm_scale, bfmRender3d, bfmRender3dPts, bfmMask);
 				}
 				if (borderMeshRrender3dPts.empty())
 				{
@@ -863,7 +876,7 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 					{
 						BfmIterManger->bfmMsh.figureFacesNomral();
 					}
-					meshdraw::render(BfmIterManger->borderMsh, cam, borderMeshRrender3dPts, borderMeshMask);
+					meshdraw::render(BfmIterManger->borderMsh, cam, BfmIterManger->bfm_R, BfmIterManger->bfm_t, BfmIterManger->bfm_scale, borderMeshRrender3dPts, borderMeshMask);
 				}
 				if (ImgShift.empty())
 				{
@@ -896,7 +909,7 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 
 							const cv::Vec3f&bfmPt = bfmRender3dPts.at<cv::Vec3f>(maybeYinBfmmap, maybeXinBfmmap);
 							Eigen::RowVector3f pickedBfmPt(bfmPt[0], bfmPt[1], bfmPt[2]);
-							pickedBfmPt = (pickedBfmPt- BfmIterManger->bfm_t)*BfmIterManger->bfm_R* (1./BfmIterManger->bfm_scale);
+							//pickedBfmPt = (pickedBfmPt- BfmIterManger->bfm_t)*BfmIterManger->bfm_R* (1./BfmIterManger->bfm_scale);
 
 							labelControlPtr->ptsData.bfmMeshControlPts[BfmIter::imgPickIdx][thisTarName] = pickedBfmPt;
 							labelControlPtr->ptsData.borderMeshControlPts[BfmIter::imgPickIdx][thisTarName] = borderMeshRrender3dPts.at<cv::Vec3f>(maybeYint, maybeXint);
@@ -956,7 +969,13 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 							LOG_OUT << scale;
 							LOG_OUT << R;
 							LOG_OUT << t;
+							for (auto&d: BfmIterManger->shifts)
+							{
+								d[0] = 0; d[1] = 0;
+							}
+							ImgShift.release();
 							BfmIterManger->updataRts(R, t, scale);
+							mixFactorChanged = false;
 						}
 					}
 				);

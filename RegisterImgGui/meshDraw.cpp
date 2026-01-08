@@ -426,7 +426,7 @@ namespace meshdraw
         V =(V * R_inv* scale).rowwise() + t;
         return true;
     }
-    bool render(const Mesh& msh, const Camera& cam, cv::Mat& rgbMat, cv::Mat& vertexMap, cv::Mat& mask, const RenderType& renderTpye)
+    bool render(const Mesh& msh, const Camera& cam, const Eigen::Matrix3f& R, const Eigen::RowVector3f& t, const float& scale, cv::Mat& rgbMat, cv::Mat& vertexMap, cv::Mat& mask, const RenderType& renderTpye)
     {
         if (renderTpye == RenderType::vertexColor)
         {
@@ -448,17 +448,20 @@ namespace meshdraw
             Eigen::Matrix3f R_T = cam.R.transpose();
             Eigen::MatrixX3i ptsInPic;
             Eigen::MatrixX3i colorInt = (msh.C * 255.f).cast<int>();
+            Eigen::Matrix3f R_inv = R.transpose();
+            Eigen::MatrixX3f meshVRotated = (msh.V * R_inv * scale).rowwise() + t;
+            Eigen::MatrixX3f meshFacesNormalInCam = msh.facesNormal * R_inv;
             if (cam.cameraType == CmaeraType::Pinhole)
             {
-                Eigen::MatrixX3f ptsInCam = (msh.V * R_T).rowwise() + cam.t;
+                Eigen::MatrixX3f ptsInCam = (meshVRotated * R_T).rowwise() + cam.t;
                 Eigen::MatrixX3f ptsInPicFloat = (ptsInCam.array().colwise() / ptsInCam.col(2).array()).matrix().eval();
                 Eigen::Matrix3f intr_T = cam.intr.transpose();
                 ptsInPicFloat = ptsInPicFloat * intr_T;
                 ptsInPic = ptsInPicFloat.cast<int>();
                 Eigen::MatrixX3f barycenter;
-                igl::barycenter(msh.V, msh.F, barycenter);
+                igl::barycenter(meshVRotated, msh.F, barycenter);
                 Eigen::MatrixX3f viewFaceDir = (barycenter.rowwise() - cam.t);// .rowwise().norm();
-                Eigen::VectorXf dots = viewFaceDir.cwiseProduct(msh.facesNormal).rowwise().sum();
+                Eigen::VectorXf dots = viewFaceDir.cwiseProduct(meshFacesNormalInCam).rowwise().sum();
                 rgbMat = cv::Mat::zeros(cam.height, cam.width, CV_8UC3);
                 cv::Mat drawMatDist = cv::Mat::zeros(cam.height, cam.width, CV_32FC1);
                 mask = cv::Mat::zeros(cam.height, cam.width, CV_8UC1);
@@ -482,7 +485,7 @@ namespace meshdraw
                         const int& fa = msh.F(f, 0);
                         const int& fb = msh.F(f, 1);
                         const int& fc = msh.F(f, 2);
-                        if (!ptsInCanvas[fa] || !ptsInCanvas[fb] || !ptsInCanvas[fc] )
+                        if (!ptsInCanvas[fa] || !ptsInCanvas[fb] || !ptsInCanvas[fc])
                         {
                             continue;
                         }
@@ -540,7 +543,235 @@ namespace meshdraw
         }
         return true;
     }
+    bool render(const Mesh& msh, const Camera& cam, const Eigen::Matrix3f& R, const Eigen::RowVector3f& t, const float& scale, cv::Mat& vertexMap, cv::Mat& mask)
+    {
+        if (isEmpty(msh.F) || isEmpty(msh.V) || isEmpty(msh.facesNormal))
+        {
+            LOG_ERR_OUT << "empty VF";
+            return false;
+        }
+        if (isEmpty(cam.R))
+        {
+            LOG_ERR_OUT << "empty R";
+            return false;
+        }
+        if (cam.cameraType == CmaeraType::Pinhole && isEmpty(cam.t))
+        {
+            LOG_ERR_OUT << "empty t";
+            return false;
+        }
+        Eigen::Matrix3f R_T = cam.R.transpose();
+        Eigen::MatrixX3i ptsInPic;
+        Eigen::MatrixX3i colorInt = (msh.C * 255.f).cast<int>();
+        Eigen::Matrix3f R_inv = R.transpose();
+        Eigen::MatrixX3f meshVRotated = (msh.V * R_inv * scale).rowwise() + t;
+        Eigen::MatrixX3f meshFacesNormalInCam = msh.facesNormal * R_inv;
+        if (cam.cameraType == CmaeraType::Pinhole)
+        {
+            Eigen::MatrixX3f ptsInCam = (meshVRotated * R_T).rowwise() + cam.t;
+            Eigen::MatrixX3f ptsInPicFloat = (ptsInCam.array().colwise() / ptsInCam.col(2).array()).matrix().eval();
+            Eigen::Matrix3f intr_T = cam.intr.transpose();
+            ptsInPicFloat = ptsInPicFloat * intr_T;
+            ptsInPic = ptsInPicFloat.cast<int>();
+            Eigen::MatrixX3f barycenter;
+            igl::barycenter(meshVRotated, msh.F, barycenter);
+            Eigen::MatrixX3f viewFaceDir = (barycenter.rowwise() - cam.t);// .rowwise().norm();
+            Eigen::VectorXf faceDists = viewFaceDir.rowwise().norm();
+            Eigen::Index minIndex;
+            faceDists.minCoeff(&minIndex);
+            float nearestFaceDot = viewFaceDir.row(minIndex).dot(meshFacesNormalInCam.row(minIndex));
+            if (nearestFaceDot > 0)
+            {
+                nearestFaceDot = 1;
+            }
+            else
+            {
+                nearestFaceDot = -1;
+            }
 
+            Eigen::VectorXf dots = viewFaceDir.cwiseProduct(msh.facesNormal).rowwise().sum();
+            cv::Mat drawMatDist = cv::Mat::zeros(cam.height, cam.width, CV_32FC1);
+            mask = cv::Mat::zeros(cam.height, cam.width, CV_8UC1);
+            vertexMap = cv::Mat::zeros(cam.height, cam.width, CV_32FC3);
+            std::vector<bool>ptsInCanvas(msh.V.rows(), true);
+#pragma omp parallel for  schedule(dynamic)
+            for (int i = 0; i < ptsInCanvas.size(); i++)
+            {
+                if (ptsInPic(i, 0) < 0 || ptsInPic(i, 1) < 0 || ptsInPic(i, 0) >= cam.width || ptsInPic(i, 1) >= cam.height)
+                {
+                    ptsInCanvas[i] = false;
+                }
+            }
+            for (int f = 0; f < dots.size(); f++)
+            {
+                if (dots[f] * nearestFaceDot > 0)
+                {
+                    const int& fa = msh.F(f, 0);
+                    const int& fb = msh.F(f, 1);
+                    const int& fc = msh.F(f, 2);
+                    if (!ptsInCanvas[fa] || !ptsInCanvas[fb] || !ptsInCanvas[fc])
+                    {
+                        continue;
+                    }
+                    float distFromCam = (barycenter.row(f) - cam.t).norm();
+                    std::list<std::pair<cv::Vec2i, Eigen::Vector3f>>trianglePixels = utils::triangle({ ptsInPic(fa,0),ptsInPic(fa,1) }, { ptsInPic(fb,0),ptsInPic(fb,1) }, { ptsInPic(fc,0),ptsInPic(fc,1) }, msh.V.row(fa), msh.V.row(fb), msh.V.row(fc));
+                    for (const auto& d : trianglePixels)
+                    {
+                        const cv::Vec2i& pixel = d.first;
+                        const Eigen::Vector3f& value = d.second;
+                        const int& r = pixel[1];
+                        const int& c = pixel[0];
+                        if (c >= 0 && r >= 0 && c < cam.width && r < cam.height)
+                        {
+                            if (mask.ptr<uchar>(r)[c] == 0)
+                            {
+                                mask.ptr<uchar>(r)[c] = 1;
+                                drawMatDist.ptr<float>(r)[c] = distFromCam;
+                                vertexMap.at<cv::Vec3f>(r, c)[0] = value[0];
+                                vertexMap.at<cv::Vec3f>(r, c)[1] = value[1];
+                                vertexMap.at<cv::Vec3f>(r, c)[2] = value[2];
+
+                            }
+                            else if (drawMatDist.ptr<float>(r)[c] > distFromCam)
+                            {
+                                drawMatDist.ptr<float>(r)[c] = distFromCam;
+                                vertexMap.at<cv::Vec3f>(r, c)[0] = value[0];
+                                vertexMap.at<cv::Vec3f>(r, c)[1] = value[1];
+                                vertexMap.at<cv::Vec3f>(r, c)[2] = value[2];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else if (cam.cameraType == CmaeraType::Ortho)
+        {
+            ptsInPic = (msh.V * R_T).cast<int>();
+        }
+        else
+        {
+            LOG_ERR_OUT << "not supported.";
+            return false;
+        }
+
+
+        return true;
+    }
+
+    bool render(const Mesh& msh, const Camera& cam, cv::Mat& rgbMat, cv::Mat& vertexMap, cv::Mat& mask, const RenderType& renderTpye)
+    {
+        if (renderTpye == RenderType::vertexColor)
+        {
+            if (isEmpty(msh.F) || isEmpty(msh.V) || isEmpty(msh.C) || isEmpty(msh.facesNormal))
+            {
+                LOG_ERR_OUT << "empty VFC";
+                return false;
+            }
+            if (isEmpty(cam.R))
+            {
+                LOG_ERR_OUT << "empty R";
+                return false;
+            }
+            if (cam.cameraType == CmaeraType::Pinhole && isEmpty(cam.t))
+            {
+                LOG_ERR_OUT << "empty t";
+                return false;
+            }
+            Eigen::Matrix3f R_T = cam.R.transpose();
+            Eigen::MatrixX3i ptsInPic;
+            Eigen::MatrixX3i colorInt = (msh.C * 255.f).cast<int>();
+            if (cam.cameraType == CmaeraType::Pinhole)
+            {
+                Eigen::MatrixX3f ptsInCam = (msh.V * R_T).rowwise() + cam.t;
+                Eigen::MatrixX3f ptsInPicFloat = (ptsInCam.array().colwise() / ptsInCam.col(2).array()).matrix().eval();
+                Eigen::Matrix3f intr_T = cam.intr.transpose();
+                ptsInPicFloat = ptsInPicFloat * intr_T;
+                ptsInPic = ptsInPicFloat.cast<int>();
+                Eigen::MatrixX3f barycenter;
+                igl::barycenter(msh.V, msh.F, barycenter);
+                Eigen::MatrixX3f viewFaceDir = (barycenter.rowwise() - cam.t);// .rowwise().norm();
+                Eigen::VectorXf dots = viewFaceDir.cwiseProduct(msh.facesNormal).rowwise().sum();
+                rgbMat = cv::Mat::zeros(cam.height, cam.width, CV_8UC3);
+                cv::Mat drawMatDist = cv::Mat::zeros(cam.height, cam.width, CV_32FC1);
+                mask = cv::Mat::zeros(cam.height, cam.width, CV_8UC1);
+                vertexMap = cv::Mat::zeros(cam.height, cam.width, CV_32FC3);
+                std::vector<bool>ptsInCanvas(msh.V.rows(), true);
+#pragma omp parallel for  schedule(dynamic)
+                for (int i = 0; i < ptsInCanvas.size(); i++)
+                {
+                    if (ptsInPic(i, 0) < 0 || ptsInPic(i, 1) < 0 || ptsInPic(i, 0) >= cam.width || ptsInPic(i, 1) >= cam.height)
+                    {
+                        ptsInCanvas[i] = false;
+                    }
+                }
+
+
+
+                for (int f = 0; f < dots.size(); f++)
+                {
+                    if (dots[f] < 0)
+                    {
+                        const int& fa = msh.F(f, 0);
+                        const int& fb = msh.F(f, 1);
+                        const int& fc = msh.F(f, 2);
+                        if (!ptsInCanvas[fa] || !ptsInCanvas[fb] || !ptsInCanvas[fc])
+                        {
+                            continue;
+                        }
+                        float distFromCam = (barycenter.row(f) - cam.t).norm();
+                        std::list<std::pair<cv::Vec2i, Eigen::Vector3f>>trianglePixels = utils::triangle({ ptsInPic(fa,0),ptsInPic(fa,1) }, { ptsInPic(fb,0),ptsInPic(fb,1) }, { ptsInPic(fc,0),ptsInPic(fc,1) }, msh.V.row(fa), msh.V.row(fb), msh.V.row(fc));
+                        for (const auto& d : trianglePixels)
+                        {
+                            const cv::Vec2i& pixel = d.first;
+                            const Eigen::Vector3f& value = d.second;
+                            const int& r = pixel[1];
+                            const int& c = pixel[0];
+                            if (c >= 0 && r >= 0 && c < cam.width && r < cam.height)
+                            {
+                                if (mask.ptr<uchar>(r)[c] == 0)
+                                {
+                                    mask.ptr<uchar>(r)[c] = 1;
+                                    drawMatDist.ptr<float>(r)[c] = distFromCam;
+                                    rgbMat.at<cv::Vec3b>(r, c)[0] = colorInt(fa, 2);
+                                    rgbMat.at<cv::Vec3b>(r, c)[1] = colorInt(fa, 1);
+                                    rgbMat.at<cv::Vec3b>(r, c)[2] = colorInt(fa, 0);
+                                    vertexMap.at<cv::Vec3f>(r, c)[0] = value[0];
+                                    vertexMap.at<cv::Vec3f>(r, c)[1] = value[1];
+                                    vertexMap.at<cv::Vec3f>(r, c)[2] = value[2];
+
+                                }
+                                else if (drawMatDist.ptr<float>(r)[c] > distFromCam)
+                                {
+                                    drawMatDist.ptr<float>(r)[c] = distFromCam;
+                                    rgbMat.at<cv::Vec3b>(r, c)[0] = colorInt(fa, 2);
+                                    rgbMat.at<cv::Vec3b>(r, c)[1] = colorInt(fa, 1);
+                                    rgbMat.at<cv::Vec3b>(r, c)[2] = colorInt(fa, 0);
+                                    vertexMap.at<cv::Vec3f>(r, c)[0] = value[0];
+                                    vertexMap.at<cv::Vec3f>(r, c)[1] = value[1];
+                                    vertexMap.at<cv::Vec3f>(r, c)[2] = value[2];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else if (cam.cameraType == CmaeraType::Ortho)
+            {
+                ptsInPic = (msh.V * R_T).cast<int>();
+            }
+            else
+            {
+                LOG_ERR_OUT << "not supported.";
+                return false;
+            }
+        }
+        else
+        {
+            LOG_ERR_OUT << "not supported.";
+            return false;
+        }
+        return true;
+    }
     bool render(const Mesh& msh, const Camera& cam,  cv::Mat& vertexMap, cv::Mat& mask)
     {
         
