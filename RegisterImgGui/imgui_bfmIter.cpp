@@ -565,7 +565,7 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 						this->borderMshRenderPts.emplace_back(borderMshRender3dPts);
 						this->borderMshMasks.emplace_back(borderMshMask);
 						shifts.emplace_back(ImVec2(0, 0));
-						if (this->borderMshMasks.size()>=5)
+						if (this->borderMshMasks.size()>=9)
 						{
 							break;
 						}
@@ -980,6 +980,12 @@ bool bfmIterFrame(bool* show_bfmIter_window)
 					}
 				);
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			}
+			if (ImGui::Button("bmfPts"))
+			{
+				Eigen::Matrix3f R_inv = BfmIterManger->bfm_R.transpose();
+				Eigen::MatrixX3f  V2 = (BfmIterManger->bfmMsh.V * R_inv * BfmIterManger->bfm_scale).rowwise() + BfmIterManger->bfm_t;
+				meshdraw::utils::savePts("1.txt", V2);
 			}
 		}
 		break;

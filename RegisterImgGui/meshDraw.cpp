@@ -450,7 +450,7 @@ namespace meshdraw
             Eigen::MatrixX3i colorInt = (msh.C * 255.f).cast<int>();
             Eigen::Matrix3f R_inv = R.transpose();
             Eigen::MatrixX3f meshVRotated = (msh.V * R_inv * scale).rowwise() + t;
-            Eigen::MatrixX3f meshFacesNormalInCam = msh.facesNormal * R_inv;
+            Eigen::MatrixX3f meshFacesNormalInCam = msh.facesNormal * R;
             if (cam.cameraType == CmaeraType::Pinhole)
             {
                 Eigen::MatrixX3f ptsInCam = (meshVRotated * R_T).rowwise() + cam.t;
@@ -461,6 +461,19 @@ namespace meshdraw
                 Eigen::MatrixX3f barycenter;
                 igl::barycenter(meshVRotated, msh.F, barycenter);
                 Eigen::MatrixX3f viewFaceDir = (barycenter.rowwise() - cam.t);// .rowwise().norm();
+                Eigen::VectorXf distFromCams = viewFaceDir.rowwise().norm();
+                Eigen::VectorXf faceDists = viewFaceDir.rowwise().norm();
+                Eigen::Index minIndex;
+                faceDists.minCoeff(&minIndex);
+                float nearestFaceDot = viewFaceDir.row(minIndex).dot(meshFacesNormalInCam.row(minIndex));
+                if (nearestFaceDot > 0)
+                {
+                    nearestFaceDot = 1;
+                }
+                else
+                {
+                    nearestFaceDot = -1;
+                } 
                 Eigen::VectorXf dots = viewFaceDir.cwiseProduct(meshFacesNormalInCam).rowwise().sum();
                 rgbMat = cv::Mat::zeros(cam.height, cam.width, CV_8UC3);
                 cv::Mat drawMatDist = cv::Mat::zeros(cam.height, cam.width, CV_32FC1);
@@ -480,7 +493,7 @@ namespace meshdraw
 
                 for (int f = 0; f < dots.size(); f++)
                 {
-                    if (dots[f] < 0)
+                    if (dots[f]* nearestFaceDot > 0)
                     {
                         const int& fa = msh.F(f, 0);
                         const int& fb = msh.F(f, 1);
@@ -489,7 +502,7 @@ namespace meshdraw
                         {
                             continue;
                         }
-                        float distFromCam = (barycenter.row(f) - cam.t).norm();
+                        float distFromCam = distFromCams[f];// (barycenter.row(f) - cam.t).norm();
                         std::list<std::pair<cv::Vec2i, Eigen::Vector3f>>trianglePixels = utils::triangle({ ptsInPic(fa,0),ptsInPic(fa,1) }, { ptsInPic(fb,0),ptsInPic(fb,1) }, { ptsInPic(fc,0),ptsInPic(fc,1) }, msh.V.row(fa), msh.V.row(fb), msh.V.row(fc));
                         for (const auto& d : trianglePixels)
                         {
@@ -565,7 +578,7 @@ namespace meshdraw
         Eigen::MatrixX3i colorInt = (msh.C * 255.f).cast<int>();
         Eigen::Matrix3f R_inv = R.transpose();
         Eigen::MatrixX3f meshVRotated = (msh.V * R_inv * scale).rowwise() + t;
-        Eigen::MatrixX3f meshFacesNormalInCam = msh.facesNormal * R_inv;
+        Eigen::MatrixX3f meshFacesNormalInCam = msh.facesNormal * R;
         if (cam.cameraType == CmaeraType::Pinhole)
         {
             Eigen::MatrixX3f ptsInCam = (meshVRotated * R_T).rowwise() + cam.t;
@@ -589,7 +602,7 @@ namespace meshdraw
                 nearestFaceDot = -1;
             }
 
-            Eigen::VectorXf dots = viewFaceDir.cwiseProduct(msh.facesNormal).rowwise().sum();
+            Eigen::VectorXf dots = viewFaceDir.cwiseProduct(meshFacesNormalInCam).rowwise().sum();
             cv::Mat drawMatDist = cv::Mat::zeros(cam.height, cam.width, CV_32FC1);
             mask = cv::Mat::zeros(cam.height, cam.width, CV_8UC1);
             vertexMap = cv::Mat::zeros(cam.height, cam.width, CV_32FC3);
@@ -613,7 +626,7 @@ namespace meshdraw
                     {
                         continue;
                     }
-                    float distFromCam = (barycenter.row(f) - cam.t).norm();
+                    float distFromCam = faceDists[f];
                     std::list<std::pair<cv::Vec2i, Eigen::Vector3f>>trianglePixels = utils::triangle({ ptsInPic(fa,0),ptsInPic(fa,1) }, { ptsInPic(fb,0),ptsInPic(fb,1) }, { ptsInPic(fc,0),ptsInPic(fc,1) }, msh.V.row(fa), msh.V.row(fb), msh.V.row(fc));
                     for (const auto& d : trianglePixels)
                     {
@@ -690,7 +703,21 @@ namespace meshdraw
                 Eigen::MatrixX3f barycenter;
                 igl::barycenter(msh.V, msh.F, barycenter);
                 Eigen::MatrixX3f viewFaceDir = (barycenter.rowwise() - cam.t);// .rowwise().norm();
+                Eigen::VectorXf faceDists = viewFaceDir.rowwise().norm();
+                Eigen::Index minIndex;
+                faceDists.minCoeff(&minIndex);
+                float nearestFaceDot = viewFaceDir.row(minIndex).dot(msh.facesNormal.row(minIndex));
+                if (nearestFaceDot > 0)
+                {
+                    nearestFaceDot = 1;
+                }
+                else
+                {
+                    nearestFaceDot = -1;
+                }
+                
                 Eigen::VectorXf dots = viewFaceDir.cwiseProduct(msh.facesNormal).rowwise().sum();
+
                 rgbMat = cv::Mat::zeros(cam.height, cam.width, CV_8UC3);
                 cv::Mat drawMatDist = cv::Mat::zeros(cam.height, cam.width, CV_32FC1);
                 mask = cv::Mat::zeros(cam.height, cam.width, CV_8UC1);
@@ -709,7 +736,7 @@ namespace meshdraw
 
                 for (int f = 0; f < dots.size(); f++)
                 {
-                    if (dots[f] < 0)
+                    if (dots[f]* nearestFaceDot > 0)
                     {
                         const int& fa = msh.F(f, 0);
                         const int& fb = msh.F(f, 1);
