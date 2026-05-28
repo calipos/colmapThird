@@ -624,13 +624,26 @@ namespace pips2
         }
         return true;
     }
-    bool Pips2::inputImage(const std::vector<std::filesystem::path>& imgPath)
+    bool Pips2::inputImage(const std::vector<std::filesystem::path>& imgPath_)
     {
-        if (imgPath.size()==0)
+        if (imgPath_.size()==0)
         {
             LOG_ERR_OUT << "imgPath.size()==0";
             return false;
         }
+        std::vector<std::filesystem::path>imgPath;
+        imgPath.reserve((imgPath_.size() / 16 + 1) * 16);
+        imgPath.insert(imgPath.end(), imgPath_.begin(), imgPath_.end());
+        if (imgPath.size()<16)
+        {
+            for (int i = imgPath_.size(); i < 16; i++)
+            {
+                imgPath.emplace_back(imgPath.back());
+            }
+        }
+
+
+
         fmapsVec.clear();
         fmapsVec.reserve(imgPath.size());
 
@@ -858,7 +871,15 @@ namespace pips2
         traj = std::vector<std::vector<cv::Point2f>>(this->fmapsVec.size(), std::vector<cv::Point2f>(controlPts.size()));
 
 
-        std::string paramStr = pips2::Pips2::getCorrsNet(sequenceLimit, imgSize.height, imgSize.width);
+        std::string paramStr;
+        if (this->fmapsVec.size()>= sequenceLimit)
+        {
+            paramStr = pips2::Pips2::getCorrsNet(sequenceLimit, imgSize.height, imgSize.width);
+        }
+        else
+        {
+            paramStr = pips2::Pips2::getCorrsNet(this->fmapsVec.size(), imgSize.height, imgSize.width);
+        }
         corrsNet = std::shared_ptr<ncnn::Net>(new ncnn::Net());
         corrsNet->load_param_mem(paramStr.c_str());
         corrsNet->load_model((const unsigned char*)0);
