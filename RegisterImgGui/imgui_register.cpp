@@ -138,7 +138,7 @@ bool registFrame(bool* show_regist_window)
 			progress.proc = new std::thread(
 				[&]() {
 					std::filesystem::path imgDirPath_ = imgDirPath;
-					int registRet = register_incremental(imgDirPath_.string());
+					int registRet = register_incremental_loop(imgDirPath_.string());
 					endThread(progress);
 				}
 			);

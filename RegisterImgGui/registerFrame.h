@@ -3,5 +3,6 @@
 #include <string>
 bool registFrame(bool* show_far_align_window = nullptr);
 int register_incremental(const std::string& folder);
+int register_incremental_loop(const std::string& folder);
 
 #endif // !_REGIST_FRAME_H_

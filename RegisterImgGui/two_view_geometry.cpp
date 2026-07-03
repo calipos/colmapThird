@@ -51,6 +51,7 @@ TwoViewGeometry EstimateCalibratedTwoViewGeometry(
     }
     const size_t min_num_inliers = std::min(EssentialMatrixFivePointEstimator::kMinNumSamples, FundamentalMatrixSevenPointEstimator::kMinNumSamples);
     if (matchesPointId.size() < static_cast<size_t>(min_num_inliers)) {
+        LOG_ERR_OUT << img1.Name()<<" - "<< img2.Name() << " : matchesPointId.size = " << matchesPointId.size() << " < " << static_cast<size_t>(min_num_inliers);
         geometry.config = TwoViewGeometry::ConfigurationType::DEGENERATE;
         return geometry;
     }
