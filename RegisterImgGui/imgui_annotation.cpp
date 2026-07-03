@@ -693,6 +693,10 @@ bool annotationFrame(bool* show_regist_window)
 						annotationManger->imgNameForlist.clear();
 						const auto& newPicNameForList = labelControlPtr->ptsData.hasTagFlags[pickedTag];
 						annotationManger->imgNameForlist.insert(annotationManger->imgNameForlist.end(), newPicNameForList.begin(), newPicNameForList.end());
+						if (AnnotationManger::imgPickIdx >= 0)
+						{
+							annotationManger->imgNameForlist[AnnotationManger::imgPickIdx][0] = '-';
+						}
 					}
 				}				
 			}
@@ -748,17 +752,18 @@ bool annotationFrame(bool* show_regist_window)
 					label::ImageLabel::tarStr[0] = '\0';
 				}
 				ImGui::SameLine();
-				if (ImGui::Checkbox("showAllTag", &labelControlPtr->showLabeled))
+				if (ImGui::Checkbox(u8"新增label模式", &labelControlPtr->showLabeled))
 				{
 					labelControlPtr->ptsData.tagPickIdx = -1;
 					for (auto&d: labelControlPtr->ptsData.tagsListName)
 					{
 						d[0] = ' ';
 					}
-					for (auto&d: annotationManger->imgNameForlist)
-					{
-						d[0] = ' ';
-					}
+					//for (auto&d: annotationManger->imgNameForlist)
+					//{
+					//	d[0] = ' ';
+					//}
+
 				}
 				if (!labelControlPtr->showLabeled && labelControlPtr->ptsData.tagPickIdx<0)
 				{
@@ -788,6 +793,10 @@ bool annotationFrame(bool* show_regist_window)
 						annotationManger->imgNameForlist.clear();
 						const auto& newPicNameForList = labelControlPtr->ptsData.hasTagFlags[tagName];
 						annotationManger->imgNameForlist.insert(annotationManger->imgNameForlist.end(), newPicNameForList.begin(), newPicNameForList.end());
+						if (AnnotationManger::imgPickIdx >= 0)
+						{
+							annotationManger->imgNameForlist[AnnotationManger::imgPickIdx][0] = '-';
+						}
 					}
 				}
 				ImGui::SameLine();
@@ -810,6 +819,10 @@ bool annotationFrame(bool* show_regist_window)
 					annotationManger->imgNameForlist.clear();
 					const auto& newPicNameForList = labelControlPtr->ptsData.hasTagFlags[tagName];
 					annotationManger->imgNameForlist.insert(annotationManger->imgNameForlist.end(), newPicNameForList.begin(), newPicNameForList.end());
+					if (AnnotationManger::imgPickIdx >= 0)
+					{
+						annotationManger->imgNameForlist[AnnotationManger::imgPickIdx][0] = '-';
+					}
 					labelControlPtr->ptsData.updata();
 				}
 				if (labelControlPtr->ptsData.tagPickIdx < 0 || AnnotationManger::imgPickIdx < 0)

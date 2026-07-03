@@ -78,6 +78,7 @@ int main(int, char**)
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
+    ImFont* font = io.Fonts->AddFontFromFileTTF("c:/Windows/Fonts/simhei.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
     //ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     ImVec4 clear_color = ImVec4(0.f, 0.f, 0.f, 1.00f);
     while (!glfwWindowShouldClose(window))
@@ -87,7 +88,7 @@ int main(int, char**)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame(); 
         ImGui::Begin("Hello, world!");
-        if (ImGui::Button("annotation") && !show_annotation_window)
+        if (ImGui::Button(u8"БъзЂ") && !show_annotation_window)
         {
             show_annotation_window = !show_annotation_window;
         }
