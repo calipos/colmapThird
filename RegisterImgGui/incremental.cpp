@@ -271,7 +271,7 @@ int register_incremental_loop(const std::string& folder)
             {
                 for (const auto&targetImgIdx: pickedImgs)
                 {
-                    for (int k = 1; k < incrementalImages.size(); k++)
+                    for (int k = 0; k < incrementalImages.size(); k++)
                     {
                         if (pickedImgs.count(k)==0)
                         { 
@@ -283,7 +283,7 @@ int register_incremental_loop(const std::string& folder)
                             bool EstimateRet = EstimateTwoViewGeometryPose(camera1, image1, camera2, image2, &two_view_geometry);
                             if (!EstimateRet)
                             {
-                                LOG_ERR_OUT << "EstimateTwoViewGeometryPose failed!";
+                                //LOG_ERR_OUT << "EstimateTwoViewGeometryPose failed!";
                                 continue;
                             }
                             ;
@@ -309,13 +309,21 @@ int register_incremental_loop(const std::string& folder)
                         }
                     }
                 }
+                if (bestSource<0)
+                {
+                    LOG_OUT;
+                    i--;
+                    continue;
+                }
                 pickedImgs.insert(bestSource);
             }
-
+            continue;
             LOG_OUT << "\n====================================  " << i << " ====================================";
+            LOG_OUT << "bestTarget  " << bestTarget;
+            LOG_OUT << "bestSource  " << bestSource;
             image_t picked2 = incrementalImages[bestSource];
             {
-                //figure new frame pose from prev Image
+                //figure new frame pose based on EstimateCalibratedTwoViewGeometry
                 image_t picked1 = incrementalImages[bestTarget];
                 Image& image1 = imageList[picked1];
                 Image& image2 = imageList[picked2];
@@ -338,7 +346,7 @@ int register_incremental_loop(const std::string& folder)
                 image2.SetCamFromWorld(poses[picked2]);
 
                 {
-
+                    //re-figure the rt base on the pnp, if the points updata
                     std::vector<cv::Point2d>imgPtsPnp;
                     std::vector<cv::Point3d>objPtsPnp;
                     imgPtsPnp.reserve(image2.featPts.size());
@@ -353,7 +361,7 @@ int register_incremental_loop(const std::string& folder)
                     }
                     if (objPtsPnp.size() >= 6)
                     {
-                        Eigen::Matrix3x4d Rt = image1.CamFromWorld().ToMatrix();
+                        Eigen::Matrix3x4d Rt = image2.CamFromWorld().ToMatrix();
                         cv::Mat rvec, tvec;
                         utils::convertRt(Rt, rvec, tvec);
 
@@ -378,9 +386,9 @@ int register_incremental_loop(const std::string& folder)
                 }
             }
             {
-                //updata pose3d from total prev
+                //updata pose3d based on TriangulatePoint
                 {
-                    image_t picked1 = incrementalImages[i];//j
+                    image_t picked1 = incrementalImages[bestTarget];//j
                     Image& image1 = imageList[picked1];
                     Image& image2 = imageList[picked2];
                     Camera& camera1 = cameraList[image1.CameraId()];
@@ -418,16 +426,15 @@ int register_incremental_loop(const std::string& folder)
                     }
                 }
             }
-            if (pickedImgs.size()<3)// only two images need not ba.
+            if (pickedImgs.size()>=3  )// only two images need not ba.
             {
                 //ba
                 BundleAdjustmentOptions ba_options;
                 BundleAdjustmentConfig ba_config;
-                for (int j = 0; j <= i; j++)
-                {
-                    ba_config.AddImage(incrementalImages[j]);
-                    //LOG_OUT << incrementalImages[j];
-                }
+                for (const auto&d: pickedImgs)
+                { 
+                    ba_config.AddImage(incrementalImages[d]);
+                } 
                 for (const auto& d : objPts) ba_config.AddVariablePoint(d.first);
                 std::unique_ptr<BundleAdjuster> bundle_adjuster;
                 ba_config.SetConstantCamPose(incrementalImages[0]);  // 1st image
