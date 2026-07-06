@@ -262,6 +262,7 @@ int register_incremental_loop(const std::string& folder)
     {
         std::set<int>pickedImgs;
         pickedImgs.insert(0);
+        std::map<std::string, TwoViewGeometry> TwoViewGeometryRecode;
         for (int i = 1; i < incrementalImages.size(); i++)
         {
             int bestTarget = -1;
@@ -279,14 +280,32 @@ int register_incremental_loop(const std::string& folder)
                             Image& image2 = imageList[k];
                             Camera& camera1 = cameraList[image1.CameraId()];
                             Camera& camera2 = cameraList[image2.CameraId()];
-                            TwoViewGeometry two_view_geometry = EstimateCalibratedTwoViewGeometry(camera1, image1, camera2, image2);
-                            bool EstimateRet = EstimateTwoViewGeometryPose(camera1, image1, camera2, image2, &two_view_geometry);
-                            if (!EstimateRet)
+                            std::string recodeKeyStr1 = std::to_string(targetImgIdx) + "_" + std::to_string(k);
+                            std::string recodeKeyStr2 = std::to_string(k) + "_" + std::to_string(targetImgIdx);
+        
+
+                            TwoViewGeometry two_view_geometry;
+                            if (TwoViewGeometryRecode.count(recodeKeyStr1)!=0)
                             {
-                                //LOG_ERR_OUT << "EstimateTwoViewGeometryPose failed!";
-                                continue;
+                                two_view_geometry = TwoViewGeometryRecode[recodeKeyStr1];
                             }
-                            ;
+                            else if (TwoViewGeometryRecode.count(recodeKeyStr2) != 0)
+                            {
+                                two_view_geometry = TwoViewGeometryRecode[recodeKeyStr2];
+                            }
+                            else
+                            {
+                                two_view_geometry = EstimateCalibratedTwoViewGeometry(camera1, image1, camera2, image2);
+                                bool EstimateRet = EstimateTwoViewGeometryPose(camera1, image1, camera2, image2, &two_view_geometry);
+                                TwoViewGeometryRecode[recodeKeyStr1] = two_view_geometry;
+                                TwoViewGeometryRecode[recodeKeyStr2] = two_view_geometry;
+                                if (!EstimateRet)
+                                {
+                                    //LOG_ERR_OUT << "EstimateTwoViewGeometryPose failed!";
+                                    continue;
+                                }
+                                ;
+                            }
                             Eigen::AngleAxisd aa(two_view_geometry.cam2_from_cam1.rotation);
                             int angle_radx100 = abs(aa.angle())*100;
                             double baseLine = two_view_geometry.cam2_from_cam1.translation.norm();
@@ -311,9 +330,21 @@ int register_incremental_loop(const std::string& folder)
                 }
                 if (bestSource<0)
                 {
-                    LOG_OUT;
-                    i--;
-                    continue;
+                    for (int k = 0; k < incrementalImages.size(); k++)
+                    {
+                        if (pickedImgs.count(k) != 0)
+                        {
+                            LOG_OUT << imageList[k].Name() << "   ok";
+                        }
+                    }
+                    for (int k = 0; k < incrementalImages.size(); k++)
+                    {
+                        if (pickedImgs.count(k) == 0)
+                        { 
+                            LOG_OUT << imageList[k].Name()<<" not find a pair";
+                        }
+                    }
+                    return -1;
                 }
                 pickedImgs.insert(bestSource);
             }
