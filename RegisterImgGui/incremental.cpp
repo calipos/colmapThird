@@ -262,10 +262,10 @@ int register_incremental_loop(const std::string& folder)
     {
         std::set<int>pickedImgs;
         pickedImgs.insert(0);
+        int prevPickedImgsSize = 1;
         std::map<std::string, TwoViewGeometry> TwoViewGeometryRecode;
         while (true)
         {
-            bool incrementalImageHint = true;
             for (int i = 1; i < incrementalImages.size(); i++)
             {
                 if (pickedImgs.count(i)!=0)
@@ -338,34 +338,6 @@ int register_incremental_loop(const std::string& folder)
                     if (bestSource < 0)
                     {
                         LOG_OUT << "hint runout, maybe another loop";
-                        for (int k = 0; k < incrementalImages.size() && false; k++)
-                        {
-                            if (pickedImgs.count(k) == 0)
-                            {
-                                LOG_OUT << imageList[k].Name() << " not find a pair";
-                                for (const auto& l : pickedImgs)
-                                {
-                                    std::string recodeKeyStr = std::to_string(k) + "_" + std::to_string(l);
-                                    TwoViewGeometry two_view_geometry;
-                                    if (TwoViewGeometryRecode.count(recodeKeyStr) != 0)
-                                    {
-                                        two_view_geometry = TwoViewGeometryRecode[recodeKeyStr];
-                                    }
-                                    else
-                                    {
-                                        LOG_ERR_OUT << "cannot be here.";
-                                        return -1;
-                                    }
-                                    Eigen::AngleAxisd aa(two_view_geometry.cam2_from_cam1.rotation);
-                                    Image& image1 = imageList[l];
-                                    Image& image2 = imageList[k];
-                                    int sharedPtsCnt_ = countSharedPtsCount(image1, image2);
-                                    LOG_OUT << "\t" << imageList[l].Name() << " : deg=" << aa.angle() * 180 / 3.1415926 << "; sharedPtsCnt=" << sharedPtsCnt_;
-                                }
-
-
-                            }
-                        }
                     }
                     else
                     {
@@ -378,7 +350,6 @@ int register_incremental_loop(const std::string& folder)
                 LOG_OUT << "bestSource  " << bestSource;
                 if (bestSource < 0 || bestTarget < 0)
                 {
-                    incrementalImageHint = false;
                     break;
                 }
                 image_t picked2 = incrementalImages[bestSource];
@@ -507,6 +478,7 @@ int register_incremental_loop(const std::string& folder)
                     if (solverRet.termination_type != ceres::CONVERGENCE)
                     {
                         LOG_ERR_OUT << "not convergence! incremental at " << imageList[picked2].Name();
+                        return -1;
                         break;
                     }
                     {
@@ -515,10 +487,52 @@ int register_incremental_loop(const std::string& folder)
                     }
                 }
             }
-            if (incrementalImageHint && pickedImgs.size() == incrementalImages.size())
+            if (pickedImgs.size() == incrementalImages.size())
             {
                 break;
             }
+            if (prevPickedImgsSize== pickedImgs.size())
+            {
+                for (int k = 0; k < incrementalImages.size(); k++)
+                {
+                    if (pickedImgs.count(k) != 0)
+                        LOG_OUT << imageList[k].Name();
+                }
+                for (int k = 0; k < incrementalImages.size(); k++)
+                {
+                    if (pickedImgs.count(k) == 0)
+                    {
+                        LOG_OUT << imageList[k].Name() << " not find a pair";
+                        for (const auto& l : pickedImgs)
+                        {
+                            std::string recodeKeyStr = std::to_string(k) + "_" + std::to_string(l);
+                            TwoViewGeometry two_view_geometry;
+                            if (TwoViewGeometryRecode.count(recodeKeyStr) != 0)
+                            {
+                                two_view_geometry = TwoViewGeometryRecode[recodeKeyStr];
+                            }
+                            else
+                            {
+                                LOG_ERR_OUT << "cannot be here.";
+                                return -1;
+                            }
+                            Eigen::AngleAxisd aa(two_view_geometry.cam2_from_cam1.rotation);
+                            Image& image1 = imageList[l];
+                            Image& image2 = imageList[k];
+                            int sharedPtsCnt_ = countSharedPtsCount(image1, image2);
+                            if (sharedPtsCnt_ > 5)
+                            {
+                                LOG_OUT << "\t\t" << imageList[l].Name() << " : deg=" << aa.angle() * 180 / 3.1415926 << "; sharedPtsCnt=" << sharedPtsCnt_;
+                            }
+                        }
+
+
+                    }
+                }
+                LOG_ERR_OUT << "annotation need fixs.";
+                return -1;
+            }
+            prevPickedImgsSize = pickedImgs.size();
         }
     }
     for (auto& d : poses)
