@@ -233,6 +233,41 @@ int register_incremental(const std::string& folder)
 
     return 0;
 }
+double reprojectTotal(const std::set<int>&pickedImgs,const std::vector<Camera>&cameraList,const std::vector<Image>& imageList,const std::unordered_map<point3D_t, Eigen::Vector3d>&objPts)
+{
+
+    std::vector<double>errs;
+    errs.reserve(pickedImgs.size()* objPts.size());
+    for (const auto&imgId: pickedImgs)
+    {
+        const Image& img = imageList[imgId];
+        const Camera& camera = cameraList[img.CameraId()];
+        const Eigen::Matrix3x4d& Rt = img.CamFromWorld().ToMatrix();
+        const Eigen::Matrix3d& K = camera.CalibrationMatrix();
+        for (const auto& feat2d:img.featPts)
+        {
+            const auto& ptId = feat2d.first;
+            const Eigen::Vector2d& pt2d = feat2d.second;
+            if (objPts.count(ptId)>0)
+            {
+                Eigen::Vector4d pt3d;
+                pt3d[0] = objPts.at(ptId)[0];
+                pt3d[1] = objPts.at(ptId)[1];
+                pt3d[2] = objPts.at(ptId)[2];
+                pt3d[3] = 1;
+                Eigen::Vector3d repojectPt = K* Rt* pt3d;
+                double diffX = repojectPt[0] / repojectPt[2] - pt2d[0];
+                double diffY = repojectPt[1] / repojectPt[2] - pt2d[1];
+                errs.emplace_back(std::sqrt(diffX * diffX + diffY* diffY));
+            }
+        }
+    }
+    if (errs.size()==0)
+    {
+        return 1e20;
+    }
+    return std::accumulate(errs.begin(), errs.end(),0.)/ errs.size();
+}
 int countSharedPtsCount(const Image& img1, const Image& img2)
 {
     std::vector<point2D_t>matchesPointId;
@@ -461,7 +496,7 @@ int register_incremental_loop(const std::string& folder)
                 {
                     //ba
                     BundleAdjustmentOptions ba_options;
-                    ba_options.solver_options.max_num_iterations = 500;
+                    ba_options.solver_options.max_num_iterations = 50000;
                     BundleAdjustmentConfig ba_config;
                     for (const auto& d : pickedImgs)
                     {
@@ -495,8 +530,9 @@ int register_incremental_loop(const std::string& folder)
                     }
                     else
                     {
-                        LOG_OUT << "final_cost = " << solverRet.final_cost;
-                        if (solverRet.final_cost > 5)
+                        double final_cost = reprojectTotal(pickedImgs, cameraList, imageList, objPts);
+                        LOG_OUT << "final_cost = " << final_cost;
+                        if (final_cost > 5)
                         {
                             LOG_ERR_OUT << "final_cost>5 at " << imageList[picked2].Name();
                             return -1;
@@ -507,9 +543,11 @@ int register_incremental_loop(const std::string& folder)
                             const Image& imag = imageList[d];
                             LOG_OUT << d << "qt" << qs[d] <<", " << ts[d] << "    " << imag.CamFromWorld().rotation << ", " << imag.CamFromWorld().translation.transpose();
                         }
-                        //std::filesystem::create_directories(dataPath / ("result"+std::to_string(i)));
-                        //writeResult(dataPath / ("result" + std::to_string(i)), cameraList, imageList, objPts, poses);
                     }
+                }
+                if (pickedImgs.size() >= 3)
+                {
+                    
                 }
             }
             if (pickedImgs.size() == incrementalImages.size())
