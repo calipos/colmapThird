@@ -461,6 +461,7 @@ int register_incremental_loop(const std::string& folder)
                 {
                     //ba
                     BundleAdjustmentOptions ba_options;
+                    ba_options.solver_options.max_num_iterations = 500;
                     BundleAdjustmentConfig ba_config;
                     for (const auto& d : pickedImgs)
                     {
@@ -470,6 +471,17 @@ int register_incremental_loop(const std::string& folder)
                     std::unique_ptr<BundleAdjuster> bundle_adjuster;
                     ba_config.SetConstantCamPose(incrementalImages[0]);  // 1st image
                     bundle_adjuster = CreateDefaultBundleAdjuster(std::move(ba_options), std::move(ba_config), cameraList, imageList, objPts);
+
+
+                    std::map<int, Eigen::Quaterniond>qs;
+                    std::map<int, Eigen::RowVector3d>ts;
+                    for (const auto&d: pickedImgs)
+                    {
+                        const Image& imag = imageList[d];
+                        qs[d] = imag.CamFromWorld().rotation;
+                        ts[d] = imag.CamFromWorld().translation.transpose();
+                    }
+
 
                     auto solverRet = bundle_adjuster->Solve();
                     //for (const auto& d : objPts) LOG_OUT << "objPts : " << d.second[0] << "  " << d.second[1] << "  " << d.second[2];
@@ -481,7 +493,20 @@ int register_incremental_loop(const std::string& folder)
                         return -1;
                         break;
                     }
+                    else
                     {
+                        LOG_OUT << "final_cost = " << solverRet.final_cost;
+                        if (solverRet.final_cost > 5)
+                        {
+                            LOG_ERR_OUT << "final_cost>5 at " << imageList[picked2].Name();
+                            return -1;
+                            break;
+                        }
+                        for (const auto& d : pickedImgs)
+                        {
+                            const Image& imag = imageList[d];
+                            LOG_OUT << d << "qt" << qs[d] <<", " << ts[d] << "    " << imag.CamFromWorld().rotation << ", " << imag.CamFromWorld().translation.transpose();
+                        }
                         //std::filesystem::create_directories(dataPath / ("result"+std::to_string(i)));
                         //writeResult(dataPath / ("result" + std::to_string(i)), cameraList, imageList, objPts, poses);
                     }
