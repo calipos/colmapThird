@@ -472,9 +472,10 @@ int register_incremental_loop(const std::string& folder)
                                 potentialPts3d[ptId].reserve(pickedImgs.size());
                             }
                             potentialPts3d[ptId].emplace_back(xyz);                            
-                            std::pair<bool, Eigen::Vector2d>imgPt1 = image1.ProjectPoint(xyz);
+                            std::pair<bool, Eigen::Vector2d>imgPt0 = image0.ProjectPoint(xyz);
                             std::pair<bool, Eigen::Vector2d>imgPt2 = image2.ProjectPoint(xyz);
-                            LOG_OUT << imgPt1.second.transpose() << " " << imgPt2.second.transpose();
+                            LOG_OUT << imgPt0.second.transpose() << " , " << image0.featPts.at(ptId).transpose();
+                            LOG_OUT << imgPt2.second.transpose() << " , " << image2.featPts.at(ptId).transpose();
                         }
                     }
                 }
@@ -483,16 +484,17 @@ int register_incremental_loop(const std::string& folder)
                     auto ptId = potentialIncrementalPt3d.first;
                     if (objPts.count(ptId)==0)
                     {
-                        objPts[ptId] = Eigen::Vector3d::Zero();
-                        for (const auto&d: potentialIncrementalPt3d.second)
-                        {
-                            objPts[ptId][0] += d[0];
-                            objPts[ptId][1] += d[1];
-                            objPts[ptId][2] += d[2];
-                        }
-                        objPts[ptId][0] /= potentialIncrementalPt3d.second.size();
-                        objPts[ptId][1] /= potentialIncrementalPt3d.second.size();
-                        objPts[ptId][2] /= potentialIncrementalPt3d.second.size();
+                        objPts[ptId] = potentialIncrementalPt3d.second[0];
+                        //objPts[ptId] = Eigen::Vector3d::Zero();
+                        //for (const auto&d: potentialIncrementalPt3d.second)
+                        //{
+                        //    objPts[ptId][0] += d[0];
+                        //    objPts[ptId][1] += d[1];
+                        //    objPts[ptId][2] += d[2];
+                        //}
+                        //objPts[ptId][0] /= potentialIncrementalPt3d.second.size();
+                        //objPts[ptId][1] /= potentialIncrementalPt3d.second.size();
+                        //objPts[ptId][2] /= potentialIncrementalPt3d.second.size();
                     }
                 }
             }
