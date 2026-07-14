@@ -384,42 +384,6 @@ int register_incremental_loop(const std::string& folder)
             Image& image2 = imageList[bestSource];
             Camera& camera1 = cameraList[image1.CameraId()];
             Camera& camera2 = cameraList[image2.CameraId()];
-            int img2FeatSharedCnt = 0;
-            for (const auto&sourceFeat: image2.featPts)
-            {
-                if (objPts.count(sourceFeat.first)>0)
-                {
-                    img2FeatSharedCnt += 1;
-                }
-            }
-            if (img2FeatSharedCnt>5)
-            {
-                //figure initial rt from pnp
-                std::vector<cv::Point2d>imgPtsPnp;
-                std::vector<cv::Point3d>objPtsPnp;
-                imgPtsPnp.reserve(image2.featPts.size());
-                objPtsPnp.reserve(image2.featPts.size());
-                for (const auto& [ptId, imgPt] : image2.featPts)
-                {
-                    if (objPts.count(ptId) > 0)
-                    {
-                        imgPtsPnp.emplace_back(imgPt[0], imgPt[1]);
-                        objPtsPnp.emplace_back(objPts[ptId][0], objPts[ptId][1], objPts[ptId][2]);
-                    }
-                }
-                {
-                    cv::Mat rvec, tvec;
-                    cv::Mat intrMat = utils::intrConvert(camera2.CalibrationMatrix());
-                    cv::solvePnP(objPtsPnp, imgPtsPnp, intrMat, cv::Mat(), rvec, tvec, false);
-                    Eigen::AngleAxisd eulerAngle(cv::norm(rvec), Eigen::Vector3d(rvec.ptr<double>(0)[0] / cv::norm(rvec), rvec.ptr<double>(1)[0] / cv::norm(rvec), rvec.ptr<double>(2)[0] / cv::norm(rvec)));
-                    Rigid3d pnpRt(Eigen::Quaterniond(eulerAngle), Eigen::Vector3d(tvec.ptr<double>(0)[0], tvec.ptr<double>(1)[0], rvec.ptr<double>(2)[0]));
-
-                    poses[bestSource] = pnpRt;
-                    image2.SetCamFromWorld(pnpRt);
-                }
-
-            }
-            else
             {
                 //figure initial rt from EstimateTwoViewGeometryPose 
                 std::string recodeKeyStr1 = std::to_string(bestTarget) + "_" + std::to_string(bestSource);
@@ -437,7 +401,6 @@ int register_incremental_loop(const std::string& folder)
                 poses[bestSource] = two_view_geometry.cam2_from_cam1 * poses[bestTarget];
                 image2.SetCamFromWorld(poses[bestSource]);
             }
-
             {
                 //triganlePoints
                 std::unordered_map<point2D_t, std::vector<Eigen::Vector3d>>potentialPts3d;
@@ -499,6 +462,7 @@ int register_incremental_loop(const std::string& folder)
                 }
             }
             pickedImgs.insert(bestSource);
+            if (pickedImgs.size()>2)
             {
                 //ba
                 BundleAdjustmentOptions ba_options;
@@ -513,6 +477,7 @@ int register_incremental_loop(const std::string& folder)
                 for (const auto& d : objPts) ba_config.AddVariablePoint(d.first);
                 std::unique_ptr<BundleAdjuster> bundle_adjuster;
                 ba_config.SetConstantCamPose(incrementalImages[0]);  // 1st image
+                ba_config.SetConstantCamIntrinsics(0); // 1st camera fxfxcxcy
                 bundle_adjuster = CreateDefaultBundleAdjuster(std::move(ba_options), std::move(ba_config), cameraList, imageList, objPts);
 
 
