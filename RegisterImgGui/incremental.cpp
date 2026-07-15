@@ -294,8 +294,8 @@ int register_incremental_loop(const std::string& folder)
     std::iota(incrementalImages.begin(), incrementalImages.end(), 0);
     std::unordered_map<point3D_t, Eigen::Vector3d>objPts;
     std::unordered_map < image_t, struct Rigid3d>poses;
+    std::set<int>pickedImgs;
     {
-        std::set<int>pickedImgs;
         pickedImgs.insert(0);
         {
             poses[0] = Rigid3d();
@@ -377,7 +377,17 @@ int register_incremental_loop(const std::string& folder)
                     bestSource = k;
                 }
             }
-
+            if (bestTarget<0 || bestSource<0)
+            {
+                for (int k = 0; k < incrementalImages.size(); k++)
+                {
+                    if (pickedImgs.count(k) == 0)
+                    {
+                        LOG_OUT << imageList[k].Name() << " not find a pair";
+                    }
+                }
+                return -1;
+            }
 
             LOG_OUT << "\n====================================  " << bestTarget<<" & "<< bestSource << " ====================================";
             Image& image1 = imageList[bestTarget];
@@ -569,6 +579,71 @@ int register_incremental_loop(const std::string& folder)
     {
         d.second = imageList[d.first].CamFromWorld();
     }
+
+    for (auto&cam: cameraList)
+    {
+        auto camera_id = cam.camera_id;
+        auto focal_length = cam.FocalLength();
+        auto width = cam.width;
+        auto height = cam.height;
+        cam =  Camera::CreateFromModelId(camera_id, CameraModelId::kOpenCV, focal_length, width, height);
+    }
+    for (auto&img:imageList)
+    { 
+        img.SetCameraPtr(&cameraList[img.CameraId()]);
+    } 
+    {
+        //ba
+        BundleAdjustmentOptions ba_options;
+        ba_options.solver_options.max_num_iterations = 5000;
+        //ba_options.solver_options.logging_type = ceres::LoggingType::PER_MINIMIZER_ITERATION;
+        //ba_options.solver_options.minimizer_progress_to_stdout = true;
+        BundleAdjustmentConfig ba_config;
+        for (const auto& d : pickedImgs)
+        {
+            ba_config.AddImage(incrementalImages[d]);
+        }
+        for (const auto& d : objPts) ba_config.AddVariablePoint(d.first);
+        std::unique_ptr<BundleAdjuster> bundle_adjuster;
+        ba_config.SetConstantCamPose(incrementalImages[0]);  // 1st image
+        bundle_adjuster = CreateDefaultBundleAdjuster(std::move(ba_options), std::move(ba_config), cameraList, imageList, objPts);
+
+
+        std::map<int, Eigen::Quaterniond>qs;
+        std::map<int, Eigen::RowVector3d>ts;
+        for (const auto& d : pickedImgs)
+        {
+            const Image& imag = imageList[d];
+            qs[d] = imag.CamFromWorld().rotation;
+            ts[d] = imag.CamFromWorld().translation.transpose();
+        }
+
+
+        auto solverRet = bundle_adjuster->Solve();
+        for (int j = 0; j < cameraList.size(); j++) LOG_OUT << cameraList[j];
+        if (solverRet.termination_type != ceres::CONVERGENCE)
+        {
+            LOG_ERR_OUT << "not convergence! incremental at total"; 
+        }
+        //else
+        {
+            double final_cost = reprojectTotal(pickedImgs, cameraList, imageList, objPts);
+            LOG_OUT << "final_cost = " << final_cost;
+            if (final_cost > 5)
+            {
+                LOG_ERR_OUT << "final_cost>5 at total";
+                return -1;
+            }
+            for (const auto& d : pickedImgs)
+            {
+                const Image& imag = imageList[d];
+                LOG_OUT << d << "qt" << qs[d] << ", " << ts[d] << "    " << imag.CamFromWorld().rotation << ", " << imag.CamFromWorld().translation.transpose();
+            }
+        }
+    }
+
+
+
     writeResult(dataPath / "result", cameraList, imageList, objPts, poses);
 
     return 0;
