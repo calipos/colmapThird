@@ -408,7 +408,7 @@ bool segmentFrame(bool* show_regist_window)
 
 
 	ImGui::SetNextWindowSize(ImVec2(1280, 960));//ImVec2(x, y)
-	ImGui::Begin("segment", show_regist_window, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
+	ImGui::Begin("segment", show_regist_window, ImGuiWindowFlags_NoTitleBar);
 	ImGui::Text("segment"); 
 
 	int isProcRunning = progress.procRunning.load();

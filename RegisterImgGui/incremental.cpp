@@ -586,7 +586,7 @@ int register_incremental_loop(const std::string& folder)
         auto focal_length = cam.FocalLength();
         auto width = cam.width;
         auto height = cam.height;
-        cam =  Camera::CreateFromModelId(camera_id, CameraModelId::kOpenCV, focal_length, width, height);
+        cam =  Camera::CreateFromModelId(camera_id, CameraModelId::kSimpleRadial, focal_length, width, height);
     }
     for (auto&img:imageList)
     { 
