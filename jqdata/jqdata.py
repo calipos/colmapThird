@@ -1,8 +1,8 @@
+from PIL import Image, ImageDraw
 import os
 import time
 import akshare as ak 
 print(ak.__version__)
-from PIL import Image
 import io
 import numpy as np 
 import easyocr
@@ -112,8 +112,8 @@ def compare_images(img1_path, img2_path, threshold=30):
     
     return diff, diff_thresh, marked_img
 
-time.sleep(1)
-reader = easyocr.Reader(['ch_sim', 'en']) 
+# time.sleep(1)
+# reader = easyocr.Reader(['ch_sim', 'en']) 
 
 def getTimeString():
     local_time = time.localtime() 
@@ -163,13 +163,59 @@ def putInSearch(code,x,y):
     time.sleep(0.2)
     pyautogui.press('enter')
     time.sleep(2)
-
-def recogv2(path):
+def rectPos(rect):
+    np.min(np.vstack(rect), axis=0)
+    np.max(np.vstack(rect), axis=0)
+def parseInfo(img):
     
-    ocr = PaddleOCR(use_angle_cls=True, lang='ch',cpu_threads=4) 
-    result = ocr.predict(path) 
-    for detection in result:
-        print(f"识别到的文字: {detection[1]}, 置信度: {detection[2]:.2f}")
+    ocr = PaddleOCR(use_angle_cls=False, lang='ch',cpu_threads=4) 
+    result = ocr.predict(np.array(img))
+    if len(result) < 1:
+        assert False
+    else:
+        rec_texts = result[0]['rec_texts']
+        rec_scores = result[0]['rec_scores']
+        rec_polys = result[0]['rec_polys']
+
+
+        # draw = ImageDraw.Draw(img)
+        # for d in rec_polys:
+        #     points = []
+        #     points.append((d[0][0], d[0][1]))
+        #     points.append((d[1][0], d[1][1]))
+        #     points.append((d[2][0], d[2][1]))
+        #     points.append((d[3][0], d[3][1]))
+        #     draw.polygon(points, outline='blue', width=2)
+        # img.save('output2.jpg')
+
+
+        assert len(rec_texts)==22
+        startPoss = [x[0] for x in np.min(rec_polys, axis=1)]
+
+        sorted_data = sorted(zip(startPoss, rec_texts, rec_scores, rec_polys))
+        d_sorted, a_sorted, b_sorted, c_sorted = zip(*sorted_data)
+        rec_texts = list(a_sorted)
+        rec_scores = list(b_sorted)
+        rec_polys = list(c_sorted)
+
+
+        startPossY1 = [x[1] for x in np.min(rec_polys[0:11], axis=1)]
+        startPossY2 = [x[1] for x in np.min(rec_polys[11:22], axis=1)]
+
+        sorted_data = sorted(
+            zip(startPossY1, rec_texts[0:11], rec_scores[0:11], rec_polys[0:11]))
+        d_sorted, a_sorted, b_sorted, c_sorted = zip(*sorted_data)
+        rec_texts1 = list(a_sorted)
+        rec_scores1 = list(b_sorted)
+        rec_polys1 = list(c_sorted)
+        sorted_data = sorted(
+            zip(startPossY2, rec_texts[11:22], rec_scores[11:22], rec_polys[11:22]))
+        d_sorted, a_sorted, b_sorted, c_sorted = zip(*sorted_data)
+        rec_texts2 = list(a_sorted)
+        rec_scores2 = list(b_sorted)
+        rec_polys2 = list(c_sorted)
+
+        return rec_texts1, rec_texts2  # items, values
 def findCodeSearch(img):
     result = reader.readtext(img) 
     searchsPos=[]
@@ -187,8 +233,7 @@ def urlBaseCode(code):
     elif code.startswith("000") or code.startswith("001") or code.startswith("002")or code.startswith("300") :
         return  "https://quote.eastmoney.com/concept/sz"+code+".html#chart-k-cyq"
     else:return None
-if __name__ == "__main__":  
-
+if __name__ == "__main__":   
 
 
     currentTime = getTimeString()
@@ -214,36 +259,71 @@ if __name__ == "__main__":
         # pyautogui.hotkey('ctrl', 'v')  
         # time.sleep(0.2)
 
-        # screenSearchBefore = pyautogui.screenshot() 
-        # screenSearchBefore.save('screenSearchBefore.png') 
+
         pyautogui.moveTo(addressPos[0],500)
-        
+
+        pyautogui.scroll(801)
+        time.sleep(1)
         pyautogui.scroll(-401)   
-        pyautogui.click(1141,528, button='left')
-        pyautogui.click(1141,614, button='left') 
+        time.sleep(1)
+        # screenSearchBefore = pyautogui.screenshot()
+        # screenSearchBefore.save('screenSearchBefore.png')
+
+        pyautogui.click(1141, 418, button='left')
+        pyautogui.moveTo(1141, 490)
+        time.sleep(0.5)
+        pyautogui.click(1141, 490, button='left')
+        time.sleep(0.5)
+
 
         for mouseX in  [int(1258-9.43*x) for x in range(0,66)]:
             pyautogui.moveTo(mouseX,888)
             time.sleep(0.3)
             
             screenSearchAfter = pyautogui.screenshot()
-            screenSearchAfter.save('screenSearchBefore.png')
-            dailyInfo = pyautogui.screenshot(region=(530, 686, 110, 209))
-            dailyInfo.save('dailyInfo.png')
-            result = reader.recognize(np.array(dailyInfo))
-            exit(-1)
-            print(result)
-        pyautogui.dragTo(1258,888,duration=3)
-        for mouseX in  [int(1258-9.43*x) for x in range(0,66)]:
-            pyautogui.moveTo(mouseX,888)
-            time.sleep(0.3) 
-            dailyInfo = pyautogui.screenshot(region=(530, 686, 110, 209))
-            result = reader.recognize(np.array(dailyInfo))
-            print(result)
+            dailyInfo = screenSearchAfter.crop((418, 476, 114+418, 212+476))
+            # dailyInfo.save('dailyInfo.png')
+            items, values = parseInfo(dailyInfo)
+            print(items, values)
+            pyautogui.hotkey('ctrl', 'a')
+            time.sleep(0.5)  # 极短延迟，确保操作完成
 
-        
-        screenSearchAfter = pyautogui.screenshot()
-        screenSearchAfter.save('screenSearchBefore.png')
+            # 3. 模拟 Ctrl+C 复制
+            pyautogui.hotkey('ctrl', 'c')
+            time.sleep(0.5)
+            pyautogui.click(addressPos[0], 500, button='left')
+            # 4. 用 pyperclip 读取剪贴板内容
+            page_text = pyperclip.paste()
+            profitRateStr = page_text[page_text.find(
+                '获利比例'):page_text.find('获利比例')+100]
+            profitRate = float(profitRateStr.split('\t')[1].split('%')[0])
+            print(profitRate)
+
+        pyautogui.dragTo(1258,888,duration=3)
+        for mouseX in [int(1258-9.43*x) for x in range(0, 66)]:
+            pyautogui.moveTo(mouseX, 888)
+            time.sleep(0.3)
+
+            screenSearchAfter = pyautogui.screenshot()
+            dailyInfo = screenSearchAfter.crop((418, 476, 114+418, 212+476))
+            # dailyInfo.save('dailyInfo.png')
+            items, values = parseInfo(dailyInfo)
+            print(items, values)
+            pyautogui.hotkey('ctrl', 'a')
+            time.sleep(0.5)  # 极短延迟，确保操作完成
+
+            # 3. 模拟 Ctrl+C 复制
+            pyautogui.hotkey('ctrl', 'c')
+            time.sleep(0.5)
+            pyautogui.click(addressPos[0], 500, button='left')
+            # 4. 用 pyperclip 读取剪贴板内容
+            page_text = pyperclip.paste()
+            profitRateStr = page_text[page_text.find(
+                '获利比例'):page_text.find('获利比例')+100]
+            profitRate = float(profitRateStr.split('\t')[1].split('%')[0])
+            print(profitRate)
+
+         
 
         exit(0)
         # searchPos = findCodeSearch('full_screenshot.png')
