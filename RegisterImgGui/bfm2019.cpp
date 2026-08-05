@@ -134,7 +134,65 @@ version/minorVersion
         fout.close();
         return;
     }
+    void saveToBin(const std::filesystem::path& path) {
+        return;
+    }
+    template<typename Type>
+    int encodeType()
+    {
+        return 0;
+    } 
 
+    template<typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
+    void saveToBin(std::ofstream& fo, const Eigen::Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols>& data)
+    {
+
+        if constexpr (std::is_same_v<_Scalar, float>) {
+            // Type 是 float
+            std::cout << "Saving float" << std::endl;
+            int typeEncode = 1;
+            fo.write((const char*)&typeEncode,sizeof(int));
+        }
+        else if constexpr (std::is_same_v<_Scalar, double>) {
+            // Type 是 double
+            std::cout << "Saving double" << std::endl;
+            int typeEncode = 2;
+            fo.write((const char*)&typeEncode, sizeof(int));
+        }
+        else if constexpr (std::is_same_v<_Scalar, int>) {
+            // Type 是 int
+            std::cout << "Saving int" << std::endl;
+            int typeEncode = 3;
+            fo.write((const char*)&typeEncode, sizeof(int));
+        }
+        else {
+            static_assert(false, "Unsupported type!");
+        }
+        int rows = data.rows();
+        int cols = data.cols();
+        fo.write((const char*)&rows, sizeof(int));
+        fo.write((const char*)&cols, sizeof(int));
+        for (int i = 0; i < data.rows(); ++i) {
+            for (int j = 0; j < data.cols(); ++j) {
+                fo.write((const char*)&data(i, j), sizeof(_Scalar));
+            } 
+        }
+    }
+     
+    //Matrix<Type, Size, Size>
+    template<typename T, typename... Args>
+    void saveToBin(const std::filesystem::path& path,const T&data0,const Args&...rest)
+    {
+        std::ofstream file(path, std::ios::app); // 追加模式
+        if (!file.is_open()) {
+            throw std::runtime_error("Cannot open file: " + path.string());
+        }
+        saveToBin(file, data0);
+        file.flush();
+        file.close();
+
+        saveToBin(path, rest...);
+    }
     Bfm2019::Bfm2019() {}
     Bfm2019::Bfm2019(const std::filesystem::path& bfmFacePath)
     {
@@ -393,6 +451,9 @@ version/minorVersion
         shapeDim = shape_pcaBasis.cols();
         expressionDim = expression_pcaBasis.cols();
         colorDim = color_pcaBasis.cols();
+
+
+        saveToBin("123.bin", shape_pcaStandardDeviation, expression_pcaStandardDeviation, color_pcaStandardDeviation, shape_mean, shape_pcaBasis, expression_mean, expression_pcaBasis);
     } 
     void Bfm2019::generateRandomFace(Eigen::MatrixX3f& V, Eigen::MatrixX3f& C)const
     {
@@ -666,7 +727,7 @@ int test_TriangulateMultiViewPoint()
 }
 int test_bfm(void)
 {
-    if (1)
+    if (0)
     {
         Eigen::MatrixX3f src(4, 3);
         Eigen::MatrixX3f tar(4, 3);
