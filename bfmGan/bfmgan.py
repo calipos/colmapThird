@@ -1,115 +1,174 @@
+import imageio
 import os
 import time
 import numpy as np
 import torch
 import torch.nn.functional as F
 import struct
+import pyrender
+import trimesh
 
-
-
-
-class Bfm2019:
-    def __init__(self,
-                 bfm_folder='./BFM',
-                 defaultFaceFile='model2019_bfm(47439p94464f).h5',
-                 defaultHeadFile='model2019_fullHead(58203p116160f).h5',
-                 defaultFaceLmIdxFile='index_mp468_from_model2019_47439p.npy'):
-        self.bfm_folder=bfm_folder
-        faceH5Path = os.path.join(bfm_folder, defaultFaceFile)
-        headH5Path = os.path.join(bfm_folder, defaultHeadFile)
-        faceLmIdxFile = os.path.join(bfm_folder, defaultFaceLmIdxFile)
-        if not os.path.isfile(faceH5Path):
-            print("not exists : ",faceH5Path)
-            return
-        if not os.path.isfile(headH5Path):
-            print("not exists : ",headH5Path)
-            return         
-        if not os.path.isfile(faceLmIdxFile):
-            print("not exists : ", faceLmIdxFile)
-            return            
-        with h5py.File(faceH5Path, 'r') as h5_file:
-            shape_points = h5_file['shape/representer/points'][:]
-            shape_cells = h5_file['shape/representer/cells'][:]
-            shape_mean = h5_file['shape/model/mean'][:]
-            shape_pcaBasis = h5_file['shape/model/pcaBasis'][:]
-            expression_points = h5_file['expression/representer/points'][:]
-            expression_cells = h5_file['expression/representer/cells'][:]
-            expression_mean = h5_file['expression/model/mean'][:]
-            expression_pcaBasis = h5_file['expression/model/pcaBasis'][:]
-
-        randomShape = (shape_pcaBasis@np.random.rand(199,1)+shape_mean.reshape(-1,1)).reshape(47439,3)
-        randomExpression = (expression_pcaBasis@np.random.rand(100, 1) +
-                            expression_mean.reshape(-1, 1)).reshape(47439, 3)
-        np.savetxt('randomShape.txt', randomShape, delimiter=' ')
-        np.savetxt('randomExpression.txt', randomExpression, delimiter=' ')
-        np.savetxt('randomFace.txt', randomExpression +
-                   randomShape, delimiter=' ')
-
-        # mean face shape. [3*N,1]
-        self.mean_shape = (shape_mean+expression_mean).astype(np.float32)
-        # identity basis. [3*N,80]
-        self.id_base = shape_pcaBasis.astype(np.float32)
-        # expression basis. [3*N,64]
-        self.exp_base = expression_pcaBasis.astype(np.float32) 
-        self.face_tri = np.array(shape_cells.T, dtype=np.int64)
-        # vertex indices for 68 landmarks. starts from 0. [68,1]
-        self.keypoints = np.load(faceLmIdxFile).astype(np.int64)
-        self.device = 'cpu'
-
-    def to(self, device):
-        self.device = device
-        for key, value in self.__dict__.items():
-            if type(value).__module__ == np.__name__:
-                setattr(self, key, torch.tensor(value).to(device))
-
-    def getMediapipe486BfmBase(self,):
-        mediapipe486Len = len(self.keypoints)  # 只有480  里没有6个点的对应
-        id_486part = np.zeros([mediapipe486Len*3, 199])
-        exp_486part = np.zeros([mediapipe486Len*3, 100])
-        mean_486part = np.zeros([mediapipe486Len*3, 1])
-        for i in range(mediapipe486Len):
-            I = int(self.keypoints[i])
-            if I < 0:
-                continue
-            id_486part[3*i, ...] = self.id_base[3*I, ...]
-            id_486part[3*i+1, ...] = self.id_base[3*I+1, ...]
-            id_486part[3*i+2, ...] = self.id_base[3*I+2, ...]
-
-            exp_486part[3*i, ...] = self.exp_base[3*I, ...]
-            exp_486part[3*i+1, ...] = self.exp_base[3*I+1, ...]
-            exp_486part[3*i+2, ...] = self.exp_base[3*I+2, ...]
-
-            mean_486part[3*i, ...] = self.mean_shape[3*I, ...]
-            mean_486part[3*i+1, ...] = self.mean_shape[3*I+1, ...]
-            mean_486part[3*i+2, ...] = self.mean_shape[3*I+2, ...]
-        return id_486part, exp_486part, mean_486part
-
-
-if __name__ == '__main__':
-    bfmDateFile = 'RegisterImgGui/123.bin'
-    with open(bfmDateFile, 'rb') as f: 
+def readEigenData(path):
+    assert os.path.exists(path)
+    with open(path, 'rb') as f:
         typeEncode = struct.unpack('<i', f.read(4))[0]
         rows = struct.unpack('<i', f.read(4))[0]
         cols = struct.unpack('<i', f.read(4))[0]
-        if 1==typeEncode:
-        
-        # 读取后续 8 字节作为两个 float（小端序）
-        float1, float2 = struct.unpack('<ff', f.read(8))
-        print(f"浮点数: {float1}, {float2}")
+        if typeEncode == 1:  # float
+            data = f.read(rows*cols*4)
+            arr = np.array(struct.unpack(
+                '<'+str(rows*cols)+'f', data), dtype=np.float32)
+        elif typeEncode == 3:  # int
+            data = f.read(rows*cols*4)
+            arr = np.array(struct.unpack(
+                '<'+str(rows*cols)+'i', data), dtype=np.int32)
+        else:
+            assert False
+        return arr.reshape(rows, cols)
+
+
+def saveFacePts(facePts, path):
+    if isinstance(facePts, torch.Tensor):
+        if facePts.requires_grad:
+            facePtsNp = facePts.detach().numpy()
+        else:
+            facePtsNp = facePts.numpy()
+    else:
+        facePtsNp = facePts
+    if facePtsNp.ndim == 2:
+        facePtsNp = facePtsNp.reshape([1, -1, 3])
+    if facePtsNp.ndim == 3:
+        headCnt = facePtsNp.shape[0]
+        np.savetxt(path, facePtsNp[0], fmt='%.18e',
+                   delimiter=' ')  # 保存为2位小数的浮点数，用逗号分隔
+        for i in range(1, headCnt):
+            # 保存为2位小数的浮点数，用逗号分隔
+            np.savetxt(path+str(i)+'.pts',
+                       facePtsNp[i], fmt='%.18e', delimiter=' ')
+
+
+def saveColorFacePts(path,facePts, face_texture):
+    if isinstance(facePts, torch.Tensor):
+        facePtsNp = facePts.numpy()
+        face_textureNp = face_texture.numpy()
+    else:
+        facePtsNp = facePts
+        face_textureNp = face_texture
+    if facePtsNp.ndim == 2:
+        facePtsNp = facePtsNp.reshape([1, -1, 3])
+    if face_textureNp.ndim == 2:
+        face_textureNp = face_textureNp.reshape([1, -1, 3])
+    if facePtsNp.ndim == 3:
+        headCnt = facePtsNp.shape[0]
+        np.savetxt(path, np.concatenate(
+            [facePtsNp[0], face_textureNp[0]], axis=1), fmt='%.18e', delimiter=' ')  # 保存为2位小数的浮点数，用逗号分隔
+        for i in range(1, headCnt):
+            np.savetxt(path+str(i)+'.pts', np.concatenate(
+                [facePtsNp[i], face_textureNp[i]], axis=1), fmt='%.18e', delimiter=' ')  # 保存为2位小数的浮点数，用逗号分隔
+
+
+def saveObj(filepath, verts, faces):
+    thefile = open(filepath, 'w')
+    for item in verts:
+        thefile.write("v {0} {1} {2}\n".format(item[0], item[1], item[2]))
+    for item in faces:
+        thefile.write("f {0} {1} {2}\n".format(
+            item[0]+1, item[1]+1, item[2]+1))
+    thefile.close()
+
+
+def saveColorObj(filepath, verts, color,faces):
+    thefile = open(filepath, 'w')
+    for i in range(len(verts)):
+        thefile.write("v {0} {1} {2} {3} {4} {5}\n".format(
+            verts[i, 0], verts[i, 1], verts[i, 2], color[i, 0], color[i, 1], color[i, 2]))
+    for item in faces:
+        thefile.write("f {0} {1} {2}\n".format(
+            item[0]+1, item[1]+1, item[2]+1))
+    thefile.close()
+
+def generParamFace(param, shape_pcaStandardDeviation, expression_pcaStandardDeviation, color_pcaStandardDeviation, shape_mean, shape_pcaBasis, expression_mean, expression_pcaBasis):
+    print()
+
+
+if __name__ == '__main__':
+    shape_pcaStandardDeviation = readEigenData(
+        'RegisterImgGui/shape_pcaStandardDeviation.bin')
+    expression_pcaStandardDeviation = readEigenData(
+        'RegisterImgGui/expression_pcaStandardDeviation.bin')
+    color_pcaStandardDeviation = readEigenData(
+        'RegisterImgGui/color_pcaStandardDeviation.bin')
+    shape_mean = readEigenData('RegisterImgGui/shape_mean.bin')
+    shape_pcaBasis = readEigenData(
+        'RegisterImgGui/shape_pcaBasis.bin')
+    expression_mean = readEigenData(
+        'RegisterImgGui/expression_mean.bin')
+    expression_pcaBasis = readEigenData(
+        'RegisterImgGui/expression_pcaBasis.bin')
+    color_mean = readEigenData('RegisterImgGui/color_mean.bin')
+    color_pcaBasis = readEigenData(
+        'RegisterImgGui/color_pcaBasis.bin')
+    face_tri = readEigenData(
+        'RegisterImgGui/facet.bin')
+
+    shapeParam = np.random.uniform(-1., 1.,
+                                   size=(shape_pcaBasis.shape[1], 1))
+    expressionParam = np.random.uniform(-1., 1.,
+                                        size=(
+                                            expression_pcaBasis.shape[1], 1))
+    colorParam = np.random.uniform(-1., 1.,
+                                   size=(color_pcaBasis.shape[1], 1))
+    Vert = shape_mean+shape_pcaBasis@(shapeParam*shape_pcaStandardDeviation) + \
+        expression_pcaBasis@(expressionParam*expression_pcaStandardDeviation)
+    texture = color_mean+color_pcaBasis@(colorParam*color_pcaStandardDeviation)
+    Vert = Vert.reshape(-1, 3)
+    texture = np.clip(texture, 0, 1).reshape(-1, 3)
+    saveColorObj("bfmGan/bfm09.obj", Vert, texture,face_tri)
+    # saveColorFacePts("bfmGan/bfm092.obj", Vert, texture)
+
+    mesh = trimesh.load('bfmGan/bfm09.obj')
+
+    # 创建一个场景
+    scene = trimesh.Scene([mesh])
+
+    scene.set_camera(distance=300.0)  # 相机距离模型中心3个单位
+
+    # 渲染成图像（返回的是像素数组，直接使用顶点颜色）
+    img = scene.save_image(resolution=(800, 600),  visible=True)
+
+    # 保存
+    with open('bfmGan/output_trimesh.png', 'wb') as f:
+        f.write(img)
+    exit(0)
+
+    material = pyrender.MetallicRoughnessMaterial(
+        baseColorFactor=[1.0, 1.0, 1.0, 1.0],
+        metallicFactor=0.0,
+        roughnessFactor=1.0,
+        alphaMode='OPAQUE'
+    )
+    mesh = trimesh.load('bfmGan/bfm09.obj')
+    mesh = pyrender.Mesh.from_trimesh(mesh, material=material)
+
+    # 2. 搭建场景
+    scene = pyrender.Scene()
+    scene.add(mesh)
+
+
+    camera =pyrender.OrthographicCamera(100,100,5,300)
+    # camera = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
+    camera_pose = np.eye(4)
+    # 将相机放在 Z 轴正方向，距离物体 2 个单位远
+    camera_pose[2, 3] = 200.0
+    scene.add(camera, pose=camera_pose)
 
 
 
-    with h5py.File('models/model2019_face12.h5', 'r') as f:
-        print("文件中的所有对象 (路径):") 
-    facemodel2019 = Bfm2019('Deep3d/BFM')
+    # 5. 离屏渲染，拍一张照片
+    r = pyrender.OffscreenRenderer(viewport_width=800, viewport_height=600)
+    color, depth = r.render(scene, flags=pyrender.RenderFlags.FLAT)
 
-    facemodel = ParametricFaceModel(facemodel2019.bfm_folder)
-    shape_base = facemodel.id_base.reshape(-1,3,80)
-    expression_base = facemodel.exp_base.reshape(-1,3,64)
-    mean_base = facemodel.mean_shape.reshape(-1,3)
-    shape_weight = np.zeros([80,1])
-    expression_weight = np.zeros([64,1])
-    vts = (shape_base@shape_weight + expression_base@expression_weight).reshape(-1,3)+mean_base
-    vts=vts*100
-    save.saveObj("bfm09.obj",vts,facemodel.face_tri)
+    # 6. 保存图像 (color 是 RGB 数组)
+    imageio.imwrite('bfmGan/output.png', color)
+
     print()

@@ -146,23 +146,23 @@ version/minorVersion
     template<typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
     void saveToBin(std::ofstream& fo, const Eigen::Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols>& data)
     {
-
+        int typeEncode = -1;
         if constexpr (std::is_same_v<_Scalar, float>) {
             // Type 是 float
             std::cout << "Saving float" << std::endl;
-            int typeEncode = 1;
+            typeEncode = 1;
             fo.write((const char*)&typeEncode,sizeof(int));
         }
         else if constexpr (std::is_same_v<_Scalar, double>) {
             // Type 是 double
             std::cout << "Saving double" << std::endl;
-            int typeEncode = 2;
+            typeEncode = 2;
             fo.write((const char*)&typeEncode, sizeof(int));
         }
         else if constexpr (std::is_same_v<_Scalar, int>) {
             // Type 是 int
             std::cout << "Saving int" << std::endl;
-            int typeEncode = 3;
+            typeEncode = 3;
             fo.write((const char*)&typeEncode, sizeof(int));
         }
         else {
@@ -174,16 +174,31 @@ version/minorVersion
         fo.write((const char*)&cols, sizeof(int));
         for (int i = 0; i < data.rows(); ++i) {
             for (int j = 0; j < data.cols(); ++j) {
-                fo.write((const char*)&data(i, j), sizeof(_Scalar));
+                if (typeEncode == 1)
+                {
+                    float d = data(i, j);
+                    fo.write((const char*)&d, sizeof(float));
+                }
+                if (typeEncode == 2)
+                {
+                    double d = data(i, j);
+                    fo.write((const char*)&d, sizeof(double));
+                }
+                if (typeEncode == 3)
+                {
+                    int d = data(i, j);
+                    fo.write((const char*)&d, sizeof(int));
+                }
             } 
         }
+        return;
     }
      
     //Matrix<Type, Size, Size>
     template<typename T, typename... Args>
     void saveToBin(const std::filesystem::path& path,const T&data0,const Args&...rest)
     {
-        std::ofstream file(path, std::ios::app); // 追加模式
+        std::ofstream file(path, std::ios::app| std::ios::binary); // 追加模式
         if (!file.is_open()) {
             throw std::runtime_error("Cannot open file: " + path.string());
         }
@@ -346,7 +361,6 @@ version/minorVersion
             color_pcaStandardDeviation = color_pcaStandardDeviation.cwiseSqrt();
         }
 
-
         {
             //metadata/landmarks/json
             landmarks.clear();
@@ -452,8 +466,22 @@ version/minorVersion
         expressionDim = expression_pcaBasis.cols();
         colorDim = color_pcaBasis.cols();
 
+        saveToBin("shape_pcaStandardDeviation.bin", shape_pcaStandardDeviation);
+        saveToBin("expression_pcaStandardDeviation.bin", expression_pcaStandardDeviation);
+        saveToBin("color_pcaStandardDeviation.bin", color_pcaStandardDeviation);
+        saveToBin("shape_mean.bin", shape_mean);
+        saveToBin("shape_pcaBasis.bin", shape_pcaBasis);
+        saveToBin("expression_mean.bin", expression_mean);
+        saveToBin("expression_pcaBasis.bin", expression_pcaBasis);
+        saveToBin("facet.bin", F);
+        saveToBin("color_mean.bin", color_mean);
+        saveToBin("color_pcaBasis.bin", color_pcaBasis);
+        saveToBin("color_pcaStandardDeviation.bin", color_pcaStandardDeviation);
 
-        saveToBin("123.bin", shape_pcaStandardDeviation, expression_pcaStandardDeviation, color_pcaStandardDeviation, shape_mean, shape_pcaBasis, expression_mean, expression_pcaBasis);
+        
+
+
+        //saveToBin("123.bin", shape_pcaStandardDeviation, expression_pcaStandardDeviation, color_pcaStandardDeviation, shape_mean, shape_pcaBasis, expression_mean, expression_pcaBasis);
     } 
     void Bfm2019::generateRandomFace(Eigen::MatrixX3f& V, Eigen::MatrixX3f& C)const
     {
@@ -820,6 +848,11 @@ int test_bfm(void)
         LOG_ERR_OUT << "need models/model2019_face12.h5";
         return -1;
     }
+
+
+
+
+
     bfm::Bfm2019 model(bfmFacePath); 
     cv::Mat face;
     cv::Mat color;
