@@ -5,9 +5,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import struct
-import pyrender
 import trimesh
-
+import pyrender
+from PIL import Image
 def readEigenData(path):
     assert os.path.exists(path)
     with open(path, 'rb') as f:
@@ -93,23 +93,23 @@ def generParamFace(param, shape_pcaStandardDeviation, expression_pcaStandardDevi
 
 if __name__ == '__main__':
     shape_pcaStandardDeviation = readEigenData(
-        'RegisterImgGui/shape_pcaStandardDeviation.bin')
+        'models/shape_pcaStandardDeviation.bin')
     expression_pcaStandardDeviation = readEigenData(
-        'RegisterImgGui/expression_pcaStandardDeviation.bin')
+        'models/expression_pcaStandardDeviation.bin')
     color_pcaStandardDeviation = readEigenData(
-        'RegisterImgGui/color_pcaStandardDeviation.bin')
-    shape_mean = readEigenData('RegisterImgGui/shape_mean.bin')
+        'models/color_pcaStandardDeviation.bin')
+    shape_mean = readEigenData('models/shape_mean.bin')
     shape_pcaBasis = readEigenData(
-        'RegisterImgGui/shape_pcaBasis.bin')
+        'models/shape_pcaBasis.bin')
     expression_mean = readEigenData(
-        'RegisterImgGui/expression_mean.bin')
+        'models/expression_mean.bin')
     expression_pcaBasis = readEigenData(
-        'RegisterImgGui/expression_pcaBasis.bin')
-    color_mean = readEigenData('RegisterImgGui/color_mean.bin')
+        'models/expression_pcaBasis.bin')
+    color_mean = readEigenData('models/color_mean.bin')
     color_pcaBasis = readEigenData(
-        'RegisterImgGui/color_pcaBasis.bin')
+        'models/color_pcaBasis.bin')
     face_tri = readEigenData(
-        'RegisterImgGui/facet.bin')
+        'models/facet.bin')
 
     shapeParam = np.random.uniform(-1., 1.,
                                    size=(shape_pcaBasis.shape[1], 1))
@@ -122,53 +122,63 @@ if __name__ == '__main__':
         expression_pcaBasis@(expressionParam*expression_pcaStandardDeviation)
     texture = color_mean+color_pcaBasis@(colorParam*color_pcaStandardDeviation)
     Vert = Vert.reshape(-1, 3)
-    texture = np.clip(texture, 0, 1).reshape(-1, 3)
+    texture = np.clip(texture, 0, 1).reshape(-1, 3)*255
+    texture=np.column_stack([texture, 255*np.ones([texture.shape[0],1])]).astype(np.uint8)
     saveColorObj("bfmGan/bfm09.obj", Vert, texture,face_tri)
-    # saveColorFacePts("bfmGan/bfm092.obj", Vert, texture)
 
-    mesh = trimesh.load('bfmGan/bfm09.obj')
-
-    # 创建一个场景
-    scene = trimesh.Scene([mesh])
-
-    scene.set_camera(distance=300.0)  # 相机距离模型中心3个单位
-
-    # 渲染成图像（返回的是像素数组，直接使用顶点颜色）
-    img = scene.save_image(resolution=(800, 600),  visible=True)
-
-    # 保存
-    with open('bfmGan/output_trimesh.png', 'wb') as f:
-        f.write(img)
-    exit(0)
-
-    material = pyrender.MetallicRoughnessMaterial(
-        baseColorFactor=[1.0, 1.0, 1.0, 1.0],
-        metallicFactor=0.0,
-        roughnessFactor=1.0,
-        alphaMode='OPAQUE'
-    )
-    mesh = trimesh.load('bfmGan/bfm09.obj')
-    mesh = pyrender.Mesh.from_trimesh(mesh, material=material)
-
-    # 2. 搭建场景
+    trimesh_obj = trimesh.Trimesh(vertices=Vert, faces=face_tri, vertex_colors=texture)
+    mesh = pyrender.Mesh.from_trimesh(trimesh_obj)
     scene = pyrender.Scene()
     scene.add(mesh)
+    bounds = trimesh_obj.bounds
+    model_size = np.max(bounds[1] - bounds[0])
+    camera = pyrender.OrthographicCamera(xmag=128 , 
+                                        ymag=128 ,
+                                        znear=0.01, 
+                                        zfar=300.0)
 
-
-    camera =pyrender.OrthographicCamera(100,100,5,300)
-    # camera = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
+    cameraCnt=7
+    camera_nodes=[]
     camera_pose = np.eye(4)
-    # 将相机放在 Z 轴正方向，距离物体 2 个单位远
-    camera_pose[2, 3] = 200.0
-    scene.add(camera, pose=camera_pose)
+    camera_pose[:3, 3] = np.array([0, 0, 200])
+    node = scene.add(camera, pose=camera_pose)
+    camera_nodes.append(node)
+    for camera_i in range(1,cameraCnt):
+        theta = 3.141592653589793*0.4/cameraCnt*camera_i 
+        camera_pose = np.eye(4)
+        camera_pose[0,0] = np.cos(theta)
+        camera_pose[0,2] = np.sin(theta)
+        camera_pose[2,0] = -np.sin(theta)
+        camera_pose[2,2] = np.cos(theta)
+        # camera_pose=camera_pose.T
+        camera_pose[:3, 3] = np.array([200*np.sin(theta), 0, 200*np.cos(theta)])
+        node = scene.add(camera, pose=camera_pose)
+        camera_nodes.append(node)
+    for camera_i in range(1,cameraCnt):
+        theta = -3.141592653589793*0.4/cameraCnt*camera_i  
+        camera_pose = np.eye(4)
+        camera_pose[0,0] = np.cos(theta)
+        camera_pose[0,2] = np.sin(theta)
+        camera_pose[2,0] = -np.sin(theta)
+        camera_pose[2,2] = np.cos(theta)
+        # camera_pose=camera_pose.T
+        camera_pose[:3, 3] = np.array([200*np.sin(theta), 0, 200*np.cos(theta)])
+        node = scene.add(camera, pose=camera_pose)
+        camera_nodes.append(node)
+        
 
+ 
+    renderer = pyrender.OffscreenRenderer(viewport_width=600, 
+                                        viewport_height=600)
 
-
-    # 5. 离屏渲染，拍一张照片
-    r = pyrender.OffscreenRenderer(viewport_width=800, viewport_height=600)
-    color, depth = r.render(scene, flags=pyrender.RenderFlags.FLAT)
-
-    # 6. 保存图像 (color 是 RGB 数组)
-    imageio.imwrite('bfmGan/output.png', color)
-
-    print()
+    print(f"场景中有 {len(camera_nodes)} 个相机")
+    for i, camera_node in enumerate(camera_nodes):
+        scene.main_camera_node = camera_nodes[i]
+        # 设置当前要渲染的相机
+        color, depth = renderer.render(scene, flags=pyrender.RenderFlags.FLAT)
+        Image.fromarray(color).save(f'bfmGan/output_{i:02d}.png')
+        Image.fromarray((depth>0).astype(np.uint8)*255).save(f'bfmGan/mask_{i:02d}.png') 
+    
+    # color, depth = renderer.render(scene, flags=pyrender.RenderFlags.FLAT)
+    # Image.fromarray(color).save('bfmGan/output.png')
+    # Image.fromarray((depth>0).astype(np.uint8)*255).save('bfmGan/mask.png')
