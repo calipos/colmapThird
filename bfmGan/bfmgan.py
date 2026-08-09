@@ -8,6 +8,12 @@ import struct
 import trimesh
 import pyrender
 from PIL import Image
+import voxelCarving
+from tools import figureMediapipeKeyPts
+from tools import dlibLandMark
+from tools import insightFaceLandmark
+from tools import landmarkShapeType
+from tools import figureLandmark
 def readEigenData(path):
     assert os.path.exists(path)
     with open(path, 'rb') as f:
@@ -90,8 +96,158 @@ def saveColorObj(filepath, verts, color,faces):
 def generParamFace(param, shape_pcaStandardDeviation, expression_pcaStandardDeviation, color_pcaStandardDeviation, shape_mean, shape_pcaBasis, expression_mean, expression_pcaBasis):
     print()
 
+def generRandFaceDat():
+
+
+    landmarkFinder=None
+    landmarkType = 'insightface'
+
+    if landmarkType=='dlib':
+        faceParamPath = 'models/mmod_human_face_detector.dat'
+        landmarkParamPath = 'models/shape_predictor_68_face_landmarks.dat'
+        landmarkFinder = dlibLandMark.DlibFinder(
+            faceParamPath, landmarkParamPath)
+
+    if landmarkType == 'mediapipe':
+        paramPath = 'models/face_landmarker_v2_with_blendshapes.task'
+        landmarkFinder = figureMediapipeKeyPts.MediapipeFinder(paramPath)
+
+    if landmarkType == 'insightface':
+        faceParamPath = 'models/buffalo_l/det_10g.onnx'
+        landmarkParamPath = 'models/buffalo_l/2d106det.onnx'
+        landmarkFinder = insightFaceLandmark.InsightFaceFinder(
+            faceParamPath, landmarkParamPath)
+
+    if landmarkFinder == None:
+        print('landmarkFinder == None')
+        assert False
+
+    shape_pcaStandardDeviation = readEigenData(
+        'models/shape_pcaStandardDeviation.bin')
+    expression_pcaStandardDeviation = readEigenData(
+        'models/expression_pcaStandardDeviation.bin')
+    color_pcaStandardDeviation = readEigenData(
+        'models/color_pcaStandardDeviation.bin')
+    shape_mean = readEigenData('models/shape_mean.bin')
+    shape_pcaBasis = readEigenData(
+        'models/shape_pcaBasis.bin')
+    expression_mean = readEigenData(
+        'models/expression_mean.bin')
+    expression_pcaBasis = readEigenData(
+        'models/expression_pcaBasis.bin')
+    color_mean = readEigenData('models/color_mean.bin')
+    color_pcaBasis = readEigenData(
+        'models/color_pcaBasis.bin')
+    face_tri = readEigenData(
+        'models/facet.bin')
+    
+    faceCnt=10
+    cameraCnt=4
+    scene = pyrender.Scene()
+    camera = pyrender.OrthographicCamera(xmag=160 , 
+                                        ymag=160 ,
+                                        znear=0.01, 
+                                        zfar=300.0)
+    
+    
+    renderer = pyrender.OffscreenRenderer(viewport_width=600, 
+                                            viewport_height=600)
+    reconstructor = voxelCarving.Silhouette3DReconstructor(voxel_resolution=100, world_size=200.0)
+    for faceIdx in range(faceCnt):
+        scene.clear()
+        R_list=[]
+        camera_nodes=[]
+        camera_pose = np.eye(4)
+        camera_pose[:3, 3] = np.array([0, 0, 200])
+        R_list .append(camera_pose[0:3,0:3])
+        node = scene.add(camera, pose=camera_pose)
+        camera_nodes.append(node)
+        for camera_i in range(1,cameraCnt):
+            noisyTheta = np.random.uniform(-5., 5.)/180*np.pi
+            theta = 3.141592653589793*0.5/cameraCnt*camera_i +noisyTheta
+            camera_pose = np.eye(4)
+            camera_pose[0,0] = np.cos(theta)
+            camera_pose[0,2] = np.sin(theta)
+            camera_pose[2,0] = -np.sin(theta)
+            camera_pose[2,2] = np.cos(theta)
+            camera_pose[:3, 3] = np.array([200*np.sin(theta), 0, 200*np.cos(theta)])
+            R_list .append(camera_pose[0:3,0:3])
+            node = scene.add(camera, pose=camera_pose)
+            camera_nodes.append(node)
+        for camera_i in range(1,cameraCnt):
+            noisyTheta = np.random.uniform(-5., 5.)/180*np.pi
+            theta = -3.141592653589793*0.5/cameraCnt*camera_i   +noisyTheta
+            camera_pose = np.eye(4)
+            camera_pose[0,0] = np.cos(theta)
+            camera_pose[0,2] = np.sin(theta)
+            camera_pose[2,0] = -np.sin(theta)
+            camera_pose[2,2] = np.cos(theta)
+            # camera_pose=camera_pose.T
+            camera_pose[:3, 3] = np.array([200*np.sin(theta), 0, 200*np.cos(theta)])
+            R_list .append(camera_pose[0:3,0:3])
+            node = scene.add(camera, pose=camera_pose)
+            camera_nodes.append(node)
+
+
+
+
+        shapeParam = np.random.uniform(-1., 1.,
+                                   size=(shape_pcaBasis.shape[1], 1))
+        expressionParam = np.random.uniform(-1., 1.,
+                                            size=(
+                                                expression_pcaBasis.shape[1], 1))
+        colorParam = np.random.uniform(-1., 1.,
+                                    size=(color_pcaBasis.shape[1], 1))
+        Vert = shape_mean+shape_pcaBasis@(shapeParam*shape_pcaStandardDeviation) + \
+            expression_pcaBasis@(expressionParam*expression_pcaStandardDeviation)
+        texture = color_mean+color_pcaBasis@(colorParam*color_pcaStandardDeviation)
+        Vert = Vert.reshape(-1, 3)
+        texture = np.clip(texture, 0, 1).reshape(-1, 3)*255
+        texture=np.column_stack([texture, 255*np.ones([texture.shape[0],1])]).astype(np.uint8)
+
+        trimesh_obj = trimesh.Trimesh(vertices=Vert, faces=face_tri, vertex_colors=texture)
+        mesh = pyrender.Mesh.from_trimesh(trimesh_obj)
+        mesh_node = scene.add(mesh)
+        mask_list=[]
+        
+        for i, camera_node in enumerate(camera_nodes):
+            scene.main_camera_node = camera_nodes[i]
+            # 设置当前要渲染的相机
+            color, depth = renderer.render(scene, flags=pyrender.RenderFlags.FLAT)
+            if i==0:
+                frontRgb = color
+                frontDep=depth
+                landmarkFinder.proc(
+                            imgPath, landmarkShapeType.LandmarkShapeType.EyeMouthBorder)
+            # Image.fromarray(color).save(f'bfmGan/output_{i:02d}.png')
+            # Image.fromarray((depth>0).astype(np.uint8)*255).save(f'bfmGan/mask_{i:02d}.png') 
+            mask_list.append((depth>0).astype(np.uint8)*255)
+        reconstructor.reset()
+        reconstructor.reconstruct(mask_list,R_list)
+        verts_temp, faces_temp = reconstructor.extract_mesh()
+        voxelCarving.save_obj(verts_temp, faces_temp , f'bfmgan/reconstructed_model{faceIdx:02d}.obj')
+        saveColorObj(f"bfmGan/bfm{faceIdx:02d}.obj", Vert, texture,face_tri)
+
+        scene.clear()
+        camera_pose = np.eye(4)
+        camera_pose[:3, 3] = np.array([0, 0, 200])
+        node = scene.add(camera, pose=camera_pose)
+        trimesh_obj = trimesh.Trimesh(vertices=verts_temp, faces=faces_temp)
+        mesh = pyrender.Mesh.from_trimesh(trimesh_obj)
+        mesh_node = scene.add(mesh)
+        color, depth = renderer.render(scene, flags=pyrender.RenderFlags.FLAT)
+        y, x = np.indices(depth.shape)
+        points = np.column_stack((x.ravel(), y.ravel(), depth.ravel()))
+        np.savetxt('bfmgan/voxelpointcloud.txt', points[points[:,2] > 0], fmt='%d %d %.6f')
+        points = np.column_stack((x.ravel(), y.ravel(), frontDep.ravel()))
+        np.savetxt('bfmgan/pointcloud.txt', points[points[:,2] > 0], fmt='%d %d %.6f')
+
 
 if __name__ == '__main__':
+    generRandFaceDat()
+    exit(0)
+
+
     shape_pcaStandardDeviation = readEigenData(
         'models/shape_pcaStandardDeviation.bin')
     expression_pcaStandardDeviation = readEigenData(
@@ -132,19 +288,19 @@ if __name__ == '__main__':
     scene.add(mesh)
     bounds = trimesh_obj.bounds
     model_size = np.max(bounds[1] - bounds[0])
-    camera = pyrender.OrthographicCamera(xmag=128 , 
-                                        ymag=128 ,
+    camera = pyrender.OrthographicCamera(xmag=160 , 
+                                        ymag=160 ,
                                         znear=0.01, 
                                         zfar=300.0)
 
-    cameraCnt=7
+    cameraCnt=4
     camera_nodes=[]
     camera_pose = np.eye(4)
     camera_pose[:3, 3] = np.array([0, 0, 200])
     node = scene.add(camera, pose=camera_pose)
     camera_nodes.append(node)
     for camera_i in range(1,cameraCnt):
-        theta = 3.141592653589793*0.4/cameraCnt*camera_i 
+        theta = 3.141592653589793*0.5/cameraCnt*camera_i 
         camera_pose = np.eye(4)
         camera_pose[0,0] = np.cos(theta)
         camera_pose[0,2] = np.sin(theta)
@@ -155,7 +311,7 @@ if __name__ == '__main__':
         node = scene.add(camera, pose=camera_pose)
         camera_nodes.append(node)
     for camera_i in range(1,cameraCnt):
-        theta = -3.141592653589793*0.4/cameraCnt*camera_i  
+        theta = -3.141592653589793*0.5/cameraCnt*camera_i  
         camera_pose = np.eye(4)
         camera_pose[0,0] = np.cos(theta)
         camera_pose[0,2] = np.sin(theta)

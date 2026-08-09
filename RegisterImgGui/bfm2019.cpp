@@ -466,17 +466,17 @@ version/minorVersion
         expressionDim = expression_pcaBasis.cols();
         colorDim = color_pcaBasis.cols();
 
-        saveToBin("shape_pcaStandardDeviation.bin", shape_pcaStandardDeviation);
-        saveToBin("expression_pcaStandardDeviation.bin", expression_pcaStandardDeviation);
-        saveToBin("color_pcaStandardDeviation.bin", color_pcaStandardDeviation);
-        saveToBin("shape_mean.bin", shape_mean);
-        saveToBin("shape_pcaBasis.bin", shape_pcaBasis);
-        saveToBin("expression_mean.bin", expression_mean);
-        saveToBin("expression_pcaBasis.bin", expression_pcaBasis);
-        saveToBin("facet.bin", F);
-        saveToBin("color_mean.bin", color_mean);
-        saveToBin("color_pcaBasis.bin", color_pcaBasis);
-        saveToBin("color_pcaStandardDeviation.bin", color_pcaStandardDeviation);
+        saveToBin("../models/shape_pcaStandardDeviation.bin", shape_pcaStandardDeviation);
+        saveToBin("../models/expression_pcaStandardDeviation.bin", expression_pcaStandardDeviation);
+        saveToBin("../models/color_pcaStandardDeviation.bin", color_pcaStandardDeviation);
+        saveToBin("../models/shape_mean.bin", shape_mean);
+        saveToBin("../models/shape_pcaBasis.bin", shape_pcaBasis);
+        saveToBin("../models/expression_mean.bin", expression_mean);
+        saveToBin("../models/expression_pcaBasis.bin", expression_pcaBasis);
+        saveToBin("../models/facet.bin", F);
+        saveToBin("../models/color_mean.bin", color_mean);
+        saveToBin("../models/color_pcaBasis.bin", color_pcaBasis);
+        saveToBin("../models/color_pcaStandardDeviation.bin", color_pcaStandardDeviation);
 
         
 
