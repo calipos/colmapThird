@@ -188,6 +188,7 @@
     <ClCompile Include="imgui_tables.cpp" />
     <ClCompile Include="imgui_widgets.cpp" />
     <ClCompile Include="incremental.cpp" />
+    <ClCompile Include="iterDense.cpp" />
     <ClCompile Include="labelme.cpp" />
     <ClCompile Include="log.cpp" />
     <ClCompile Include="MarchCube.cpp" />

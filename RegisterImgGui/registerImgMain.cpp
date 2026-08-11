@@ -39,13 +39,15 @@ extern int test_mrf();
 extern int test_bfm();
 extern int test_draw();
 extern int test_curve_fit();
+extern int test_iter_d();
 int main(int, char**)
 {
+    return test_iter_d();
     //return test_curve_fit();
     //return test_draw();;
-    return test_bfm();
+    //return test_bfm();
     //return test_mrf();
-    //return test_pips2();
+    return test_pips2();
     //return test_sam2();
     //return test_incremental();
 
