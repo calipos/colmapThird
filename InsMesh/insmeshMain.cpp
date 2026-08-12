@@ -59,7 +59,7 @@ void batch_process(const std::string& input, const std::string& output,
     if (scale < 0 && vertex_count < 0 && face_count < 0) {
         std::cout << "No target vertex count/face count/scale argument provided. "
             "Setting to the default of 1/16 * input vertex count." << std::endl;
-        vertex_count = V.cols() / 16;
+        vertex_count = V.cols() / 32;
     }
 
     if (scale > 0) {
@@ -208,9 +208,9 @@ int main()
     int rosy = 4, posy = 4, face_count = -1, vertex_count = -1;
     uint32_t knn_points = 10, smooth_iter = 2;
     Float crease_angle = -1, scale = -1;
-    bool pure_quad = true;
+    bool pure_quad = false;
     std::string infile = "dense.ply";
-    std::string outfile = "out.obj";
+    std::string outfile = "out2.obj";
     batch_process(infile, outfile, rosy,posy, scale, face_count, vertex_count, crease_angle, extrinsic, align_to_boundaries, smooth_iter, knn_points, pure_quad, deterministic);
 
 

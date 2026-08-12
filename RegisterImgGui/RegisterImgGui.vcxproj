@@ -199,6 +199,7 @@
     <ClCompile Include="mrf.cpp" />
     <ClCompile Include="opencvTools.cpp" />
     <ClCompile Include="pips2.cpp" />
+    <ClCompile Include="pips2iter.cpp" />
     <ClCompile Include="pose.cpp" />
     <ClCompile Include="projection.cpp" />
     <ClCompile Include="reconstruction.cpp" />
@@ -250,6 +251,7 @@
     <ClInclude Include="mrf.h" />
     <ClInclude Include="opencvTools.h" />
     <ClInclude Include="pips2.h" />
+    <ClInclude Include="pips2iter.h" />
     <ClInclude Include="pose.h" />
     <ClInclude Include="projection.h" />
     <ClInclude Include="reconstruction.h" />

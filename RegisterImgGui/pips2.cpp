@@ -1144,7 +1144,6 @@ namespace pips2
 }
 
 
-
 int test_pips2_ocv()
 {
     cv::Mat inputBlob;
@@ -1222,11 +1221,11 @@ std::vector<std::filesystem::path> listImgPaths(const char* imgDirPath_)
 }
 
 int test_pips2()
-{
+{ 
     using dnn::ocvHelper::operator<<;
     using dnn::ncnnHelper::operator<<;
     cv::Mat colorMap;    
-    std::vector<std::filesystem::path>paths = listImgPaths("../data/a");
+    std::vector<std::filesystem::path>paths = listImgPaths("../data/c");
     pips2::Pips2 ins("../models/pips2_base_ncnn.param", "../models/pips2_base_ncnn.bin", "../models/pips2_deltaBlock_ncnn.param", "../models/pips2_deltaBlock_ncnn.bin");
     if (ins.inputImage(paths))
     {
