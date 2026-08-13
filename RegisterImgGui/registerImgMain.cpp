@@ -43,8 +43,8 @@ extern int test_iter_d();
 extern int test_pips2_iter();
 int main(int, char**)
 {
-    return test_pips2_iter();
-    //return test_iter_d();
+    //return test_pips2_iter();
+    return test_iter_d();
     //return test_curve_fit();
     //return test_draw();;
     //return test_bfm();

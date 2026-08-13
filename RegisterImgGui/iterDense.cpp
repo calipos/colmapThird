@@ -14,8 +14,8 @@
 #include "json/json.h"
 #include "log.h"
 #include "opencvTools.h"
-#include "pips2.h"
-
+#include "pips2iter.h"
+#include "triangulation.h"
 namespace rayhit
 {
 #define IGL_RAY_TRI_EPSILON 0.000001
@@ -207,6 +207,34 @@ void savePts(const std::filesystem::path& path, const Eigen::MatrixX3f& pts, std
 		}
 	}
 }
+void savePts(const std::filesystem::path& path, const Eigen::MatrixX3f& pts, std::vector<int>* enable = nullptr)
+{
+	std::fstream fout(path, std::ios::out);
+	bool enabled = false;
+	if (enable != nullptr)
+	{
+		auto [minI, maxI] = std::minmax_element(enable->begin(), enable->end());
+		if (*minI >= 0 && *maxI < pts.rows() && *minI <= *maxI)
+		{
+			enabled = true;
+		}
+	} 
+	if (enabled)
+	{
+		for (int i = 0; i < enable->size(); i++)
+		{
+			int idx = (*enable)[i];
+			fout << pts(idx, 0) << " " << pts(idx, 1) << " " << pts(idx, 2) << std::endl;
+		}
+	}
+	else
+	{
+		for (int i = 0; i < pts.rows(); i++)
+		{
+			fout << pts(i, 0) << " " << pts(i, 1) << " " << pts(i, 2) << std::endl;
+		}
+	}
+}
 int load_cameras(const std::filesystem::path& resultDir, 
 	std::vector<std::filesystem::path>&imgPaths,
 	std::vector<cv::Mat>& imgs,
@@ -316,9 +344,183 @@ void projectToImg(const Eigen::MatrixX3f& V_, std::vector<bool>& picked, const c
 	}
 	return;
 }
+
+
+std::vector<std::vector<cv::Point2f>> firgureTwoFrames(iter::Pips2<6, 12>&ins,const std::pair<std::vector<cv::Point2f>, std::vector<int>>& frame0,
+	const std::pair<std::vector<cv::Point2f>, std::vector<int>>& frame1,
+	const ncnn::Mat& frame0feat, const ncnn::Mat& frame1feat, std::vector<int>&sharedIdx)
+{
+	ncnn::Mat fmap2;
+	ncnn::Mat fmap3;
+	ncnn::Mat fmap4;
+	ncnn::Mat fmap5;
+
+	fmap2.clone_from(frame1feat);
+	fmap3.clone_from(frame1feat);
+	fmap4.clone_from(frame1feat);
+	fmap5.clone_from(frame1feat);
+	sharedIdx.clear();
+	sharedIdx.reserve(frame0.first.size());
+	std::vector<cv::Point2f>  controlPts;
+	controlPts.reserve(frame0.first.size());
+
+	int controlPtCnt0 = frame0.first.size();
+	int controlPtCnt1 = frame1.first.size();
+	int iter1 = 0;
+	for (int i = 0; i < controlPtCnt0; i++)
+	{
+		for (int j = iter1; j < controlPtCnt1; j++)
+		{
+			if (frame1.second[j] == frame0.second[i])
+			{
+				sharedIdx.emplace_back(frame0.second[i]);
+				controlPts.emplace_back(frame0.first[i]);
+				iter1 += 1;
+				break;
+			}
+			else if (frame1.second[j]> frame0.second[i])
+			{
+				break;
+			}
+			else
+			{
+				iter1 += 1;
+			}
+		}
+	}
+
+
+	std::vector<ncnn::Mat> feats{ frame0feat ,frame1feat,
+	fmap2,fmap3,fmap4,fmap5,
+	};
+	std::vector<std::vector<cv::Point2f>> traj;
+#if 0
+	ins.track(controlPts, feats, traj);
+	std::fstream fout("temp.dat", std::ios::out | std::ios::binary);
+	int cnt = traj[0].size();
+	fout.write((const char*)&cnt, sizeof(int));
+	for (const auto& d : traj)
+	{
+		for (const auto& d2 : d)
+		{
+			fout.write((const char*)&(d2.x), sizeof(float));
+			fout.write((const char*)&(d2.y), sizeof(float));
+		}
+	}
+	fout.close();
+#else
+	std::fstream fin("temp.dat", std::ios::in|std::ios::binary);
+	int cnt = 0;
+	fin.read((char*)&cnt,sizeof(int));
+	traj.resize(2);
+	for (int i = 0; i < 2; i++)
+	{
+		traj[i].resize(cnt);
+		for (int j = 0; j < cnt; j++)
+		{
+			fin.read((char*)&(traj[i][j].x), sizeof(float));
+			fin.read((char*)&(traj[i][j].y), sizeof(float));
+
+		}
+	}
+#endif
+	//LOG_OUT << traj[0][0];
+	//LOG_OUT << traj[1][0]; 
+
+	return traj;
+
+}
+
+void drawPairPts(cv::Mat& img0, cv::Mat& img1, std::vector<std::vector<cv::Point2f>>& pts)
+{
+	cv::Mat colorMap = cv::Mat::zeros(100, 100, CV_8UC3);
+	if (std::filesystem::exists("../models/bremm.png"))
+	{
+		colorMap = cv::imread("../models/bremm.png");
+	}
+
+	for (int i = 0; i < pts[0].size(); i++)
+	{
+		cv::Vec3b colors = colorMap.at<cv::Vec3b>(rand() % colorMap.rows, rand() % colorMap.cols);
+		cv::circle(img0, pts[0][i], 3, colors, -1);
+		cv::circle(img1, pts[1][i], 3, colors, -1);
+	}
+	return;
+}
+void drawPairPts(cv::Mat& img0, cv::Mat& img1, std::vector<std::vector<cv::Point2f>>& pts,
+	const std::pair<std::vector<cv::Point2f>, std::vector<int>>& frame0,
+	const std::pair<std::vector<cv::Point2f>, std::vector<int>>& frame1,
+	const std::vector<int>& sharedIdx)
+{
+	cv::Mat colorMap = cv::Mat::zeros(100, 100, CV_8UC3);
+	if (std::filesystem::exists("../models/bremm.png"))
+	{
+		colorMap = cv::imread("../models/bremm.png");
+	}
+	cv::Mat img0a, img1a;
+	img0.copyTo(img0a);
+	img1.copyTo(img1a);
+	std::unordered_set<int>sharedIdxSet;
+	for (const auto& d : sharedIdx)
+	{
+		sharedIdxSet.insert(d);
+	}
+	std::vector<cv::Vec3b>colors(pts[0].size());
+	for (int i = 0; i < pts[0].size(); i++)
+	{
+		cv::Vec3b& color = colors[i];
+		color = colorMap.at<cv::Vec3b>(rand() % colorMap.rows, rand() % colorMap.cols);
+		cv::circle(img0, pts[0][i], 3, color, -1);
+		cv::circle(img1, pts[1][i], 3, color, -1);
+	}
+	int colorIdx = 0;
+	for (int i = 0; i < frame0.second.size(); i++)
+	{
+		if (sharedIdxSet.count(i))
+		{
+			cv::circle(img0a, frame0.first[i], 3, colors[colorIdx++], -1);
+		}
+	}
+	colorIdx = 0;
+	for (int i = 0; i < frame1.second.size(); i++)
+	{
+		if (sharedIdxSet.count(i))
+		{
+			cv::circle(img1a, frame1.first[i], 3, colors[colorIdx++], -1);
+		}
+	}
+	return;
+}
+
+void drawPts(cv::Mat& img0,
+	const std::vector<cv::Point2f>& frame0)
+{
+	cv::Mat colorMap = cv::Mat::zeros(100, 100, CV_8UC3);
+	if (std::filesystem::exists("../models/bremm.png"))
+	{
+		colorMap = cv::imread("../models/bremm.png");
+	}
+	for (int i = 0; i < frame0.size(); i++)
+	{
+		cv::Vec3b color = colorMap.at<cv::Vec3b>(rand() % colorMap.rows, rand() % colorMap.cols);
+		cv::circle(img0, frame0[i], 3, color, -1);
+	}
+	return;
+}
 int test_iter_d()
 {
-	pips2::Pips2 ins("../models/pips2_base_ncnn.param", "../models/pips2_base_ncnn.bin", "../models/pips2_deltaBlock_ncnn.param", "../models/pips2_deltaBlock_ncnn.bin");
+	
+	using Matrix3x4f = Eigen::Matrix<float, 3, 4>;
+	using Matrix3x4d = Eigen::Matrix<double, 3, 4>;
+	using Matrix6d = Eigen::Matrix<double, 6, 6>;
+	using Vector3ub = Eigen::Matrix<uint8_t, 3, 1>;
+	using Vector4ub = Eigen::Matrix<uint8_t, 4, 1>;
+	using Vector6d = Eigen::Matrix<double, 6, 1>;
+	using RowMajorMatrixXi = Eigen::Matrix<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>;
+	
+
+
+
 	std::vector<std::filesystem::path>imgPaths;
 	std::vector<cv::Mat>imgs;
 	std::vector<cv::Mat>masks;
@@ -341,13 +543,19 @@ int test_iter_d()
 		}
 	}
 
-	if (!ins.inputImage(imgPaths))
-	{
-		LOG_ERR_OUT << "load img error";
-		return -1;
-	}
+	iter::Pips2<6, 12> ins("../models/pips2_base_ncnn.param", "../models/pips2_base_ncnn.bin", "../models/pips2_deltaBlock_ncnn.param", "../models/pips2_deltaBlock_ncnn.bin", imgs[0].rows, imgs[0].cols);
+	std::vector<ncnn::Mat>imgFeats;
+	imgFeats.reserve(imgs.size());
+	std::vector<std::pair<std::vector<cv::Point2f>, std::vector<int>>>imgKeyPts;
+	imgKeyPts.reserve(imgs.size());
+	Eigen::MatrixX3f BC;
+	igl::barycenter(V, F, BC);
 	for (int imgI = 0; imgI < imgs.size(); imgI++)
 	{
+		if (imgI == 0)
+		{
+			imgKeyPts.clear();
+		}
 		const Eigen::Matrix4f& Rt = Rts[imgI];
 		const Eigen::Matrix4f& K = Ks[imgI];
 		Eigen::RowVector3f ray_origin;
@@ -355,14 +563,13 @@ int test_iter_d()
 		ray_origin[1] = Rt(1, 3);
 		ray_origin[2] = Rt(2, 3);
 
-		Eigen::MatrixX3f Vdir = V.rowwise() - ray_origin;
-		Eigen::VectorXf Vdist = Vdir.rowwise().norm();
-		Vdir.array().colwise() /= Vdist.array();
-		Eigen::MatrixX3f BC;
-		igl::barycenter(V, F, BC);
-		BC.rowwise() -= ray_origin;
-		BC.rowwise().normalize();
-		Eigen::MatrixXf cosMat = Vdir * BC.transpose();
+		Eigen::MatrixX3f Vt = V.rowwise() - ray_origin;
+		Eigen::VectorXf Vdist = Vt.rowwise().norm();
+		Eigen::MatrixX3f Vdir = Vt.array().colwise() / Vdist.array();
+
+		Eigen::MatrixX3f faceCenterDir= BC.rowwise() - ray_origin;
+		faceCenterDir.rowwise().normalize();
+		Eigen::MatrixXf cosMat = Vdir * faceCenterDir.transpose();
 
 		Eigen::RowVector3f ori(0, 0, 0);
 		std::vector<bool>frontalVert(cosMat.rows(),true);
@@ -370,6 +577,7 @@ int test_iter_d()
 		{
 			if (isBndV[vI])
 			{
+				frontalVert[vI] = false;
 				continue;
 			}
 			for (int fI = 0; fI < cosMat.cols(); fI++)
@@ -380,9 +588,9 @@ int test_iter_d()
 					int bi = F(fI, 1);
 					int ci = F(fI, 2);
 					float d[3] = { Vdir(vI,0),Vdir(vI,1),Vdir(vI,2) };
-					float pa[3] = { V(ai,0),V(ai,1),V(ai,2) };
-					float pb[3] = { V(bi,0),V(bi,1),V(bi,2) };
-					float pc[3] = { V(ci,0),V(ci,1),V(ci,2) };
+					float pa[3] = { Vt(ai,0),Vt(ai,1),Vt(ai,2) };
+					float pb[3] = { Vt(bi,0),Vt(bi,1),Vt(bi,2) };
+					float pc[3] = { Vt(ci,0),Vt(ci,1),Vt(ci,2) };
 					float t, u, v;
 					int hit = rayhit::intersect_triangle1<float>(&ori[0], &d[0], pa, pb, pc, &t, &u, &v);
 					if (hit>0 && t>0 && t+1e-5< Vdist[vI])
@@ -396,12 +604,39 @@ int test_iter_d()
 		std::vector<cv::Point2f> imgPts;
 		std::vector<int> imgPtsInV;
 		projectToImg(V, frontalVert, masks[imgI], Rts[imgI], Ks[imgI], imgPts, imgPtsInV);
+		//drawPts(imgs[imgI], imgPts);
 
-		{ 
+		ncnn::Mat fmap;
+		ins.extractFeat(imgs[imgI], fmap);
+		imgFeats.emplace_back(fmap);
+		imgKeyPts.emplace_back(imgPts, imgPtsInV); 
+		if (imgKeyPts.size()>1)
+		{
+			std::vector<int>sharedIdx;
+			std::vector<std::vector<cv::Point2f>>twoFramesCorresponding = firgureTwoFrames(ins,imgKeyPts[imgI - 1], imgKeyPts[imgI], imgFeats[imgI - 1], imgFeats[imgI], sharedIdx);
+			drawPairPts(imgs[imgI - 1], imgs[imgI ], twoFramesCorresponding, imgKeyPts[imgI-1], imgKeyPts[imgI], sharedIdx);
+			const Matrix3x4d& camera0 = (Ks[imgI - 1] * Rts[imgI - 1]).block(0, 0, 3, 4).cast<double>();
+			const Matrix3x4d& camera1 = (Ks[imgI] * Rts[imgI]).block(0, 0, 3, 4).cast<double>();
+			for (size_t i = 0; i < sharedIdx.size(); i++)
+			{
+				const Eigen::Vector2d point0(twoFramesCorresponding[0][i].x, twoFramesCorresponding[0][i].y);
+				const Eigen::Vector2d point1(twoFramesCorresponding[1][i].x, twoFramesCorresponding[1][i].y);
+				Eigen::Vector3d p;
+				//TriangulateOptimalPoint(camera0, camera1, point0, point1, &p);
+				TriangulatePoint(camera0, camera1, point0, point1, &p);
+				//LOG_OUT << V.row(sharedIdx[i]);
+				//LOG_OUT << p;
 
-			std::vector<std::vector<cv::Point2f>>trajs;
-			bool trackRet = ins.trackLimit(imgPts, trajs, 2, 12);
-			 
+				V(sharedIdx[i], 0) = p[0];
+				V(sharedIdx[i], 1) = p[1];
+				V(sharedIdx[i], 2) = p[2];
+				 
+
+			}
+
+			savePts("v1.pts", V,(std::vector<bool>*)0);
+
+			LOG_OUT;
 		}
 	}
 
