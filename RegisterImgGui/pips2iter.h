@@ -3,6 +3,7 @@
 #include <array>
 #include <numeric>
 #include <iostream>
+#include <sstream>
 #include <map>
 #include <memory>
 #include <filesystem>
@@ -27,10 +28,7 @@ namespace iter
 #undef JUDGE_NAN
 #endif 
 #define JUDGE_NAN(x)   if (dnn::ncnnHelper::dataHasNanInf(x)){  LOG_ERR_OUT << "nan in "<<#x; exit(-1); }
-#ifdef SHOW_NCNN_BLOB
-#undef SHOW_NCNN_BLOB
-#endif 
-#define SHOW_NCNN_BLOB(x)   
+
 
 	template<int sequenceCnt, int iterCnt>
 	class Pips2
@@ -45,7 +43,7 @@ namespace iter
 			const int& imgWidth,
 			const int& radius_ = 3)
 		{
-			static_assert(sequenceCnt <= 8);
+			static_assert(sequenceCnt >=6);
 			imgSize.width = -1;
 			if (!std::filesystem::exists(ncnnEncoderParamPath))
 			{
@@ -310,9 +308,12 @@ namespace iter
 					std::string deltaNetParamStr = convertDeltaNet(ncnnDeltaBlockParamPath_.string(), controlPtsCnt);
 					deltaNet->load_param_mem(deltaNetParamStr.c_str());
 					deltaNet->load_model(ncnnDeltaBlockBinPath_.string().c_str());
-					padding64data = std::vector<float>(controlPtsCnt * sequenceCnt * 64);
-					padding128data = std::vector<float>(controlPtsCnt * sequenceCnt * 128);
-					padding256data = std::vector<float>(controlPtsCnt * sequenceCnt * 256);
+					//padding64data = std::vector<float>(controlPtsCnt * sequenceCnt * 64, 0);
+					//padding128data = std::vector<float>(controlPtsCnt * sequenceCnt * 128, 0);
+					//padding256data = std::vector<float>(controlPtsCnt * sequenceCnt * 256, 0);
+					padding64data = std::vector<float>(controlPtsCnt * sequenceCnt * 2 * 64, 0);
+					padding128data = std::vector<float>(controlPtsCnt * sequenceCnt * 2 * 128, 0);
+					padding256data = std::vector<float>(controlPtsCnt * sequenceCnt * 2 * 256, 0);
 					padding64 = ncnn::Mat(sequenceCnt, controlPtsCnt, 64, (void*)&padding256data[0], 4);
 					padding128 = ncnn::Mat(sequenceCnt, controlPtsCnt, 128, (void*)&padding256data[0], 4);
 					padding256 = ncnn::Mat(sequenceCnt, controlPtsCnt, 256, (void*)&padding256data[0], 4);
@@ -671,7 +672,7 @@ namespace iter
 			std::cout << "Elapsed time: " << elapsed1 << " ms" << std::endl;
 			return true;
 		}
-		ncnn::Mat concatFmapsWithBatch(const std::array<ncnn::Mat, sequenceCnt>& fmap, const std::vector<int>& picks)
+		ncnn::Mat concatFmapsWithBatch(const std::vector<ncnn::Mat>& fmap, const std::vector<int>& picks)
 		{
 			if (fmap[0].dims != 3)
 			{
@@ -800,13 +801,10 @@ namespace iter
 			return deltaIn;
 		}
 		bool track(const std::vector<cv::Point2f>& controlPts,
-			std::array<ncnn::Mat, sequenceCnt>& fmapsVec,
-			std::array<std::vector<cv::Point2f>, sequenceCnt>& traj)
+			const std::vector<ncnn::Mat>& fmapsVec,
+			std::vector<std::vector<cv::Point2f>>& traj)
 		{
-			for (auto& d : traj)
-			{
-				d.resize(controlPts.size());
-			}
+			traj = std::vector<std::vector<cv::Point2f>>(fmapsVec.size(), std::vector<cv::Point2f>(controlPts.size()));
 			this->initDeltaBlockNet(controlPts.size());
 			std::vector<float>xs0(controlPts.size());
 			std::vector<float>ys0(controlPts.size());
@@ -906,7 +904,8 @@ namespace iter
 				ncnn::Mat delta_out;
 				ex3.extract("delta", delta_out);
 				//JUDGE_NAN(delta_out);
-
+				//printBlob(deltaNetInput);
+				//printBlob(delta_out);
 
 				int blobDataI = 0;
 				for (int p = 0; p < xs[0].size(); p++)
@@ -930,6 +929,77 @@ namespace iter
 			}
 
 			return true;
+		}
+
+
+		void printBlob(const ncnn::Mat& out)
+		{
+			std::stringstream os;
+			ncnn::Mat shape = out.shape();
+			os << "out shape = " << shape.c << " " << shape.d << " " << shape.h << " " << shape.w << ")  dim=" << out.dims << std::endl;
+			int cstep = out.cstep;
+			int dstep = out.cstep;
+			const float* data = (float*)out.data;
+			const int elemSize = out.elemsize;
+			if (shape.d > 1) dstep /= shape.d;
+			for (int c = 0; c < shape.c; c++)
+			{
+				for (int d = 0; d < shape.d; d++)
+				{
+					data = (float*)out.data + d * dstep + c * cstep;
+					for (int h = 0; h < shape.h; ++h)
+					{
+						const float* data2 = data + h * shape.w;
+						os << "[" << c << "," << d << "," << h << ":];  ";
+						for (int w = 0; w < shape.w; ++w)
+						{
+							os << data2[w] << " ";
+							if (w == 2)
+							{
+								int newW = shape.w - 4;
+								if (newW > w)
+								{
+									os << " ... ";
+									w = newW;
+								}
+							}
+						}
+						os << std::endl;
+						if (h == 2)
+						{
+							int newH = shape.h - 4;
+							if (newH > h)
+							{
+								os << " ... " << std::endl;
+								h = newH;
+							}
+						}
+					}
+					if (d == 2)
+					{
+						int newD = shape.d - 4;
+						if (newD > d)
+						{
+							os << " ... " << std::endl;
+							d = newD;
+						}
+					}
+					else
+					{
+						os << std::endl;
+					}
+				}
+				if (c == 2)
+				{
+					int newC = shape.c - 4;
+					if (newC > c)
+					{
+						os << " ... " << std::endl;
+						c = newC;
+					}
+				}
+			}
+			LOG_OUT << os.str();
 		}
 	};
 

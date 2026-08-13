@@ -27,7 +27,7 @@ idr/data/
 
 doc/_build
 vcpkg_installed/
-
+InsMesh/x64/*
 RegisterImgGui/x64/*
 RegisterImgGui/Debug/*
 RegisterImgGui/Release/*
