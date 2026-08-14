@@ -10,6 +10,7 @@
 #include <igl/barycenter.h>
 #include "igl/boundary_loop.h"
 #include "igl/read_triangle_mesh.h"
+#include "igl/per_vertex_normals.h"
 #include "opencv2/opencv.hpp"
 #include "json/json.h"
 #include "log.h"
@@ -172,6 +173,10 @@ bool readRsultJson(const std::filesystem::path& jsonPath, Eigen::Matrix4f& Rt, E
 			Rt(0, 3) = QtNode[4].asDouble();
 			Rt(1, 3) = QtNode[5].asDouble();
 			Rt(2, 3) = QtNode[6].asDouble();
+			LOG_OUT << QtNode[4].asDouble();
+			LOG_OUT << QtNode[5].asDouble();
+			LOG_OUT << QtNode[6].asDouble(); 
+			LOG_OUT << Rt;
 		}
 		K(0, 0) = fxNode.asFloat();
 		K(1, 1) = fyNode.asFloat();
@@ -307,7 +312,7 @@ void projectToImg(const Eigen::MatrixX3f& V_, std::vector<bool>& picked, const c
 			pickedV(3, idx) = 1;
 			pickedIdxToTotalIdx.emplace_back(i);
 			idx++;
-		}
+		} 
 	} 
 	Eigen::Matrix<float, 3, 4> Rt = Rt_.block(0, 0, 3, 4);
 	Eigen::Matrix<float, 3, 3> K = K_.block(0, 0, 3, 3);
@@ -394,7 +399,7 @@ std::vector<std::vector<cv::Point2f>> firgureTwoFrames(iter::Pips2<6, 12>&ins,co
 	fmap2,fmap3,fmap4,fmap5,
 	};
 	std::vector<std::vector<cv::Point2f>> traj;
-#if 0
+#if 1
 	ins.track(controlPts, feats, traj);
 	std::fstream fout("temp.dat", std::ios::out | std::ios::binary);
 	int cnt = traj[0].size();
@@ -447,9 +452,10 @@ void drawPairPts(cv::Mat& img0, cv::Mat& img1, std::vector<std::vector<cv::Point
 	}
 	return;
 }
-void drawPairPts(cv::Mat& img0, cv::Mat& img1, std::vector<std::vector<cv::Point2f>>& pts,
+void drawPairPts(const cv::Mat& img0, const cv::Mat& img1,
 	const std::pair<std::vector<cv::Point2f>, std::vector<int>>& frame0,
-	const std::pair<std::vector<cv::Point2f>, std::vector<int>>& frame1,
+	const std::pair<std::vector<cv::Point2f>, std::vector<int>>& frame1, 
+	const std::vector<std::vector<cv::Point2f>>& pts,
 	const std::vector<int>& sharedIdx)
 {
 	cv::Mat colorMap = cv::Mat::zeros(100, 100, CV_8UC3);
@@ -457,38 +463,44 @@ void drawPairPts(cv::Mat& img0, cv::Mat& img1, std::vector<std::vector<cv::Point
 	{
 		colorMap = cv::imread("../models/bremm.png");
 	}
-	cv::Mat img0a, img1a;
-	img0.copyTo(img0a);
-	img1.copyTo(img1a);
-	std::unordered_set<int>sharedIdxSet;
-	for (const auto& d : sharedIdx)
+	const std::vector<cv::Point2f>& originalPts0 = frame0.first;
+	const std::vector<cv::Point2f>& originalPts1 = frame1.first;
+	const std::vector<int>& originalPtIdx0 = frame0.second;
+	const std::vector<int>& originalPtIdx1 = frame1.second;
+
+	int max0 = *std::max_element(originalPtIdx0.begin(), originalPtIdx0.end());
+	int max1 = *std::max_element(originalPtIdx1.begin(), originalPtIdx1.end());
+	int max2 = *std::max_element(sharedIdx.begin(), sharedIdx.end());
+	std::vector<cv::Vec3b>colors((std::max)((std::max)(max0, max1), max2)+1);
+	for (int i = 0; i < colors.size(); i++)
 	{
-		sharedIdxSet.insert(d);
+		colors[i] = colorMap.at<cv::Vec3b>(rand() % colorMap.rows, rand() % colorMap.cols);
 	}
-	std::vector<cv::Vec3b>colors(pts[0].size());
+
+	cv::Mat imgMesh0, imgMesh1;
+	cv::Mat imgPip0, imgPip1;
+	img0.copyTo(imgMesh0);
+	img0.copyTo(imgPip0);
+	img1.copyTo(imgMesh1);
+	img1.copyTo(imgPip1);
+
+
+	for (int i = 0; i < originalPts0.size(); i++)
+	{
+		int coloeIdx = originalPtIdx0[i];
+		cv::circle(imgMesh0, originalPts0[i], 3, colors[coloeIdx], -1);
+	}
+	for (int i = 0; i < originalPts1.size(); i++)
+	{
+		int coloeIdx = originalPtIdx1[i];
+		cv::circle(imgMesh1, originalPts1[i], 3, colors[coloeIdx], -1);
+	}
 	for (int i = 0; i < pts[0].size(); i++)
-	{
-		cv::Vec3b& color = colors[i];
-		color = colorMap.at<cv::Vec3b>(rand() % colorMap.rows, rand() % colorMap.cols);
-		cv::circle(img0, pts[0][i], 3, color, -1);
-		cv::circle(img1, pts[1][i], 3, color, -1);
-	}
-	int colorIdx = 0;
-	for (int i = 0; i < frame0.second.size(); i++)
-	{
-		if (sharedIdxSet.count(i))
-		{
-			cv::circle(img0a, frame0.first[i], 3, colors[colorIdx++], -1);
-		}
-	}
-	colorIdx = 0;
-	for (int i = 0; i < frame1.second.size(); i++)
-	{
-		if (sharedIdxSet.count(i))
-		{
-			cv::circle(img1a, frame1.first[i], 3, colors[colorIdx++], -1);
-		}
-	}
+	{ 
+		int coloeIdx = sharedIdx[i];
+		cv::circle(imgPip0, pts[0][i], 3, colors[coloeIdx], -1);
+		cv::circle(imgPip1, pts[1][i], 3, colors[coloeIdx], -1);
+	} 
 	return;
 }
 
@@ -506,6 +518,10 @@ void drawPts(cv::Mat& img0,
 		cv::circle(img0, frame0[i], 3, color, -1);
 	}
 	return;
+}
+void pickFrontalVert(const Eigen::MatrixX3f& V, const Eigen::MatrixX3f& F, const Eigen::Matrix4f& R, const Eigen::Matrix4f& K)
+{
+
 }
 int test_iter_d()
 {
@@ -542,6 +558,8 @@ int test_iter_d()
 			} 
 		}
 	}
+	Eigen::MatrixX3f VN;
+	igl::per_vertex_normals(V, F, VN);
 
 	iter::Pips2<6, 12> ins("../models/pips2_base_ncnn.param", "../models/pips2_base_ncnn.bin", "../models/pips2_deltaBlock_ncnn.param", "../models/pips2_deltaBlock_ncnn.bin", imgs[0].rows, imgs[0].cols);
 	std::vector<ncnn::Mat>imgFeats;
@@ -566,45 +584,53 @@ int test_iter_d()
 		Eigen::MatrixX3f Vt = V.rowwise() - ray_origin;
 		Eigen::VectorXf Vdist = Vt.rowwise().norm();
 		Eigen::MatrixX3f Vdir = Vt.array().colwise() / Vdist.array();
+		Eigen::VectorXf viewDirDotVN = (Vdir.cwiseProduct(VN)).rowwise().sum();
 
-		Eigen::MatrixX3f faceCenterDir= BC.rowwise() - ray_origin;
-		faceCenterDir.rowwise().normalize();
-		Eigen::MatrixXf cosMat = Vdir * faceCenterDir.transpose();
+		//Eigen::MatrixX3f faceCenterDir= BC.rowwise() - ray_origin;
+		//faceCenterDir.rowwise().normalize();
+		//Eigen::MatrixXf cosMat = Vdir * faceCenterDir.transpose();
 
 		Eigen::RowVector3f ori(0, 0, 0);
-		std::vector<bool>frontalVert(cosMat.rows(),true);
-		for (int vI = 0; vI < cosMat.rows(); vI++)
+		std::vector<bool>frontalVert(V.rows(),true);
+#pragma omp parallel for
+		for (int vI = 0; vI < V.rows(); vI++)
 		{
+			if (viewDirDotVN[vI]>-0.3)
+			{
+				frontalVert[vI] = false;
+				continue;
+			}
 			if (isBndV[vI])
 			{
 				frontalVert[vI] = false;
 				continue;
 			}
-			for (int fI = 0; fI < cosMat.cols(); fI++)
-			{
-				if (cosMat(vI,fI)>0.99)
-				{
-					int ai = F(fI, 0);
-					int bi = F(fI, 1);
-					int ci = F(fI, 2);
-					float d[3] = { Vdir(vI,0),Vdir(vI,1),Vdir(vI,2) };
-					float pa[3] = { Vt(ai,0),Vt(ai,1),Vt(ai,2) };
-					float pb[3] = { Vt(bi,0),Vt(bi,1),Vt(bi,2) };
-					float pc[3] = { Vt(ci,0),Vt(ci,1),Vt(ci,2) };
-					float t, u, v;
-					int hit = rayhit::intersect_triangle1<float>(&ori[0], &d[0], pa, pb, pc, &t, &u, &v);
-					if (hit>0 && t>0 && t+1e-5< Vdist[vI])
-					{
-						frontalVert[vI] = false;
-						break;
-					}
-				}
-			}
+			//for (int fI = 0; fI < cosMat.cols(); fI++)
+			//{
+			//	if (cosMat(vI,fI)>0.96)
+			//	{
+			//		int ai = F(fI, 0);
+			//		int bi = F(fI, 1);
+			//		int ci = F(fI, 2);
+			//		float d[3] = { Vdir(vI,0),Vdir(vI,1),Vdir(vI,2) };
+			//		float pa[3] = { Vt(ai,0),Vt(ai,1),Vt(ai,2) };
+			//		float pb[3] = { Vt(bi,0),Vt(bi,1),Vt(bi,2) };
+			//		float pc[3] = { Vt(ci,0),Vt(ci,1),Vt(ci,2) };
+			//		float t, u, v;
+			//		int hit = rayhit::intersect_triangle1<float>(&ori[0], &d[0], pa, pb, pc, &t, &u, &v);
+			//		if (hit>0 && t>0 && t+1e-5< Vdist[vI])
+			//		{
+			//			frontalVert[vI] = false;
+			//			break;
+			//		}
+			//	}
+			//}
 		}
 		std::vector<cv::Point2f> imgPts;
 		std::vector<int> imgPtsInV;
 		projectToImg(V, frontalVert, masks[imgI], Rts[imgI], Ks[imgI], imgPts, imgPtsInV);
 		//drawPts(imgs[imgI], imgPts);
+		//savePts("vf.txt", V, &frontalVert);
 
 		ncnn::Mat fmap;
 		ins.extractFeat(imgs[imgI], fmap);
@@ -614,7 +640,8 @@ int test_iter_d()
 		{
 			std::vector<int>sharedIdx;
 			std::vector<std::vector<cv::Point2f>>twoFramesCorresponding = firgureTwoFrames(ins,imgKeyPts[imgI - 1], imgKeyPts[imgI], imgFeats[imgI - 1], imgFeats[imgI], sharedIdx);
-			drawPairPts(imgs[imgI - 1], imgs[imgI ], twoFramesCorresponding, imgKeyPts[imgI-1], imgKeyPts[imgI], sharedIdx);
+			drawPairPts(imgs[imgI - 1], imgs[imgI ], imgKeyPts[imgI-1], imgKeyPts[imgI], twoFramesCorresponding, sharedIdx);
+#if 0
 			const Matrix3x4d& camera0 = (Ks[imgI - 1] * Rts[imgI - 1]).block(0, 0, 3, 4).cast<double>();
 			const Matrix3x4d& camera1 = (Ks[imgI] * Rts[imgI]).block(0, 0, 3, 4).cast<double>();
 			for (size_t i = 0; i < sharedIdx.size(); i++)
@@ -626,16 +653,14 @@ int test_iter_d()
 				TriangulatePoint(camera0, camera1, point0, point1, &p);
 				//LOG_OUT << V.row(sharedIdx[i]);
 				//LOG_OUT << p;
-
-				V(sharedIdx[i], 0) = p[0];
-				V(sharedIdx[i], 1) = p[1];
-				V(sharedIdx[i], 2) = p[2];
+				//V(sharedIdx[i], 0) = p[0];
+				//V(sharedIdx[i], 1) = p[1];
+				//V(sharedIdx[i], 2) = p[2];
 				 
 
 			}
-
 			savePts("v1.pts", V,(std::vector<bool>*)0);
-
+#endif
 			LOG_OUT;
 		}
 	}
