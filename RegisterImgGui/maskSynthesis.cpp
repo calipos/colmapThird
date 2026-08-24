@@ -15,6 +15,13 @@ namespace sdf
 {
 	VolumeDat::VolumeDat(const std::uint64_t& indexMax, const double& startX, const double& startY, const double& startZ, const double& endX, const double& endY, const double& endZ)
 	{
+		this->x_start = startX;
+		this->y_start = startY;
+		this->z_start = startZ;
+		this->x_end = endX;
+		this->y_end = endY;
+		this->z_end = endZ;
+
 		maxIndex = indexMax;
 		double maxIndexDouble = static_cast<double>(maxIndex);
 		double volume = abs(endX - startX) * abs(endY - startY) * abs(endZ - startZ);
@@ -26,7 +33,7 @@ namespace sdf
 			x_size = static_cast<int>(abs(endX - startX) / unit)+1;
 			y_size = static_cast<int>(abs(endY - startY) / unit)+1;
 			z_size = static_cast<int>(abs(endZ - startZ) / unit)+1;
-		} while (x_size > 512 || y_size > 512 || z_size > 512);
+		} while (x_size * y_size  * z_size >= indexMax);
 
 		std::uint64_t totalCnt = x_size * y_size * z_size;
 		int yx_size = x_size * y_size;
@@ -120,7 +127,40 @@ namespace sdf
 		}
 		return true;
 	}
-	Eigen::Matrix3Xf VolumeDat::getCloud(const int& thre)const
+
+	bool saveCloud(const std::filesystem::path& path, const Eigen::MatrixXf& pts, const std::vector<float>& hitCnt)
+	{
+		if (hitCnt.size() != pts.cols())
+		{
+			LOG_ERR_OUT << "hitCnt.size()!=3*pts.cols()";
+			return false;
+		}
+		{
+			std::fstream fout(path, std::ios::out);
+			fout << "ply" << std::endl;
+			fout << "format binary_little_endian 1.0" << std::endl;
+			fout << "element vertex " << pts.cols() << std::endl;//可以容纳32位数
+			fout << "property float x" << std::endl;
+			fout << "property float y" << std::endl;
+			fout << "property float z" << std::endl;
+			fout << "property float hitcount" << std::endl;
+			fout << "end_header" << std::endl;
+			fout.close();
+		}
+		{
+			std::fstream fout(path, std::ios::app | std::ios::binary);
+			for (int i = 0; i < pts.cols(); i++)
+			{
+				fout.write((const char*)&(pts(0, i)), sizeof(float));
+				fout.write((const char*)&(pts(1, i)), sizeof(float));
+				fout.write((const char*)&(pts(2, i)), sizeof(float));
+				fout.write((const char*)&(hitCnt[i]), sizeof(float));
+			}
+			fout.close();
+		}
+		return true;
+	}
+	Eigen::Matrix3Xf VolumeDat::getCloud(const int& thre,std::vector<float>*hitValues)const
 	{
 		int flagCnt = this->gridCenterHitValue.size();
 		int gridCnt = grid.cols();
@@ -129,6 +169,12 @@ namespace sdf
 			LOG_ERR_OUT << "grid not initialized!";
 			return Eigen::Matrix3Xf();
 		}
+		if (hitValues!=nullptr)
+		{
+			hitValues->clear();
+			hitValues->reserve(gridCnt);
+		}
+		
 		std::list<Eigen::Vector3f>ptsList;
 		{
 			int numX_1 = x_size - 1;
@@ -140,6 +186,7 @@ namespace sdf
 				if (gridCenterHitValue[i] > thre)
 				{
 					ptsList.emplace_back(this->grid(0, i), this->grid(1, i), this->grid(2, i));
+					if (hitValues != nullptr)hitValues->emplace_back(gridCenterHitValue[i]);
 				}
 			}
 		}
@@ -316,7 +363,7 @@ int test_sdf()
 	double z_end = landmarkPts.col(2).maxCoeff();
 
 
-	sdf::VolumeDat a(static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()*0.0001), x_strat, y_strat, z_strat, x_end, y_end, z_end);
+	sdf::VolumeDat a(static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()*0.001), x_strat, y_strat, z_strat-0.2*(z_end- z_strat), x_end, y_end, z_end);
 
 	std::vector<std::filesystem::path> maskPaths;
 	std::vector<std::filesystem::path> imgPaths;
@@ -363,6 +410,13 @@ int test_sdf()
 						LOG_OUT << Rt;
 						Eigen::Matrix4Xf gridInCamera = p.cast<float>() * a.grid;
 						int gridCnt = gridInCamera.cols();
+
+						cv::Mat contorMap;
+						cv::erode(mask, contorMap, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)));
+						contorMap ^= mask;
+
+
+
 						for (size_t i = 0; i < gridCnt; i++)
 						{
 							int u = static_cast<int>(gridInCamera(0, i) / gridInCamera(2, i));
@@ -373,9 +427,9 @@ int test_sdf()
 								{
 									a.gridCenterHitValue[i] = -1;
 								}
-								else
+								if (contorMap.ptr<uchar>(v)[u] != 0)
 								{
-									a.gridCenterHitValue[i] *= 1;
+									a.gridCenterHitValue[i] += (a.gridCenterHitValue[i] < 0 ? 0 : 1);
 								}
 							}
 						}
@@ -386,10 +440,13 @@ int test_sdf()
 		}
 	}
 
-	a.emptyShellPts(0);
-	Eigen::Matrix3Xf pts = a.getCloud(0);
-	std::vector<std::uint8_t> colors = sdf::fuseColor(pts, imgPaths, cameraPs);
-	sdf::saveCloud("c.ply", pts, colors);
-	//mc::marchcube(a.grid, a.gridCenterHitValue, a.x_size, a.y_size, a.z_size, a.unit, 0);
+	//a.emptyShellPts(0);
+	std::vector<float> hitValues;
+	Eigen::Matrix3Xf pts = a.getCloud(0, &hitValues);
+	//std::vector<std::uint8_t> colors = sdf::fuseColor(pts, imgPaths, cameraPs);
+	//sdf::saveCloud("../data/a/result/c.ply", pts, colors);
+	sdf::saveCloud("../data/a/result/c.ply", pts, hitValues);
+	mc::Mesh mesh = mc::marchcube(a.grid, a.gridCenterHitValue, a.x_size, a.y_size, a.z_size, a.unit, 0);
+	mesh.saveMesh("../data/a/result/dense.obj");
 	return 0;
 }

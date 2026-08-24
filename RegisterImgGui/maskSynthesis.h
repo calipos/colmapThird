@@ -30,7 +30,7 @@ namespace sdf
 	struct VolumeDat
 	{
 		VolumeDat(const std::uint64_t& indexMax, const double& startX, const double& startY, const double& startZ, const double& endX, const double& endY, const double& endZ);
-		Eigen::Matrix3Xf getCloud(const int& thre)const;
+		Eigen::Matrix3Xf getCloud(const int& thre, std::vector<float>* hitValues = nullptr)const;
 		bool emptyShellPts(const int& thre = 1);
 		std::uint64_t maxIndex;
 		double unit;
