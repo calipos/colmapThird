@@ -595,7 +595,7 @@ int test_iter_d()
 #pragma omp parallel for
 		for (int vI = 0; vI < V.rows(); vI++)
 		{
-			if (viewDirDotVN[vI]>-0.3)
+			if (viewDirDotVN[vI]>-.3)
 			{
 				frontalVert[vI] = false;
 				continue;
@@ -630,6 +630,7 @@ int test_iter_d()
 		std::vector<int> imgPtsInV;
 		projectToImg(V, frontalVert, masks[imgI], Rts[imgI], Ks[imgI], imgPts, imgPtsInV);
 		//drawPts(imgs[imgI], imgPts);
+		//continue;
 		//savePts("vf.txt", V, &frontalVert);
 
 		ncnn::Mat fmap;
