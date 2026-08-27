@@ -9,7 +9,6 @@ import struct
 import trimesh
 import pyrender
 from PIL import Image
-import voxelCarving
 import sys
 import dlib
 
@@ -140,9 +139,7 @@ def saveColorObj(filepath, verts, color, faces):
     thefile.close()
 
 
-def generParamFace(param, shape_pcaStandardDeviation, expression_pcaStandardDeviation, color_pcaStandardDeviation, shape_mean, shape_pcaBasis, expression_mean, expression_pcaBasis):
-    print()
-
+ 
 
 def getInside(pts, ptsCnt, masks: List[np.ndarray], R_list: List[np.ndarray], RtoCam):
     frontMask = masks[0]
@@ -172,11 +169,16 @@ def getInside(pts, ptsCnt, masks: List[np.ndarray], R_list: List[np.ndarray], Rt
 def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], camera_MagX, camera_MagY):
     print('maxBox = ',maxBox)
     print('minBox = ', minBox)
-    N = 20480
-    carvingStep = 1
+    N = 204800
     RtoCam = np.eye(3, dtype=np.float32)
     RtoCam[0, 0] = masks[0].shape[1]*0.5/camera_MagX
     RtoCam[1, 1] = masks[0].shape[0]*0.5/camera_MagY
+    XcarvingStep = 0.99/RtoCam[0, 0]
+    YcarvingStep = 0.99/RtoCam[1, 1]
+    ZcarvingStep = np.min(maxBox-minBox)/80+1e-8
+    print('XcarvingStep = ', XcarvingStep)
+    print('YcarvingStep = ', YcarvingStep)
+    print('ZcarvingStep = ', ZcarvingStep)
 
     frontMask = masks[0]
     h, w = frontMask.shape
@@ -190,11 +192,11 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
     pixelStartZ = []
     pixelPos=[]
     for xi in range(1000000):
-        x = minBox[0]+xi*carvingStep
+        x = minBox[0]+xi*XcarvingStep
         if x > maxBox[0]:
             break
         for yi in range(1000000):
-            y = minBox[1]+yi*carvingStep
+            y = minBox[1]+yi*YcarvingStep
             if y > maxBox[1]:
                 break
             xInFront = np.round(RtoCam[0, 0]*x+halfWidth).astype(int)
@@ -203,7 +205,7 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
                 pass
             else:continue
             for zi in range(1000000):
-                z = maxBox[2]-zi*carvingStep
+                z = maxBox[2]-zi*ZcarvingStep
                 if z < minBox[2]:
                     break
                 if zi == 0 or idx == 0:                
@@ -220,23 +222,36 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
                         pixelEndIdx = idx if pix == (
                             len(pixelStartIdx)-1) else pixelStartIdx[pix+1]
                         pixelInside = inside[pixelStartIdx[pix]:pixelEndIdx]
-                        pos = np.argmax(pixelInside ==True)
+                        pos = np.argmax(pixelInside == True)
+                        if pos == 0 and not pixelInside[pos]:
+                            continue
                         depZPos = pixelPos[pix]
-                        depZ = pixelStartZ[pix]-pos*carvingStep
+                        depZ = pixelStartZ[pix]-pos*ZcarvingStep
                         if depZ > carvingDep[depZPos[1], depZPos[0]]:
                             carvingDep[depZPos[1], depZPos[0]] = depZ
-
-
-
                     pixelStartIdx.clear()
                     pixelStartZ.clear()
                     pixelPos.clear()
                     idx = 0
-    y_indices, x_indices = np.indices((600, 600))
-    point_cloud = np.stack([x_indices, y_indices, carvingDep], axis=-1)
-    np.savetxt('bfmGan/1.txt', point_cloud.reshape(-1, 3)) 
-    exit(0)
-    print()
+    if len(pixelStartIdx)>0:
+        inside = getInside(pts, idx, masks, R_list, RtoCam)
+        for pix in range(len(pixelStartIdx)):
+            pixelEndIdx = idx if pix == (
+                len(pixelStartIdx)-1) else pixelStartIdx[pix+1]
+            pixelInside = inside[pixelStartIdx[pix]:pixelEndIdx]
+            pos = np.argmax(pixelInside == True)
+            if pos == 0 and not pixelInside[pos]:
+                pass
+            else:
+                depZPos = pixelPos[pix]
+                depZ = pixelStartZ[pix]-pos*ZcarvingStep
+                if depZ > carvingDep[depZPos[1], depZPos[0]]:
+                    carvingDep[depZPos[1], depZPos[0]] = depZ
+    return carvingDep
+    # y_indices, x_indices = np.indices((600, 600))
+    # point_cloud = np.stack([x_indices, y_indices, carvingDep], axis=-1)
+    # np.savetxt('bfmGan/1.txt', point_cloud.reshape(-1, 3)) 
+
 
 
 def generRandFaceDat():
@@ -263,26 +278,26 @@ def generRandFaceDat():
     face_tri = readEigenData(
         'models/bfm/facet.bin')
 
-    np.random.seed(42)
+    frontCameraZ = 200
+    Znear=50
+    Zfar = 200
     faceCnt = 10
     cameraCnt = 4
     scene = pyrender.Scene()
     camera = pyrender.OrthographicCamera(xmag=160,
                                          ymag=160,
-                                         znear=0.01,
-                                         zfar=300.0)
+                                         znear=Znear,
+                                         zfar=Zfar)
 
     renderer = pyrender.OffscreenRenderer(viewport_width=600,
                                           viewport_height=600)
 
-    reconstructor = voxelCarving.Silhouette3DReconstructor(
-        voxel_resolution=100, world_size=200.0)
     for faceIdx in range(faceCnt):
         scene.clear()
         R_list = []
         camera_nodes = []
         camera_pose = np.eye(4)
-        camera_pose[:3, 3] = np.array([0, 0, 200])
+        camera_pose[:3, 3] = np.array([0, 0, frontCameraZ])
         R_list .append(camera_pose[0:3, 0:3])
         node = scene.add(camera, pose=camera_pose)
         camera_nodes.append(node)
@@ -295,7 +310,7 @@ def generRandFaceDat():
             camera_pose[2, 0] = -np.sin(theta)
             camera_pose[2, 2] = np.cos(theta)
             camera_pose[:3, 3] = np.array(
-                [200*np.sin(theta), 0, 200*np.cos(theta)])
+                [frontCameraZ*np.sin(theta), 0, frontCameraZ*np.cos(theta)])
             R_list .append(camera_pose[0:3, 0:3])
             node = scene.add(camera, pose=camera_pose)
             camera_nodes.append(node)
@@ -309,7 +324,7 @@ def generRandFaceDat():
             camera_pose[2, 2] = np.cos(theta)
             # camera_pose=camera_pose.T
             camera_pose[:3, 3] = np.array(
-                [200*np.sin(theta), 0, 200*np.cos(theta)])
+                [frontCameraZ*np.sin(theta), 0, frontCameraZ*np.cos(theta)])
             R_list .append(camera_pose[0:3, 0:3])
             node = scene.add(camera, pose=camera_pose)
             camera_nodes.append(node)
@@ -331,6 +346,11 @@ def generRandFaceDat():
         texture = np.clip(texture, 0, 1).reshape(-1, 3)*255
         texture = np.column_stack(
             [texture, 255*np.ones([texture.shape[0], 1])]).astype(np.uint8)
+ 
+        Vert = np.array([[0, 50, 150], [50, 0, 150], [-50, 0, 150]])
+        face_tri = np.array([[0, 2, 1]], dtype=np.int32)
+        texture = np.array(
+            [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]], dtype=np.uint8)
 
         trimesh_obj = trimesh.Trimesh(
             vertices=Vert, faces=face_tri, vertex_colors=texture)
@@ -345,133 +365,33 @@ def generRandFaceDat():
                 scene, flags=pyrender.RenderFlags.FLAT)
             if i == 0:
                 frontRgb = color
-                frontDep = depth
+                # depth = zFar*(zObj-zNear)/(zFar-zNear)
+                print(np.max(depth))
+                frontDep = frontCameraZ-  (0.024-1/depth)*(Zfar*Znear)
+                frontDep[depth == 0] = 0
                 landmark = landmarkFinder.proc(color)
-            # Image.fromarray(frontRgb).save(f'bfmGan/output_{i:02d}.png')
+            # Image.fromarray(color).save(f'bfmGan/output_{i:02d}.png')
             # Image.fromarray((depth>0).astype(np.uint8)*255).save(f'bfmGan/mask_{i:02d}.png')
             mask_list.append((depth > 0).astype(np.uint8)*255)
 
+        carvingDep = carving(np.max(Vert, axis=0), np.min(
+            Vert, axis=0), mask_list, R_list, camera.xmag, camera.ymag)
 
-        carving(np.max(Vert, axis=0), np.min(Vert, axis=0), mask_list, R_list, camera.xmag, camera.ymag)
-        reconstructor.reset()
-        reconstructor.reconstruct(mask_list, R_list)
-        verts_temp, faces_temp = reconstructor.extract_mesh()
-        voxelCarving.save_obj(verts_temp, faces_temp,
-                              f'bfmgan/reconstructed_model{faceIdx:02d}.obj')
-        saveColorObj(f"bfmGan/bfm{faceIdx:02d}.obj", Vert, texture, face_tri)
+        carvingDep = frontCameraZ-carvingDep
+        carvingDep[carvingDep > frontCameraZ] = 0
 
-        scene.clear()
-        camera_pose = np.eye(4)
-        camera_pose[:3, 3] = np.array([0, 0, 200])
-        node = scene.add(camera, pose=camera_pose)
-        trimesh_obj = trimesh.Trimesh(vertices=verts_temp, faces=faces_temp)
-        mesh = pyrender.Mesh.from_trimesh(trimesh_obj)
-        mesh_node = scene.add(mesh)
-        color, depth = renderer.render(scene, flags=pyrender.RenderFlags.FLAT)
-        y, x = np.indices(depth.shape)
-        points = np.column_stack((x.ravel(), y.ravel(), depth.ravel()))
-        np.savetxt('bfmgan/voxelpointcloud.txt',
-                   points[points[:, 2] > 0], fmt='%d %d %.6f')
+        # saveColorObj(f"bfmGan/bfm{faceIdx:02d}.obj", Vert, texture, face_tri)
+        y, x = np.indices(frontDep.shape)
         points = np.column_stack((x.ravel(), y.ravel(), frontDep.ravel()))
-        np.savetxt('bfmgan/pointcloud.txt',
-                   points[points[:, 2] > 0], fmt='%d %d %.6f')
+        np.savetxt('bfmgan/1.txt', points, fmt='%d %d %.6f')
+        points = np.column_stack((x.ravel(), y.ravel(), carvingDep.ravel()))
+        np.savetxt('bfmgan/2.txt', points, fmt='%d %d %.6f')
+        # print(np.max(frontDep))
+        # print(np.min(frontDep))
+        exit(0)
 
 
 if __name__ == '__main__':
 
     generRandFaceDat()
     exit(0)
-
-    shape_pcaStandardDeviation = readEigenData(
-        'models/shape_pcaStandardDeviation.bin')
-    expression_pcaStandardDeviation = readEigenData(
-        'models/expression_pcaStandardDeviation.bin')
-    color_pcaStandardDeviation = readEigenData(
-        'models/color_pcaStandardDeviation.bin')
-    shape_mean = readEigenData('models/shape_mean.bin')
-    shape_pcaBasis = readEigenData(
-        'models/shape_pcaBasis.bin')
-    expression_mean = readEigenData(
-        'models/expression_mean.bin')
-    expression_pcaBasis = readEigenData(
-        'models/expression_pcaBasis.bin')
-    color_mean = readEigenData('models/color_mean.bin')
-    color_pcaBasis = readEigenData(
-        'models/color_pcaBasis.bin')
-    face_tri = readEigenData(
-        'models/facet.bin')
-
-    shapeParam = np.random.uniform(-1., 1.,
-                                   size=(shape_pcaBasis.shape[1], 1))
-    expressionParam = np.random.uniform(-1., 1.,
-                                        size=(
-                                            expression_pcaBasis.shape[1], 1))
-    colorParam = np.random.uniform(-1., 1.,
-                                   size=(color_pcaBasis.shape[1], 1))
-    Vert = shape_mean+shape_pcaBasis@(shapeParam*shape_pcaStandardDeviation) + \
-        expression_pcaBasis@(expressionParam*expression_pcaStandardDeviation)
-    texture = color_mean+color_pcaBasis@(colorParam*color_pcaStandardDeviation)
-    Vert = Vert.reshape(-1, 3)
-    texture = np.clip(texture, 0, 1).reshape(-1, 3)*255
-    texture = np.column_stack(
-        [texture, 255*np.ones([texture.shape[0], 1])]).astype(np.uint8)
-    saveColorObj("bfmGan/bfm09.obj", Vert, texture, face_tri)
-
-    trimesh_obj = trimesh.Trimesh(
-        vertices=Vert, faces=face_tri, vertex_colors=texture)
-    mesh = pyrender.Mesh.from_trimesh(trimesh_obj)
-    scene = pyrender.Scene()
-    scene.add(mesh)
-    bounds = trimesh_obj.bounds
-    model_size = np.max(bounds[1] - bounds[0])
-    camera = pyrender.OrthographicCamera(xmag=160,
-                                         ymag=160,
-                                         znear=0.01,
-                                         zfar=300.0)
-
-    cameraCnt = 4
-    camera_nodes = []
-    camera_pose = np.eye(4)
-    camera_pose[:3, 3] = np.array([0, 0, 200])
-    node = scene.add(camera, pose=camera_pose)
-    camera_nodes.append(node)
-    for camera_i in range(1, cameraCnt):
-        theta = 3.141592653589793*0.5/cameraCnt*camera_i
-        camera_pose = np.eye(4)
-        camera_pose[0, 0] = np.cos(theta)
-        camera_pose[0, 2] = np.sin(theta)
-        camera_pose[2, 0] = -np.sin(theta)
-        camera_pose[2, 2] = np.cos(theta)
-        # camera_pose=camera_pose.T
-        camera_pose[:3, 3] = np.array(
-            [200*np.sin(theta), 0, 200*np.cos(theta)])
-        node = scene.add(camera, pose=camera_pose)
-        camera_nodes.append(node)
-    for camera_i in range(1, cameraCnt):
-        theta = -3.141592653589793*0.5/cameraCnt*camera_i
-        camera_pose = np.eye(4)
-        camera_pose[0, 0] = np.cos(theta)
-        camera_pose[0, 2] = np.sin(theta)
-        camera_pose[2, 0] = -np.sin(theta)
-        camera_pose[2, 2] = np.cos(theta)
-        # camera_pose=camera_pose.T
-        camera_pose[:3, 3] = np.array(
-            [200*np.sin(theta), 0, 200*np.cos(theta)])
-        node = scene.add(camera, pose=camera_pose)
-        camera_nodes.append(node)
-
-    renderer = pyrender.OffscreenRenderer(viewport_width=600,
-                                          viewport_height=600)
-
-    print(f"场景中有 {len(camera_nodes)} 个相机")
-    for i, camera_node in enumerate(camera_nodes):
-        scene.main_camera_node = camera_nodes[i]
-        # 设置当前要渲染的相机
-        color, depth = renderer.render(scene, flags=pyrender.RenderFlags.FLAT)
-        Image.fromarray(color).save(f'bfmGan/output_{i:02d}.png')
-        Image.fromarray((depth > 0).astype(np.uint8) *
-                        255).save(f'bfmGan/mask_{i:02d}.png')
-
-    # color, depth = renderer.render(scene, flags=pyrender.RenderFlags.FLAT)
-    # Image.fromarray(color).save('bfmGan/output.png')
-    # Image.fromarray((depth>0).astype(np.uint8)*255).save('bfmGan/mask.png')
