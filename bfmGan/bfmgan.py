@@ -11,8 +11,8 @@ import pyrender
 from PIL import Image
 import sys
 import dlib
-
-
+from scipy.spatial import Delaunay
+import igl
 class DlibFinder:
     def __init__(self, faceParamPath, landmarkParamPath):
         if not os.path.exists(faceParamPath):
@@ -166,7 +166,9 @@ def getInside(pts, ptsCnt, masks: List[np.ndarray], R_list: List[np.ndarray], Rt
                                          xInt[valid_indices]] > 0
 
     return inside
-def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], camera_MagX, camera_MagY):
+
+
+def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], camera_MagX, camera_MagY, frontCameraZ):
     print('maxBox = ',maxBox)
     print('minBox = ', minBox)
     N = 204800
@@ -176,9 +178,9 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
     XcarvingStep = 0.99/RtoCam[0, 0]
     YcarvingStep = 0.99/RtoCam[1, 1]
     ZcarvingStep = np.min(maxBox-minBox)/80+1e-8
-    print('XcarvingStep = ', XcarvingStep)
-    print('YcarvingStep = ', YcarvingStep)
-    print('ZcarvingStep = ', ZcarvingStep)
+    # print('XcarvingStep = ', XcarvingStep)
+    # print('YcarvingStep = ', YcarvingStep)
+    # print('ZcarvingStep = ', ZcarvingStep)
 
     frontMask = masks[0]
     h, w = frontMask.shape
@@ -222,6 +224,7 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
                         pixelEndIdx = idx if pix == (
                             len(pixelStartIdx)-1) else pixelStartIdx[pix+1]
                         pixelInside = inside[pixelStartIdx[pix]:pixelEndIdx]
+                        pixelInside[:-1] = pixelInside[:-1] & pixelInside[1:]
                         pos = np.argmax(pixelInside == True)
                         if pos == 0 and not pixelInside[pos]:
                             continue
@@ -239,20 +242,35 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
             pixelEndIdx = idx if pix == (
                 len(pixelStartIdx)-1) else pixelStartIdx[pix+1]
             pixelInside = inside[pixelStartIdx[pix]:pixelEndIdx]
+            pixelInside[:-1] = pixelInside[:-1] & pixelInside[1:]
             pos = np.argmax(pixelInside == True)
             if pos == 0 and not pixelInside[pos]:
-                pass
-            else:
-                depZPos = pixelPos[pix]
-                depZ = pixelStartZ[pix]-pos*ZcarvingStep
-                if depZ > carvingDep[depZPos[1], depZPos[0]]:
-                    carvingDep[depZPos[1], depZPos[0]] = depZ
-    return carvingDep
+                continue
+            depZPos = pixelPos[pix]
+            depZ = pixelStartZ[pix]-pos*ZcarvingStep
+            if depZ > carvingDep[depZPos[1], depZPos[0]]:
+                carvingDep[depZPos[1], depZPos[0]] = depZ
+    return frontCameraZ - carvingDep
     # y_indices, x_indices = np.indices((600, 600))
     # point_cloud = np.stack([x_indices, y_indices, carvingDep], axis=-1)
     # np.savetxt('bfmGan/1.txt', point_cloud.reshape(-1, 3)) 
 
 
+def depthMatToVertex(depth, camera_MagX, camera_MagY):
+    h, w = depth.shape
+    RtoCam = np.eye(3, dtype=np.float32)
+    RtoCam[0, 0] = camera_MagX/w*2
+    RtoCam[1, 1] = camera_MagY/h*2
+
+    y, x = np.indices(depth.shape)
+    x =x- w*0.5
+    y = h*0.5-y
+    x=np.expand_dims(x,axis=2)
+    y=np.expand_dims(y,axis=2) 
+    z = np.expand_dims(depth, axis=2)
+    points = np.concatenate((x, y, z), axis=2).reshape(-1, 3)
+    points = points@RtoCam
+    return points
 
 def generRandFaceDat():
     faceParamPath = 'models/mmod_human_face_detector.dat'
@@ -279,18 +297,20 @@ def generRandFaceDat():
         'models/bfm/facet.bin')
 
     frontCameraZ = 200
-    Znear=50
-    Zfar = 200
-    faceCnt = 10
+    Znear=10
+    Zfar = 250
+    faceCnt = 30
     cameraCnt = 4
+    Zfar_Znear = Znear*Zfar
     scene = pyrender.Scene()
-    camera = pyrender.OrthographicCamera(xmag=160,
-                                         ymag=160,
+    camera = pyrender.OrthographicCamera(xmag=100,
+                                         ymag=100,
                                          znear=Znear,
                                          zfar=Zfar)
 
-    renderer = pyrender.OffscreenRenderer(viewport_width=600,
-                                          viewport_height=600)
+    renderer = pyrender.OffscreenRenderer(viewport_width=400,
+                                          viewport_height=400)
+
 
     for faceIdx in range(faceCnt):
         scene.clear()
@@ -342,15 +362,16 @@ def generRandFaceDat():
                                  expression_pcaStandardDeviation)
         texture = color_mean + \
             color_pcaBasis@(colorParam*color_pcaStandardDeviation)
-        Vert = Vert.reshape(-1, 3)
+        Vert = Vert.reshape(-1, 3)-np.array([0, 0, 50])
+        # Vert = np.load('bfmGan/4_00004.npz')['Vert']
         texture = np.clip(texture, 0, 1).reshape(-1, 3)*255
         texture = np.column_stack(
             [texture, 255*np.ones([texture.shape[0], 1])]).astype(np.uint8)
  
-        Vert = np.array([[0, 50, 150], [50, 0, 150], [-50, 0, 150]])
-        face_tri = np.array([[0, 2, 1]], dtype=np.int32)
-        texture = np.array(
-            [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]], dtype=np.uint8)
+        # Vert = np.array([[0, 50, 90], [50, 0, 90], [-50, 0, 90]])
+        # face_tri = np.array([[0, 2, 1]], dtype=np.int32)
+        # texture = np.array(
+        #     [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]], dtype=np.uint8)
 
         trimesh_obj = trimesh.Trimesh(
             vertices=Vert, faces=face_tri, vertex_colors=texture)
@@ -360,38 +381,58 @@ def generRandFaceDat():
 
         for i, camera_node in enumerate(camera_nodes):
             scene.main_camera_node = camera_nodes[i]
-            # 设置当前要渲染的相机
             color, depth = renderer.render(
                 scene, flags=pyrender.RenderFlags.FLAT)
             if i == 0:
                 frontRgb = color
-                # depth = zFar*(zObj-zNear)/(zFar-zNear)
-                print(np.max(depth))
-                frontDep = frontCameraZ-  (0.024-1/depth)*(Zfar*Znear)
+                # dep = (Zfar*Znear)/(Znear-ObjZ)
+                frontDep = ((Zfar_Znear/depth)-Znear)-50
                 frontDep[depth == 0] = 0
                 landmark = landmarkFinder.proc(color)
-            # Image.fromarray(color).save(f'bfmGan/output_{i:02d}.png')
+                # Image.fromarray(frontRgb).save(f'bfmGan/output_{faceIdx:05d}.png')
+            # Image.fromarray(color).save(f'bfmGan/output_{i:05d}.png')
             # Image.fromarray((depth>0).astype(np.uint8)*255).save(f'bfmGan/mask_{i:02d}.png')
             mask_list.append((depth > 0).astype(np.uint8)*255)
 
         carvingDep = carving(np.max(Vert, axis=0), np.min(
-            Vert, axis=0), mask_list, R_list, camera.xmag, camera.ymag)
+            Vert, axis=0), mask_list, R_list, camera.xmag, camera.ymag, frontCameraZ)
 
         carvingDep = frontCameraZ-carvingDep
-        carvingDep[carvingDep > frontCameraZ] = 0
+        carvingDep[carvingDep< 0] = 0
+ 
+        # np.savetxt('bfmgan/1.txt', depthMatToVertex(frontDep,
+        #            camera.xmag, camera.ymag), fmt='%d %d %.6f')
+        # np.savetxt(f'bfmgan/2.txt', depthMatToVertex(carvingDep,
+        #            camera.xmag, camera.ymag), fmt='%d %d %.6f')
+        # np.savetxt('bfmgan/3.txt', Vert, fmt='%d %d %.6f')
 
-        # saveColorObj(f"bfmGan/bfm{faceIdx:02d}.obj", Vert, texture, face_tri)
-        y, x = np.indices(frontDep.shape)
-        points = np.column_stack((x.ravel(), y.ravel(), frontDep.ravel()))
-        np.savetxt('bfmgan/1.txt', points, fmt='%d %d %.6f')
-        points = np.column_stack((x.ravel(), y.ravel(), carvingDep.ravel()))
-        np.savetxt('bfmgan/2.txt', points, fmt='%d %d %.6f')
-        # print(np.max(frontDep))
-        # print(np.min(frontDep))
-        exit(0)
+        np.savez(f"bfmGan/deps_{faceIdx:05d}.npz", landmark=landmark,
+                 frontDep=frontDep, carvingDep=carvingDep)
 
+         
+
+def doDelaunay(pts,tgt, frontDep, carvingDep):
+    size = len(frontDep)
+    bnd = np.array([[0, 0], [0, size-1], [size-1, 0], [size-1, size-1]])
+    v_tgt = np.vstack([bnd, tgt])
+    v_src = np.vstack([bnd, pts])
+    triangulation = Delaunay(v_tgt)
+    f = triangulation.simplices
+    # igl.cotmatrix(tgt_points_list,f)
+    print()
+
+def test_deform():
+    standard = np.load('bfmGan/deps_00029.npz')
+    standardLd = standard['landmark']
+    data = np.load('bfmGan/deps_00000.npz')
+    landmark = data['landmark']
+    frontDep = data['frontDep']
+    carvingDep = data['carvingDep']
+    doDelaunay(landmark, standardLd, frontDep, carvingDep)
+    return
 
 if __name__ == '__main__':
-
+    test_deform()
+    exit(0)
     generRandFaceDat()
     exit(0)
