@@ -418,7 +418,7 @@ def doDelaunay(pts,tgt, frontDep, carvingDep):
     v_src = np.vstack([bnd, pts])
     triangulation = Delaunay(v_tgt)
     f = triangulation.simplices
-    # igl.cotmatrix(tgt_points_list,f)
+    # igl.cotmatrix(v_tgt,f)
     print()
 
 def test_deform():
