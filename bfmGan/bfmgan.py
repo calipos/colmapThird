@@ -12,7 +12,10 @@ from PIL import Image
 import sys
 import dlib
 from scipy.spatial import Delaunay
-import igl
+from skimage import transform
+
+xMagnification=100
+yMagnification=100
 class DlibFinder:
     def __init__(self, faceParamPath, landmarkParamPath):
         if not os.path.exists(faceParamPath):
@@ -299,12 +302,12 @@ def generRandFaceDat():
     frontCameraZ = 200
     Znear=10
     Zfar = 250
-    faceCnt = 30
+    faceCnt = 10
     cameraCnt = 4
     Zfar_Znear = Znear*Zfar
     scene = pyrender.Scene()
-    camera = pyrender.OrthographicCamera(xmag=100,
-                                         ymag=100,
+    camera = pyrender.OrthographicCamera(xmag=xMagnification,
+                                         ymag=yMagnification,
                                          znear=Znear,
                                          zfar=Zfar)
 
@@ -411,28 +414,33 @@ def generRandFaceDat():
 
          
 
-def doDelaunay(pts,tgt, frontDep, carvingDep):
-    size = len(frontDep)
-    bnd = np.array([[0, 0], [0, size-1], [size-1, 0], [size-1, size-1]])
-    v_tgt = np.vstack([bnd, tgt])
-    v_src = np.vstack([bnd, pts])
-    triangulation = Delaunay(v_tgt)
-    f = triangulation.simplices
-    # igl.cotmatrix(v_tgt,f)
-    print()
+def tpsFunc(pts,tgt, frontDep, carvingDep): 
+    tps = transform.ThinPlateSplineTransform()
+    tps.estimate(tgt, pts)
+    frontDepWarped = transform.warp(frontDep, tps)
+    carvingDepWarped = transform.warp(carvingDep, tps)
+    return frontDepWarped,carvingDepWarped
 
 def test_deform():
-    standard = np.load('bfmGan/deps_00029.npz')
+    standard = np.load('bfmGan/deps_00009.npz')
     standardLd = standard['landmark']
     data = np.load('bfmGan/deps_00000.npz')
     landmark = data['landmark']
     frontDep = data['frontDep']
     carvingDep = data['carvingDep']
-    doDelaunay(landmark, standardLd, frontDep, carvingDep)
+    np.savetxt('bfmgan/3.txt', depthMatToVertex(frontDep,
+               xMagnification, yMagnification), fmt='%d %d %.6f')
+    np.savetxt(f'bfmgan/4.txt', depthMatToVertex(carvingDep,
+               xMagnification, yMagnification), fmt='%d %d %.6f')
+    frontDepWarped,carvingDepWarped = tpsFunc(landmark,standardLd,frontDep,carvingDep)
+    np.savetxt('bfmgan/1.txt', depthMatToVertex(frontDepWarped,
+               xMagnification, yMagnification), fmt='%d %d %.6f')
+    np.savetxt(f'bfmgan/2.txt', depthMatToVertex(carvingDepWarped,
+               xMagnification, yMagnification), fmt='%d %d %.6f')
     return
 
 if __name__ == '__main__':
-    test_deform()
-    exit(0)
+    # test_deform()
+    # exit(0)
     generRandFaceDat()
     exit(0)
