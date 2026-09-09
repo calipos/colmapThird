@@ -13,9 +13,11 @@ import sys
 import dlib
 from scipy.spatial import Delaunay
 from skimage import transform
+import pickle
+xMagnification = 100
+yMagnification = 100
 
-xMagnification=100
-yMagnification=100
+
 class DlibFinder:
     def __init__(self, faceParamPath, landmarkParamPath):
         if not os.path.exists(faceParamPath):
@@ -163,10 +165,10 @@ def getInside(pts, ptsCnt, masks: List[np.ndarray], R_list: List[np.ndarray], Rt
         valid = (xInt >= 0) & (xInt < w) & (
             yInt >= 0) & (yInt < h)
 
-        if np.any(valid):
-            valid_indices = np.where(valid)[0]
-            inside[valid_indices] &= mask[yInt[valid_indices],
-                                         xInt[valid_indices]] > 0
+        inside &= valid
+        valid_indices = np.where(valid)[0]
+        inside[valid_indices] &= mask[yInt[valid_indices],
+                                      xInt[valid_indices]] > 0
 
     return inside
 
@@ -206,9 +208,8 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
                 break
             xInFront = np.round(RtoCam[0, 0]*x+halfWidth).astype(int)
             yInFront = np.round(halfHeight-RtoCam[1, 1]*y).astype(int)
-            if (xInFront >= 0) & (xInFront < w) & (yInFront >= 0) & (yInFront < h) & frontMask[yInFront, xInFront] > 0:
-                pass
-            else:continue
+            if (xInFront < 0) or (xInFront >= w) or (yInFront < 0) or (yInFront >= h) or frontMask[yInFront, xInFront] <= 0:
+                continue
             for zi in range(1000000):
                 z = maxBox[2]-zi*ZcarvingStep
                 if z < minBox[2]:
@@ -223,10 +224,9 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
                 idx += 1
                 if idx == N:
                     inside = getInside(pts, idx, masks, R_list, RtoCam)
-                    for pix in range(len(pixelStartIdx)):
-                        pixelEndIdx = idx if pix == (
-                            len(pixelStartIdx)-1) else pixelStartIdx[pix+1]
-                        pixelInside = inside[pixelStartIdx[pix]:pixelEndIdx]
+                    pixelStartIdx.append(idx)
+                    for pix in range(len(pixelStartIdx)-1):
+                        pixelInside = inside[pixelStartIdx[pix]:pixelStartIdx[pix+1]]
                         pixelInside[:-1] = pixelInside[:-1] & pixelInside[1:]
                         pos = np.argmax(pixelInside == True)
                         if pos == 0 and not pixelInside[pos]:
@@ -275,7 +275,16 @@ def depthMatToVertex(depth, camera_MagX, camera_MagY):
     points = points@RtoCam
     return points
 
+
 def generRandFaceDat():
+    standardLd=None
+    if os.path.exists('bfmGan/standardLd.npz'):
+        standardLd = np.load('bfmGan/standardLd.npz')
+        standardLd = standardLd['standardLd']
+        # np.savez('bfmGan/standardLd.npz', standardLd=landmark)
+        # standardLd=landmark
+
+
     faceParamPath = 'models/mmod_human_face_detector.dat'
     landmarkParamPath = 'models/shape_predictor_68_face_landmarks.dat'
     landmarkFinder = DlibFinder(faceParamPath, landmarkParamPath)
@@ -300,9 +309,9 @@ def generRandFaceDat():
         'models/bfm/facet.bin')
 
     frontCameraZ = 200
-    Znear=10
+    Znear = 10
     Zfar = 250
-    faceCnt = 10
+    faceCnt = 2000
     cameraCnt = 4
     Zfar_Znear = Znear*Zfar
     scene = pyrender.Scene()
@@ -311,10 +320,10 @@ def generRandFaceDat():
                                          znear=Znear,
                                          zfar=Zfar)
 
-    renderer = pyrender.OffscreenRenderer(viewport_width=400,
-                                          viewport_height=400)
+    renderer = pyrender.OffscreenRenderer(viewport_width=384,
+                                          viewport_height=384)
 
-
+    # np.random.seed(0)
     for faceIdx in range(faceCnt):
         scene.clear()
         R_list = []
@@ -352,30 +361,23 @@ def generRandFaceDat():
             node = scene.add(camera, pose=camera_pose)
             camera_nodes.append(node)
 
-
-        shapeParam = np.random.uniform(-1., 1.,
+        shapeParam = np.random.uniform(-1.3, 1.3,
                                        size=(shape_pcaBasis.shape[1], 1))
-        expressionParam = np.random.uniform(-1., 1.,
+        expressionParam = np.random.uniform(-1.3, 1.3,
                                             size=(
                                                 expression_pcaBasis.shape[1], 1))
-        colorParam = np.random.uniform(-1., 1.,
+        colorParam = np.random.uniform(-1.3, 1.3,
                                        size=(color_pcaBasis.shape[1], 1))
+
         Vert = shape_mean+shape_pcaBasis@(shapeParam*shape_pcaStandardDeviation) + \
             expression_pcaBasis@(expressionParam *
                                  expression_pcaStandardDeviation)
         texture = color_mean + \
             color_pcaBasis@(colorParam*color_pcaStandardDeviation)
         Vert = Vert.reshape(-1, 3)-np.array([0, 0, 50])
-        # Vert = np.load('bfmGan/4_00004.npz')['Vert']
         texture = np.clip(texture, 0, 1).reshape(-1, 3)*255
         texture = np.column_stack(
             [texture, 255*np.ones([texture.shape[0], 1])]).astype(np.uint8)
- 
-        # Vert = np.array([[0, 50, 90], [50, 0, 90], [-50, 0, 90]])
-        # face_tri = np.array([[0, 2, 1]], dtype=np.int32)
-        # texture = np.array(
-        #     [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]], dtype=np.uint8)
-
         trimesh_obj = trimesh.Trimesh(
             vertices=Vert, faces=face_tri, vertex_colors=texture)
         mesh = pyrender.Mesh.from_trimesh(trimesh_obj)
@@ -392,7 +394,10 @@ def generRandFaceDat():
                 frontDep = ((Zfar_Znear/depth)-Znear)-50
                 frontDep[depth == 0] = 0
                 landmark = landmarkFinder.proc(color)
-                # Image.fromarray(frontRgb).save(f'bfmGan/output_{faceIdx:05d}.png')
+                if standardLd is None:
+                    np.savez('bfmGan/standardLd.npz', standardLd=landmark)
+                    standardLd=landmark
+                Image.fromarray(frontRgb).save(f'bfmGan/output_{faceIdx:05d}.png')
             # Image.fromarray(color).save(f'bfmGan/output_{i:05d}.png')
             # Image.fromarray((depth>0).astype(np.uint8)*255).save(f'bfmGan/mask_{i:02d}.png')
             mask_list.append((depth > 0).astype(np.uint8)*255)
@@ -401,27 +406,49 @@ def generRandFaceDat():
             Vert, axis=0), mask_list, R_list, camera.xmag, camera.ymag, frontCameraZ)
 
         carvingDep = frontCameraZ-carvingDep
-        carvingDep[carvingDep< 0] = 0
- 
-        # np.savetxt('bfmgan/1.txt', depthMatToVertex(frontDep,
+        carvingDep[carvingDep < 0] = 0
+
+        # np.savetxt(f'bfmgan/1_{faceIdx:05d}.txt', depthMatToVertex(frontDep,
         #            camera.xmag, camera.ymag), fmt='%d %d %.6f')
-        # np.savetxt(f'bfmgan/2.txt', depthMatToVertex(carvingDep,
+        # np.savetxt(f'bfmgan/2_{faceIdx:05d}.txt', depthMatToVertex(carvingDep,
         #            camera.xmag, camera.ymag), fmt='%d %d %.6f')
-        # np.savetxt('bfmgan/3.txt', Vert, fmt='%d %d %.6f')
+        # np.savetxt(f'bfmgan/3_{faceIdx:05d}.txt', Vert, fmt='%d %d %.6f')
 
-        np.savez(f"bfmGan/deps_{faceIdx:05d}.npz", landmark=landmark,
-                 frontDep=frontDep, carvingDep=carvingDep)
+        frontDepWarped, carvingDepWarped = tpsFunc(
+            landmark, standardLd, frontDep, carvingDep)
 
-         
+        # np.savetxt(f'bfmgan/4_{faceIdx:05d}.txt', depthMatToVertex(frontDepWarped,
+        #            camera.xmag, camera.ymag), fmt='%d %d %.6f')
+        # np.savetxt(f'bfmgan/5_{faceIdx:05d}.txt', depthMatToVertex(carvingDepWarped,
+        #            camera.xmag, camera.ymag), fmt='%d %d %.6f') 
 
-def tpsFunc(pts,tgt, frontDep, carvingDep): 
+        np.savez(f"bfmGan/deps_{faceIdx:05d}.npz",
+                 frontDep=frontDepWarped, carvingDep=carvingDepWarped)
+
+
+def tpsFunc(pts, tgt, frontDep, carvingDep):
     tps = transform.ThinPlateSplineTransform()
     tps.estimate(tgt, pts)
     frontDepWarped = transform.warp(frontDep, tps)
     carvingDepWarped = transform.warp(carvingDep, tps)
-    return frontDepWarped,carvingDepWarped
+    return frontDepWarped, carvingDepWarped
 
-def test_deform():
+
+def merge():
+    train=[]
+    for faceIdx in range(125):
+        data = np.load(f"bfmGan/deps_{faceIdx:05d}.npz")
+        train.append({"image": data['frontDep']/np.max(data['frontDep']), "mask": np.float32(
+            data['frontDep'] > 0), "noise": data['carvingDep']/np.max(data['carvingDep']),'class':1})
+    valid = []
+    for faceIdx in range(125,142):
+        data = np.load(f"bfmGan/deps_{faceIdx:05d}.npz")
+        valid.append({"image": data['frontDep']/np.max(data['frontDep']), "mask": np.float32(
+            data['frontDep'] > 0), "noise": data['carvingDep']/np.max(data['carvingDep']),'class':1})
+    with open('bfmGan/dataset.pkl', 'wb') as f:
+        pickle.dump({"train": train, "valid": valid}, f)
+
+def test_deform(): 
     standard = np.load('bfmGan/deps_00009.npz')
     standardLd = standard['landmark']
     data = np.load('bfmGan/deps_00000.npz')
@@ -432,15 +459,17 @@ def test_deform():
                xMagnification, yMagnification), fmt='%d %d %.6f')
     np.savetxt(f'bfmgan/4.txt', depthMatToVertex(carvingDep,
                xMagnification, yMagnification), fmt='%d %d %.6f')
-    frontDepWarped,carvingDepWarped = tpsFunc(landmark,standardLd,frontDep,carvingDep)
+    frontDepWarped, carvingDepWarped = tpsFunc(
+        landmark, standardLd, frontDep, carvingDep)
     np.savetxt('bfmgan/1.txt', depthMatToVertex(frontDepWarped,
                xMagnification, yMagnification), fmt='%d %d %.6f')
     np.savetxt(f'bfmgan/2.txt', depthMatToVertex(carvingDepWarped,
                xMagnification, yMagnification), fmt='%d %d %.6f')
     return
 
+
 if __name__ == '__main__':
-    # test_deform()
+    # merge()
     # exit(0)
     generRandFaceDat()
     exit(0)
