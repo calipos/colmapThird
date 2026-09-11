@@ -13,14 +13,21 @@
 #include "warp.h"
 namespace sdf
 {
-	VolumeDat::VolumeDat(const std::uint64_t& indexMax, const double& startX, const double& startY, const double& startZ, const double& endX, const double& endY, const double& endZ)
+	VolumeDat::VolumeDat(const std::uint32_t& indexMax, const double& startX, const double& startY, const double& startZ, const double& endX, const double& endY, const double& endZ)
 	{
+		if (endX <= startX || endY <= startY|| endY <= startY)
+		{
+			std::cout<<"endX <= startX || endY <= startY|| endY <= startY" << std::endl;
+			exit(-1);
+		}
 		this->x_start = startX;
 		this->y_start = startY;
 		this->z_start = startZ;
 		this->x_end = endX;
 		this->y_end = endY;
 		this->z_end = endZ;
+
+		
 
 		maxIndex = indexMax;
 		double maxIndexDouble = static_cast<double>(maxIndex);
@@ -30,12 +37,35 @@ namespace sdf
 			maxIndexDouble *= 0.99;
 			unit = std::pow(volume / maxIndexDouble, 0.3333);
 			resolution = abs(endX - startX) / unit;
-			x_size = static_cast<int>(abs(endX - startX) / unit)+1;
-			y_size = static_cast<int>(abs(endY - startY) / unit)+1;
-			z_size = static_cast<int>(abs(endZ - startZ) / unit)+1;
-		} while (x_size * y_size  * z_size >= indexMax);
+			double x_size_double = abs(endX - startX) / unit + 1;
+			double y_size_double = abs(endY - startY) / unit + 1;
+			double z_size_double = abs(endZ - startZ) / unit + 1;
+			if (x_size_double>std::numeric_limits<std::int32_t>::max()
+				|| y_size_double > std::numeric_limits<std::int32_t>::max()
+				|| z_size_double > std::numeric_limits<std::int32_t>::max())
+			{
+				continue;
+			}
+			x_size = static_cast<std::int32_t>(x_size_double) + 1;
+			y_size = static_cast<std::int32_t>(y_size_double) + 1;
+			z_size = static_cast<std::int32_t>(z_size_double) + 1;
 
-		std::uint64_t totalCnt = x_size * y_size * z_size;
+			const auto& bit_width = [](int32_t x) {
+				int n = 1;
+				while (x) { ++n; x >>= 1; }
+				return n;
+			};
+			if (bit_width(x_size) + bit_width(y_size) + bit_width(z_size) >32)
+			{
+				continue;
+			}
+			else
+			{
+				break;
+			}
+		} while (true);
+
+		std::uint32_t totalCnt = x_size * y_size * z_size;
 		int yx_size = x_size * y_size;
 		gridCenterHitValue = std::vector<float>(x_size * y_size * z_size, 1.0f);
 		grid = Eigen::Matrix4Xf(4, gridCenterHitValue.size());
@@ -363,7 +393,7 @@ int test_sdf()
 	double z_end = landmarkPts.col(2).maxCoeff();
 
 
-	sdf::VolumeDat a(static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()*0.001), x_strat, y_strat, z_strat-0.2*(z_end- z_strat), x_end, y_end, z_end);
+	sdf::VolumeDat a(static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()*0.001), x_strat, y_strat, z_strat-0.2*(z_end- z_strat), x_end, y_end, z_end);
 
 	std::vector<std::filesystem::path> maskPaths;
 	std::vector<std::filesystem::path> imgPaths;

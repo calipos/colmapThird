@@ -286,6 +286,7 @@ namespace mc
 		// 0 - 255
 		int signConfig;
 		std::array<Eigen::Vector3f, 12> edgeVertIndices;
+		std::array<std::uint64_t, 12> gridHash;
 	};
 	inline int SignConfig(const float sdfs[8],const float isoLevel)
 	{
@@ -353,14 +354,48 @@ namespace mc
 		auto const& tri = signConfigToTriangles[intersect.signConfig];
 		for (auto i = 0; tri[i] != -1; i += 3)
 		{
+			auto const& hash0 = intersect.gridHash[tri[i]];
+			auto const& hash1 = intersect.gridHash[tri[i+1]];
+			auto const& hash2 = intersect.gridHash[tri[i+2]];
 			auto const& v0 = intersect.edgeVertIndices[tri[i]];
 			auto const& v1 = intersect.edgeVertIndices[tri[i + 1]];
 			auto const& v2 = intersect.edgeVertIndices[tri[i + 2]];
-			mesh.vertices.push_back(v0);
-			mesh.vertices.push_back(v1);
-			mesh.vertices.push_back(v2);
+			int v0Idx = -1;
+			int v1Idx = -1;
+			int v2Idx = -1;
+			if (mesh.marchcubeIdx.count(hash0))
+			{
+				v0Idx = mesh.marchcubeIdx.at(hash0);
+			}
+			else
+			{
+				v0Idx = mesh.vertices.size();
+				mesh.marchcubeIdx[hash0] = v0Idx;
+				mesh.vertices.push_back(v0);
+			}
+			if (mesh.marchcubeIdx.count(hash1))
+			{
+				v1Idx = mesh.marchcubeIdx.at(hash1);
+			}
+			else
+			{
+				v1Idx = mesh.vertices.size();
+				mesh.marchcubeIdx[hash1] = v1Idx;
+				mesh.vertices.push_back(v1);
+			}if (mesh.marchcubeIdx.count(hash2))
+			{
+				v2Idx = mesh.marchcubeIdx.at(hash2);
+			}
+			else
+			{
+				v2Idx = mesh.vertices.size();
+				mesh.marchcubeIdx[hash2] = v2Idx;
+				mesh.vertices.push_back(v2);
+			}
+
+
 			auto last = static_cast<int>(mesh.vertices.size() - 1);
-			mesh.triangles.push_back({ last - 2, last - 1, last });
+			mesh.triangles.push_back({ v0Idx,v1Idx,v2Idx });
 		}
 	}
 	Mesh marchcube(const Eigen::Matrix4Xf& grid, const std::vector<float>& gridSdf,
@@ -370,7 +405,8 @@ namespace mc
 	{
 		auto const HalfCubeDiag = sqrt(gridUnit* gridUnit*3) / 2.0;
 		auto const HalfCubeSize = gridUnit * 0.5;
-		const int yx_size = numX * numY;
+		const std::uint32_t yx_size = numX * numY;
+		const std::uint32_t zyx_size = numZ * yx_size;
 		int numX_1 = numX - 1;
 		int numY_1 = numY - 1;
 		int numZ_1 = numZ - 1;
@@ -441,6 +477,14 @@ namespace mc
 					auto v1 = edges[e].vert1;
 					auto vert = LerpVertex(isoLevel, sdfs[v0], sdfs[v1], pos[v0], pos[v1]);
 					intersect.edgeVertIndices[e] = vert;
+					if (index[v0]> index[v1])
+					{
+						intersect.gridHash[e] = index[v0] + index[v1] * zyx_size;
+					}
+					else
+					{
+						intersect.gridHash[e] = index[v1] + index[v0] * zyx_size;
+					}
 				}
 			}
 			Triangulate(intersect, mesh);

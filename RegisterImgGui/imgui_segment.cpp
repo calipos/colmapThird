@@ -752,7 +752,7 @@ bool segmentFrame(bool* show_regist_window)
 							std::vector<std::filesystem::path> imgPaths;
 							std::vector<std::filesystem::path> jsonPaths;
 							std::vector<Eigen::Matrix4d> cameraPs;
-							sdf::VolumeDat volumeInstance(static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()), x_strat, y_strat, z_strat, x_end, y_end, z_end);
+							sdf::VolumeDat volumeInstance(static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()), x_strat, y_strat, z_strat, x_end, y_end, z_end);
 							for (size_t i = 0; i < segmentMgr->imgPaths.size(); i++)
 							{
 								{

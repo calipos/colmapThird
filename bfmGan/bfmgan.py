@@ -14,6 +14,7 @@ import dlib
 from scipy.spatial import Delaunay
 from skimage import transform
 import pickle
+import cv2
 xMagnification = 100
 yMagnification = 100
 
@@ -144,12 +145,10 @@ def saveColorObj(filepath, verts, color, faces):
     thefile.close()
 
 
- 
-
 def getInside(pts, ptsCnt, masks: List[np.ndarray], R_list: List[np.ndarray], RtoCam):
     frontMask = masks[0]
     h, w = frontMask.shape
-    
+
     halfWidth = w/2
     halfHeight = h/2
     inside = np.ones(pts.shape[1], dtype=bool)
@@ -160,7 +159,7 @@ def getInside(pts, ptsCnt, masks: List[np.ndarray], R_list: List[np.ndarray], Rt
         xInt = np.round(
             points_cam[0, :]+halfWidth).astype(int)
         yInt = np.round(halfHeight -
-                            points_cam[1, :]).astype(int)
+                        points_cam[1, :]).astype(int)
 
         valid = (xInt >= 0) & (xInt < w) & (
             yInt >= 0) & (yInt < h)
@@ -174,7 +173,7 @@ def getInside(pts, ptsCnt, masks: List[np.ndarray], R_list: List[np.ndarray], Rt
 
 
 def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], camera_MagX, camera_MagY, frontCameraZ):
-    print('maxBox = ',maxBox)
+    print('maxBox = ', maxBox)
     print('minBox = ', minBox)
     N = 204800
     RtoCam = np.eye(3, dtype=np.float32)
@@ -189,7 +188,7 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
 
     frontMask = masks[0]
     h, w = frontMask.shape
-    
+
     halfWidth = w/2
     halfHeight = h/2
     carvingDep = np.ones(frontMask.shape, dtype=np.float32)*-1
@@ -197,7 +196,7 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
     idx = 0
     pixelStartIdx = []
     pixelStartZ = []
-    pixelPos=[]
+    pixelPos = []
     for xi in range(1000000):
         x = minBox[0]+xi*XcarvingStep
         if x > maxBox[0]:
@@ -214,7 +213,7 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
                 z = maxBox[2]-zi*ZcarvingStep
                 if z < minBox[2]:
                     break
-                if zi == 0 or idx == 0:                
+                if zi == 0 or idx == 0:
                     pixelStartIdx.append(idx)
                     pixelStartZ.append(z)
                     pixelPos.append([xInFront, yInFront])
@@ -226,7 +225,7 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
                     inside = getInside(pts, idx, masks, R_list, RtoCam)
                     pixelStartIdx.append(idx)
                     for pix in range(len(pixelStartIdx)-1):
-                        pixelInside = inside[pixelStartIdx[pix]:pixelStartIdx[pix+1]]
+                        pixelInside = inside[pixelStartIdx[pix]                                             :pixelStartIdx[pix+1]]
                         pixelInside[:-1] = pixelInside[:-1] & pixelInside[1:]
                         pos = np.argmax(pixelInside == True)
                         if pos == 0 and not pixelInside[pos]:
@@ -239,7 +238,7 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
                     pixelStartZ.clear()
                     pixelPos.clear()
                     idx = 0
-    if len(pixelStartIdx)>0:
+    if len(pixelStartIdx) > 0:
         inside = getInside(pts, idx, masks, R_list, RtoCam)
         for pix in range(len(pixelStartIdx)):
             pixelEndIdx = idx if pix == (
@@ -256,7 +255,7 @@ def carving(maxBox, minBox, masks: List[np.ndarray], R_list: List[np.ndarray], c
     return frontCameraZ - carvingDep
     # y_indices, x_indices = np.indices((600, 600))
     # point_cloud = np.stack([x_indices, y_indices, carvingDep], axis=-1)
-    # np.savetxt('bfmGan/1.txt', point_cloud.reshape(-1, 3)) 
+    # np.savetxt('bfmGan/1.txt', point_cloud.reshape(-1, 3))
 
 
 def depthMatToVertex(depth, camera_MagX, camera_MagY):
@@ -266,10 +265,10 @@ def depthMatToVertex(depth, camera_MagX, camera_MagY):
     RtoCam[1, 1] = camera_MagY/h*2
 
     y, x = np.indices(depth.shape)
-    x =x- w*0.5
+    x = x - w*0.5
     y = h*0.5-y
-    x=np.expand_dims(x,axis=2)
-    y=np.expand_dims(y,axis=2) 
+    x = np.expand_dims(x, axis=2)
+    y = np.expand_dims(y, axis=2)
     z = np.expand_dims(depth, axis=2)
     points = np.concatenate((x, y, z), axis=2).reshape(-1, 3)
     points = points@RtoCam
@@ -277,13 +276,13 @@ def depthMatToVertex(depth, camera_MagX, camera_MagY):
 
 
 def generRandFaceDat():
-    standardLd=None
+    standardLd = None
+    bnd = np.array([[0, 0], [383, 0], [383, 383], [0, 383]])
     if os.path.exists('bfmGan/standardLd.npz'):
         standardLd = np.load('bfmGan/standardLd.npz')
-        standardLd = standardLd['standardLd']
+        standardLd = np.vstack([standardLd['standardLd'], bnd])
         # np.savez('bfmGan/standardLd.npz', standardLd=landmark)
         # standardLd=landmark
-
 
     faceParamPath = 'models/mmod_human_face_detector.dat'
     landmarkParamPath = 'models/shape_predictor_68_face_landmarks.dat'
@@ -396,8 +395,9 @@ def generRandFaceDat():
                 landmark = landmarkFinder.proc(color)
                 if standardLd is None:
                     np.savez('bfmGan/standardLd.npz', standardLd=landmark)
-                    standardLd=landmark
-                Image.fromarray(frontRgb).save(f'bfmGan/output_{faceIdx:05d}.png')
+                    standardLd = np.vstack([landmark, bnd])
+                Image.fromarray(frontRgb).save(
+                    f'bfmGan/{faceIdx:05d}a.png')
             # Image.fromarray(color).save(f'bfmGan/output_{i:05d}.png')
             # Image.fromarray((depth>0).astype(np.uint8)*255).save(f'bfmGan/mask_{i:02d}.png')
             mask_list.append((depth > 0).astype(np.uint8)*255)
@@ -414,41 +414,61 @@ def generRandFaceDat():
         #            camera.xmag, camera.ymag), fmt='%d %d %.6f')
         # np.savetxt(f'bfmgan/3_{faceIdx:05d}.txt', Vert, fmt='%d %d %.6f')
 
-        frontDepWarped, carvingDepWarped = tpsFunc(
-            landmark, standardLd, frontDep, carvingDep)
+        frontRgbWarped, frontDepWarped, carvingDepWarped = tpsFunc(
+            frontRgb, np.vstack([landmark, bnd]), standardLd, frontDep, carvingDep)
+        Image.fromarray(frontRgbWarped).save(
+            f'bfmGan/{faceIdx:05d}b.png')
 
+        # Image.fromarray(frontRgbWarped).save(
+        #     f'bfmGan/Warped_{faceIdx:05d}.png')
         # np.savetxt(f'bfmgan/4_{faceIdx:05d}.txt', depthMatToVertex(frontDepWarped,
         #            camera.xmag, camera.ymag), fmt='%d %d %.6f')
         # np.savetxt(f'bfmgan/5_{faceIdx:05d}.txt', depthMatToVertex(carvingDepWarped,
-        #            camera.xmag, camera.ymag), fmt='%d %d %.6f') 
+        #            camera.xmag, camera.ymag), fmt='%d %d %.6f')
 
         np.savez(f"bfmGan/deps_{faceIdx:05d}.npz",
                  frontDep=frontDepWarped, carvingDep=carvingDepWarped)
+        # data2 = np.load(f"bfmGan/deps_{faceIdx:05d}.npz")
+        # np.savetxt(f'bfmgan/55.txt',
+        #            depthMatToVertex(data2['frontDep'], 100, 100), fmt='%d %d %.6f')
+ 
 
 
-def tpsFunc(pts, tgt, frontDep, carvingDep):
-    tps = transform.ThinPlateSplineTransform()
+def tpsFunc(frontRgb, pts, tgt, frontDep, carvingDep):
+    tps = transform.PiecewiseAffineTransform()
     tps.estimate(tgt, pts)
-    frontDepWarped = transform.warp(frontDep, tps)
-    carvingDepWarped = transform.warp(carvingDep, tps)
-    return frontDepWarped, carvingDepWarped
+    frontRgbWarped = transform.warp(
+        frontRgb, tps, preserve_range=True).astype(np.uint8)
+    frontDepWarped = transform.warp(frontDep, tps, preserve_range=True)
+    carvingDepWarped = transform.warp(carvingDep, tps, preserve_range=True)
+
+    # img_vis = frontRgb.copy()
+    # for i, (x, y) in enumerate(pts):
+    #     cv2.circle(img_vis, (int(x), int(y)), 3, (0, 255, 0), -1)
+    # for i, (x, y) in enumerate(tgt):
+    #     cv2.circle(frontRgbWarped, (int(x), int(y)), 2, (0, 0, 255), -1) 
+    # Image.fromarray(img_vis).save('bfmGan/Warped_54.png')
+    # Image.fromarray(frontRgbWarped).save('bfmGan/Warped_55.png')
+
+    return frontRgbWarped, frontDepWarped, carvingDepWarped
 
 
 def merge():
-    train=[]
-    for faceIdx in range(125):
+    train = []
+    for faceIdx in range(0, 4000):
         data = np.load(f"bfmGan/deps_{faceIdx:05d}.npz")
         train.append({"image": data['frontDep']/np.max(data['frontDep']), "mask": np.float32(
-            data['frontDep'] > 0), "noise": data['carvingDep']/np.max(data['carvingDep']),'class':1})
+            data['frontDep'] > 0), "noise": data['carvingDep']/np.max(data['carvingDep']), 'class': 1})
     valid = []
-    for faceIdx in range(125,142):
+    for faceIdx in range(125, 142):
         data = np.load(f"bfmGan/deps_{faceIdx:05d}.npz")
         valid.append({"image": data['frontDep']/np.max(data['frontDep']), "mask": np.float32(
-            data['frontDep'] > 0), "noise": data['carvingDep']/np.max(data['carvingDep']),'class':1})
+            data['frontDep'] > 0), "noise": data['carvingDep']/np.max(data['carvingDep']), 'class': 1})
     with open('bfmGan/dataset.pkl', 'wb') as f:
         pickle.dump({"train": train, "valid": valid}, f)
 
-def test_deform(): 
+
+def test_deform():
     standard = np.load('bfmGan/deps_00009.npz')
     standardLd = standard['landmark']
     data = np.load('bfmGan/deps_00000.npz')
@@ -468,7 +488,19 @@ def test_deform():
     return
 
 
+def checkFile():
+    with open('G:/BaiduNetdiskDownload/dataset.pkl', "rb") as f:
+        data_dict = pickle.load(f)
+    data_split = data_dict.get('train', [])
+    for e in data_split:
+        np.savetxt(f'bfmgan/55.txt',
+                   depthMatToVertex(e['image'], 100, 100), fmt='%d %d %.6f')
+        print()
+
+
 if __name__ == '__main__':
+    # checkFile()
+    # exit(0)
     # merge()
     # exit(0)
     generRandFaceDat()
