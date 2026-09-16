@@ -472,16 +472,6 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 	progress.procRunning.fetch_add(1);
 	progress.denominator.store(1);
 	progress.numerator.store(1);
-	this->denseObjPath = mvsResultDir / "dense.obj";
-	if (!std::filesystem::exists(this->denseObjPath))
-	{
-		LOG_ERR_OUT << "need denseObjPath";
-		return;
-	}
-	else
-	{
-		readObj(this->denseObjPath, borderMsh.V, borderMsh.F);
-	}
 	std::filesystem::path bfmFacePath = modelDirPath / "model2019_face12.h5";
 	if (!std::filesystem::exists(bfmFacePath))
 	{
@@ -492,10 +482,29 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 	bfmIns->generateRandomFace(bfmMsh.V, bfmMsh.C);
 	//meshdraw::utils::savePts("0.txt", bfmMsh.V);
 	this->bfmMsh.F = bfmIns->F;
+	if (meshdraw::isEmpty(this->bfmMsh.facesNormal))
+	{
+		this->bfmMsh.figureFacesNomral();
+	}
+
     bfm_R << 1, 0, 0, 0, -1, 0, 0, 0, -1;
     bfm_t << 0, 0, 300;  
-	bfm_scale = 1.f;
-	//this->bfmMsh.rotate(bfm_R, bfm_t, bfm_scale);
+	bfm_scale = 1.f; 
+
+
+	meshdraw::Camera cam;
+	cam.cameraType = meshdraw::CmaeraType::Ortho;
+	cam.intr << 100, 0, 197, 0, 100, 197, 0, 0, 1;
+	cam.R  << 1, 0, 0, 0, 1, 0, 0, 0, 1;
+	cam.t  <<0,0,0;
+	cam.height = 384;
+	cam.width = 384;
+	cv::Mat render3d;
+	cv::Mat render3dPts;
+	cv::Mat mask;
+	meshdraw::render(this->bfmMsh, cam, bfm_R, bfm_t, bfm_scale, render3d, render3dPts, mask);
+
+
 	imgPaths.clear();
 	imgNameForlist.clear();
 	imgDirPath_ = mvsResultDir;

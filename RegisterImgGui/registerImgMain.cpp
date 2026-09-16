@@ -24,7 +24,7 @@ static void glfw_error_callback(int error, const char* description)
 bool show_imgRegister_window = false;
 bool show_segment_window = false;
 bool show_annotation_window = false;
-bool show_bfmIter_window = false;
+bool show_bfmIter_window = true;
 
 
 extern int test_sam2();
@@ -43,7 +43,7 @@ extern int test_iter_d();
 extern int test_pips2_iter();
 int main(int, char**)
 {
-    return test_sdf();
+    //return test_sdf();
     //return test_pips2_iter();
     //return test_iter_d();
     //return test_curve_fit();
@@ -105,7 +105,7 @@ int main(int, char**)
         {
             show_segment_window = !show_segment_window;
         }
-        if (ImGui::Button("bfmIter(need dense.obj)") && !show_bfmIter_window)
+        if (ImGui::Button("iter") && !show_bfmIter_window)
         {
             show_bfmIter_window = !show_bfmIter_window;
         }

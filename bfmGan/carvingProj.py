@@ -69,7 +69,7 @@ class DlibFinder:
 def scanline_triangle(A, B, C, depth):
     pts = sorted(zip([A, B, C], depth), key=lambda p: p[0][1])
     (xy1, dep1), (xy2, dep2), (xy3, dep3) = pts
-    (x1, y1, _), (x2, y2, _), (x3, y3, _) = xy1, xy2, xy3
+    (x1, y1), (x2, y2), (x3, y3) = xy1, xy2, xy3
     resortedDeps = np.array([dep1, dep2, dep3])
     pexels = []
     if y1 == y2 == y3:
@@ -99,23 +99,34 @@ def scanline_triangle(A, B, C, depth):
                 depthRet[i] = resortedDeps[idx]
             else:
                 dists/np.linalg.norm(dists)
-                depthRet[i] = np.dot(resortedDeps, dists/np.linalg.norm(dists))
+                depthRet[i] = np.dot(resortedDeps, dists/np.sum(dists))
         return np.array(pexels, dtype=np.int32), depthRet
 
     def interp(y, p, q):
         if p[1] == q[1]:
-            return None
-        t = (y - p[1]) / (q[1] - p[1])
-        return p[0] + t * (q[0] - p[0])
+            if p[1] == y and p[0] < q[0]:
+                return list(range(p[0], q[0]+1))
+            elif p[1] == y and p[0] > q[0]:
+                return list(range(q[0], p[0]+1))
+            else:
+                return None
+        t = (np.float32(y) - p[1]) / (q[1] - p[1])
+        return np.int32(p[0] + t * (q[0] - p[0])+0.5)
 
     for y in range(y1, y3 + 1):
         xs = set()
-        for p, q in [(xy1, xy2), (xy2, xy3), (xy3, xy1)]:
+        for p, q in [(xy1, xy2), (xy2, xy3), (xy1, xy3)]:
             x = interp(y, p, q)
             if x is not None and min(p[1], q[1]) <= y <= max(p[1], q[1]):
-                xs.add(np.int32(x))
+                if isinstance(x, list):
+                    for x_ in x:
+                        xs.add(np.int32(x_))
+                else:
+                    xs.add(np.int32(x))
         if xs:
-            for x in xs:
+            xmin = min(xs)
+            xmax = max(xs)
+            for x in range(xmin, xmax+1):
                 pexels.append([x, y, 1])
 
     depthRet = np.zeros([len(pexels)])
@@ -149,6 +160,8 @@ def AffineTransform(src, tgt, depth):
     A[4, 2] = 1
     A[5, 5] = 1
     pixelList, depthRet = scanline_triangle(tgt[0], tgt[1], tgt[2], depth)
+    if len(pixelList)==0:
+        return [],[],[]
 
     xmin0 = min(min(src[0][0], src[1][0]), src[2][0])
     ymin0 = min(min(src[0][1], src[1][1]), src[2][1])
@@ -185,12 +198,139 @@ def AffineTransform(src, tgt, depth):
     return depthRet, (srcPixel+0.5).astype(np.int32).T, pixelListRet[:, :2]
 
 
+def depthMatToVertex(depth, camera_MagX=None, camera_MagY=None):
+    
+    h, w = depth.shape
+    RtoCam=None
+    if camera_MagX is not None:
+        RtoCam = np.eye(3, dtype=np.float32)
+        RtoCam[0, 0] = camera_MagX/w*2
+        RtoCam[1, 1] = camera_MagY/h*2
+
+    y, x = np.indices(depth.shape)
+    x = x - w*0.5
+    y = h*0.5-y
+    x = np.expand_dims(x, axis=2)
+    y = np.expand_dims(y, axis=2)
+    z = np.expand_dims(depth, axis=2)
+    points = np.concatenate((x, y, z), axis=2).reshape(-1, 3)
+    if camera_MagX is not None:
+        points = points@RtoCam
+    return points
+
+
+def tpsFunc(frontRgb, pts, tgt, frontDep):
+    tps = transform.PiecewiseAffineTransform()
+    tps.estimate(tgt, pts)
+    frontRgbWarped = transform.warp(
+        frontRgb, tps, preserve_range=True).astype(np.uint8)
+    frontDepWarped = transform.warp(frontDep, tps, preserve_range=True)
+
+    return frontRgbWarped, frontDepWarped
+
+def infer():
+
+    trainData = np.load('bfmgan/deps_00000.npz')
+    testData = np.load('bfmgan/test.npz')
+
+    np.savetxt('bfmgan/14.txt', depthMatToVertex(trainData['carvingDep']/np.max(trainData['carvingDep']), 1, 1),
+               fmt='%d %d %.6f')
+    np.savetxt('bfmgan/15.txt', depthMatToVertex(testData['noise'], 1, 1),
+               fmt='%d %d %.6f')
+    ret = np.load('bfmgan/final_imgs.npz')
+    ret = ret['final_imgs']
+    np.savetxt('bfmgan/117.txt', depthMatToVertex(ret, 1, 1),
+                                      fmt='%d %d %.6f')
+    print()
+
+
+def readEigenData(path):
+    assert os.path.exists(path)
+    with open(path, 'rb') as f:
+        typeEncode = struct.unpack('<i', f.read(4))[0]
+        rows = struct.unpack('<i', f.read(4))[0]
+        cols = struct.unpack('<i', f.read(4))[0]
+        if typeEncode == 1:  # float
+            data = f.read(rows*cols*4)
+            arr = np.array(struct.unpack(
+                '<'+str(rows*cols)+'f', data), dtype=np.float32)
+        elif typeEncode == 3:  # int
+            data = f.read(rows*cols*4)
+            arr = np.array(struct.unpack(
+                '<'+str(rows*cols)+'i', data), dtype=np.int32)
+        else:
+            assert False
+        return arr.reshape(rows, cols)
+
+def generRandFaceDat():
+    shape_pcaStandardDeviation = readEigenData(
+        'models/bfm/shape_pcaStandardDeviation.bin')
+    expression_pcaStandardDeviation = readEigenData(
+        'models/bfm/expression_pcaStandardDeviation.bin')
+    color_pcaStandardDeviation = readEigenData(
+        'models/bfm/color_pcaStandardDeviation.bin')
+    shape_mean = readEigenData('models/bfm/shape_mean.bin')
+    shape_pcaBasis = readEigenData(
+        'models/bfm/shape_pcaBasis.bin')
+    expression_mean = readEigenData(
+        'models/bfm/expression_mean.bin')
+    expression_pcaBasis = readEigenData(
+        'models/bfm/expression_pcaBasis.bin')
+    color_mean = readEigenData('models/bfm/color_mean.bin')
+    color_pcaBasis = readEigenData(
+        'models/bfm/color_pcaBasis.bin')
+    face_tri = readEigenData(
+        'models/bfm/facet.bin')
+
+    frontCameraZ = 200
+    Znear = 10
+    Zfar = 250
+    faceCnt = 2000
+    Zfar_Znear = Znear*Zfar
+    scene = pyrender.Scene()
+    camera = pyrender.OrthographicCamera(xmag=xMagnification,
+                                         ymag=yMagnification,
+                                         znear=Znear,
+                                         zfar=Zfar)
+
+    renderer = pyrender.OffscreenRenderer(viewport_width=384,
+                                          viewport_height=384)
+
+    # np.random.seed(0)
+
+    scene.clear()
+    camera_nodes = []
+    camera_pose = np.eye(4)
+    camera_pose[:3, 3] = np.array([0, 0, frontCameraZ])
+    node = scene.add(camera, pose=camera_pose)
+    camera_nodes.append(node)
+         
+    shapeParam = np.random.uniform(-0.5, 0.5, size=(shape_pcaBasis.shape[1], 1))
+    expressionParam = np.random.uniform(-0.5, 0.5, size=( expression_pcaBasis.shape[1], 1))
+    colorParam = np.random.uniform(-0.5, 0.5, size=(color_pcaBasis.shape[1], 1))
+
+    Vert = shape_mean +shape_pcaBasis@(shapeParam*shape_pcaStandardDeviation) + expression_pcaBasis@(expressionParam * expression_pcaStandardDeviation)
+    texture = color_mean +  color_pcaBasis@(colorParam*color_pcaStandardDeviation)
+    Vert = Vert.reshape(-1, 3)-np.array([0, 0, 50])
+    texture = np.clip(texture, 0, 1).reshape(-1, 3)*255
+    texture = np.column_stack( [texture, 255*np.ones([texture.shape[0], 1])]).astype(np.uint8)
+    trimesh_obj = trimesh.Trimesh(vertices=Vert, faces=face_tri, vertex_colors=texture)
+    mesh = pyrender.Mesh.from_trimesh(trimesh_obj)
+    mesh_node = scene.add(mesh) 
+    color, depth = renderer.render(
+        scene, flags=pyrender.RenderFlags.FLAT)
+
+    # dep = (Zfar*Znear)/(Znear-ObjZ)
+    frontDep = ((Zfar_Znear/depth)-Znear)-50
+    frontDep[depth == 0] = 0
+    return Vert, face_tri, color, frontDep
+
 if __name__ == '__main__':
+
+
     objPath = 'data/a/result/dense.obj'
-    frontJsonPath = 'data/a/result/a@00001.json'
-    faceParamPath = 'models/mmod_human_face_detector.dat'
-    landmarkParamPath = 'models/shape_predictor_68_face_landmarks.dat'
-    landmarkFinder = DlibFinder(faceParamPath, landmarkParamPath)
+    frontJsonPath = 'data/a/result/a@00000.json'
+
     with open(frontJsonPath, 'r', encoding='utf-8') as f:
         data = json.load(f)
         wxyz = data['Qt'][:4]
@@ -198,30 +338,29 @@ if __name__ == '__main__':
         cameraR = rot.as_matrix()
         cameraT = np.array(data['Qt'][4:])
         imgPath = data['imagePath']
-    # landmarks = landmarkFinder.proc(imgPath)
     mesh = trimesh.load(objPath)
     pts = mesh.vertices@cameraR.T
     dists = np.linalg.norm(pts, axis=1)
     ptsMin = np.min(pts, axis=0)
     ptsMax = np.max(pts, axis=0)
     scale = 350/max(ptsMax[0]-ptsMin[0], ptsMax[1]-ptsMin[1])
-    orthograghicPts = pts*scale-ptsMin*scale
-    orthograghicPts = orthograghicPts.astype(np.int32)
+    orthograghicPts = pts*scale-ptsMin*scale+(384-350)*0.5
+    orthograghicPts = orthograghicPts[:,:2].astype(np.int32)
     pts = pts+cameraT
     xInProjImg = data['fx']*pts[:, 0] / pts[:, 2]+data['cx']
     yInProjImg = data['fy']*pts[:, 1] / pts[:, 2]+data['cy']
 
-
-    imgRender = np.zeros([384, 384, 3])*255
-    depthMat = np.ones([384, 384, 1])*-1
+    imgRender = np.ones([384, 384, 3])*255
+    depthMat = np.ones([384, 384])*-1
     img = np.array(Image.open(imgPath))
     h, w, _ = img.shape
     for f in mesh.faces:
         i0 = f[0]
         i1 = f[1]
         i2 = f[2]
-        depthRet, srcPixels, tarPixels = AffineTransform([[xInProjImg[i0], yInProjImg[i0]], [xInProjImg[i1], yInProjImg[i1]], [xInProjImg[i2], yInProjImg[i2]]], [
-            orthograghicPts[i0], orthograghicPts[i1], orthograghicPts[i2]], [dists[i0], dists[i1], dists[i2]])
+        depthRet, srcPixels, tarPixels = AffineTransform(
+            [[xInProjImg[i0], yInProjImg[i0]], [xInProjImg[i1], yInProjImg[i1]], [xInProjImg[i2], yInProjImg[i2]]], 
+            [orthograghicPts[i0], orthograghicPts[i1], orthograghicPts[i2]], [dists[i0], dists[i1], dists[i2]])
         for dep, rgbXy, orthXy in zip(depthRet, srcPixels, tarPixels):
             if 0 <= rgbXy[0] < w and 0 <= rgbXy[1] < h and 0 <= orthXy[0] < 384 and 0 <= orthXy[1] < 384:
                 if depthMat[orthXy[1], orthXy[0]] < 0:
@@ -230,7 +369,44 @@ if __name__ == '__main__':
                 elif dep < depthMat[orthXy[1], orthXy[0]]:
                     depthMat[orthXy[1], orthXy[0]] = dep
                     imgRender[orthXy[1], orthXy[0]] = img[rgbXy[1], rgbXy[0]]
-    Image.fromarray(imgRender.astype(np.uint8)).save('bfmGan/11.png')
+    mask = depthMat<0
+    maxDpeth = np.max(depthMat)
+    depthMat[mask] = maxDpeth
+    minDpeth = np.min(depthMat)
+    depthMat = np.abs(depthMat-maxDpeth)/(maxDpeth-minDpeth)
+    depthMat[mask] = 0
+    imgRender = imgRender.astype(np.uint8)
+    landmarks = landmarkFinder.proc(imgRender)
+    landmarks = np.vstack([landmarks, bnd])
+
+
+    bfmLandmarks = np.vstack([bfmLandmarks, bnd])
+ 
+
+
+    Image.fromarray(imgRender).save('bfmGan/a.png')
+    rgbWarped, depWarped = tpsFunc(
+        bfmRgb, bfmLandmarks, landmarks, bfmDepth)
+    Image.fromarray(rgbWarped).save('bfmGan/b.png')
+    np.savetxt('bfmgan/a.txt', depthMatToVertex(bfmDepth/np.max(bfmDepth)),
+               fmt='%d %d %.6f')
+    np.savetxt('bfmgan/b.txt', depthMatToVertex(depWarped/np.max(depWarped)),
+               fmt='%d %d %.6f')
+    np.savetxt('bfmgan/c.txt', depthMatToVertex(depthMat/np.max(depthMat)),
+               fmt='%d %d %.6f')
+    np.savetxt('bfmgan/d.txt', bfmVertex, fmt='%.6f %.6f %.6f')
+    trimesh_obj = trimesh.Trimesh(
+        vertices=bfmVertex, faces=bfmFaces)
+    trimesh_obj.export('bfmgan/output.obj')
+    exit(0)
+
+
+    landmarks = landmarkFinder.proc(imgRender)
+    rgbWarped, depWarped = tpsFunc(
+        imgRender, landmarks, standardLd, depthMat)
+    Image.fromarray(rgbWarped).save('bfmGan/11a.png')
+    Image.fromarray((depWarped*255).astype(np.uint8)).save('bfmGan/11b.png')
+    np.savez('bfmGan/test.npz', noise=depWarped, mask=mask)
     exit(-1)
 
     xInCam = pts[:, 0]/pts[:, 2]

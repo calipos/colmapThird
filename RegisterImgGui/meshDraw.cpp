@@ -541,7 +541,45 @@ namespace meshdraw
             }
             else if (cam.cameraType == CmaeraType::Ortho)
             {
-                ptsInPic = (msh.V * R_T).cast<int>();
+                Eigen::Matrix3f intr = cam.intr;
+                int imgWidth = static_cast<int>(intr(0, 2) * 2);
+                int imgHeight = static_cast<int>(intr(1, 2) * 2);
+                Eigen::MatrixX3f ptsFloat = msh.V * R_T;
+                Eigen::RowVector3f colMin = ptsFloat.colwise().minCoeff();
+                Eigen::RowVector3f colMax = ptsFloat.colwise().maxCoeff(); 
+                float minx = colMin[0];
+                float miny = colMin[1];
+                float maxx = colMax[0];
+                float maxy = colMax[1];
+                float scaleHeight = imgHeight / (maxy - miny);
+                float scaleWidth = imgWidth / (maxx - minx);
+                float scale = (std::min)(scaleHeight, scaleWidth);
+                ptsInPic = ((msh.V.rowwise() - colMin)* scale).cast<int>();
+                rgbMat = cv::Mat::zeros(imgHeight, imgWidth, CV_8UC3);
+                mask = cv::Mat::zeros(imgHeight, imgWidth, CV_8UC1);
+                vertexMap = cv::Mat::zeros(imgHeight, imgWidth, CV_32FC3);
+                for (int v = 0; v < msh.V.rows(); v++)
+                { 
+                    { 
+                        {
+                            const Eigen::Vector3f& value = msh.V.row(v);
+                            const int& r = imgHeight-ptsInPic(v, 1);
+                            const int& c = ptsInPic(v, 0);
+                            if (c >= 0 && r >= 0 && c < cam.width && r < cam.height)
+                            {
+                               
+                                    mask.ptr<uchar>(r)[c] = 1;
+                                    rgbMat.at<cv::Vec3b>(r, c)[0] = colorInt(v, 2);
+                                    rgbMat.at<cv::Vec3b>(r, c)[1] = colorInt(v, 1);
+                                    rgbMat.at<cv::Vec3b>(r, c)[2] = colorInt(v, 0);
+                                    vertexMap.at<cv::Vec3f>(r, c)[0] = value[0];
+                                    vertexMap.at<cv::Vec3f>(r, c)[1] = value[1];
+                                    vertexMap.at<cv::Vec3f>(r, c)[2] = value[2];
+                            }
+                        }
+                    }
+                }
+                LOG_OUT;
             }
             else
             {
