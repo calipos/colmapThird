@@ -416,6 +416,49 @@ namespace draw
 	int Draw::canvasMaxSide = 0;
 	float Draw::resizeFactor = 1;
 }
+int figureDlibLandMarks(const  std::filesystem::path& mvsResultDir)
+{
+	for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ mvsResultDir })
+	{
+		const auto& thisFilename = dir_entry.path();
+		if (thisFilename.has_extension())
+		{
+			const auto& ext = thisFilename.extension().string();
+			if (ext.compare(".json") == 0)
+			{
+				std::string stem = thisFilename.filename().stem().string();
+				auto maskPath = thisFilename.parent_path() / ("mask_" + stem + ".dat");
+				if (std::filesystem::exists(maskPath))
+				{
+					Eigen::Matrix4d cameraMatrix, Rt;
+					bool readRet = labelme::readCmaeraFromRegisterJson(thisFilename, cameraMatrix, Rt);
+					if (!readRet)
+					{
+						LOG_WARN_OUT << "read fail : " << thisFilename;
+						continue;
+					}
+					std::string imgPath;
+					if (!labelme::readJsonStringElement(thisFilename, "imagePath", imgPath))
+					{
+						LOG_WARN_OUT << "not found : " << imgPath;
+						continue;
+					};
+					if (!std::filesystem::exists(imgPath))
+					{
+						LOG_WARN_OUT << "not found : " << imgPath;
+					}
+
+					cv::Mat image = cv::imread(imgPath);
+					if (!image.empty())
+					{
+						
+					}
+				}
+			}
+		}
+	}
+	return 0;
+}
 bool BfmIter::readObj(const std::filesystem::path& objPath, Eigen::MatrixX3f& vertex, Eigen::MatrixX3i& faces)
 {
 	if (!std::filesystem::exists(objPath))
@@ -492,17 +535,17 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 	bfm_scale = 1.f; 
 
 
-	meshdraw::Camera cam;
-	cam.cameraType = meshdraw::CmaeraType::Ortho;
-	cam.intr << 100, 0, 197, 0, 100, 197, 0, 0, 1;
-	cam.R  << 1, 0, 0, 0, 1, 0, 0, 0, 1;
-	cam.t  <<0,0,0;
-	cam.height = 384;
-	cam.width = 384;
-	cv::Mat render3d;
-	cv::Mat render3dPts;
-	cv::Mat mask;
-	meshdraw::render(this->bfmMsh, cam, bfm_R, bfm_t, bfm_scale, render3d, render3dPts, mask);
+	//meshdraw::Camera cam;
+	//cam.cameraType = meshdraw::CmaeraType::Ortho;
+	//cam.intr << 100, 0, 197, 0, 100, 197, 0, 0, 1;
+	//cam.R  << 1, 0, 0, 0, 1, 0, 0, 0, 1;
+	//cam.t  <<0,0,0;
+	//cam.height = 384;
+	//cam.width = 384;
+	//cv::Mat render3d;
+	//cv::Mat render3dPts;
+	//cv::Mat mask;
+	//meshdraw::render(this->bfmMsh, cam, bfm_R, bfm_t, bfm_scale, render3d, render3dPts, mask);
 
 
 	imgPaths.clear();

@@ -487,7 +487,8 @@ version/minorVersion
     {
         std::default_random_engine e;
         std::uniform_real_distribution<float> u(-1, 1);
-        e.seed(time(0));
+        //e.seed(time(0));
+        e.seed(0);
         Eigen::VectorXf shapeParam(shapeDim);
         Eigen::VectorXf colorParam(colorDim);
         Eigen::VectorXf expressionParam(expressionDim);

@@ -199,45 +199,10 @@ namespace meshdraw
             fout.close();
             return true;
         }
-        std::list<cv::Vec2i> triangle(const cv::Vec2i& p0, const cv::Vec2i& p1, const cv::Vec2i& p2) {
-            std::list<cv::Vec2i> ret;
-            if (p0[1] == p1[1] && p0[1] == p2[1])
-            {
-                int xmin = (std::min)((std::min)(p0[0], p1[0]), p2[0]);
-                int xmax = (std::max)((std::max)(p0[0], p1[0]), p2[0]);
-                for (int i = xmin; i <= xmax; i++)
-                {
-                    ret.emplace_back(i, p0[1]);
-                }
-                return ret;
-            }
-            cv::Vec2i t0 = p0;
-            cv::Vec2i t1 = p1;
-            cv::Vec2i t2 = p2;
-            if (t0[1] > t1[1]) std::swap(t0, t1);
-            if (t0[1] > t2[1]) std::swap(t0, t2);
-            if (t1[1] > t2[1]) std::swap(t1, t2);
-            int total_height = t2[1] - t0[1];
-            for (int i = 0; i < total_height; i++) {
-                //separate
-                bool second_half = i > t1[1] - t0[1] || t1[1] == t0[1];
-                int segment_height = second_half ? t2[1] - t1[1] : t1[1] - t0[1];
-                float alpha = (float)i / total_height;
-                float beta = (float)(i - (second_half ? t1[1] - t0[1] : 0)) / segment_height;
-                cv::Vec2i A = t0 + (t2 - t0) * alpha;
-                cv::Vec2i B = second_half ? t1 + (t2 - t1) * beta : t0 + (t1 - t0) * beta;
-                if (A[0] > B[0]) std::swap(A, B);
-                for (int j = A[0]; j <= B[0]; j++) {
-                    ret.emplace_back(j, t0[1] + i);
-                }
-            }
-            return ret;
-        }
-
         std::list<std::pair<cv::Vec2i, Eigen::Vector3f>> line(const cv::Vec2i& p0, const cv::Vec2i& p1,
             const Eigen::Vector3f& value0, const Eigen::Vector3f& value1)
         {
-            if (p0[0] ==p1[0] && p0[1] == p1[1])
+            if (p0[0] == p1[0] && p0[1] == p1[1])
             {
                 return std::list<std::pair<cv::Vec2i, Eigen::Vector3f>>{ {p0, value0}};
             }
@@ -245,16 +210,198 @@ namespace meshdraw
             cv::Vec2f d = p1 - p0;
             int cnt = cv::norm(d) + 1;
             d /= cv::norm(d);
-            Eigen::Vector3f each = (value1- value0)/ cnt;
+            Eigen::Vector3f each = (value1 - value0) / cnt;
             for (int i = 0; i <= cnt; i++)
             {
                 cv::Vec2i pixel;
                 pixel[0] = p0[0] + i * d[0];
                 pixel[1] = p0[1] + i * d[1];
-                ret.emplace_back(std::make_pair(pixel, value0 +i* each));
+                ret.emplace_back(std::make_pair(pixel, value0 + i * each));
             }
             return ret;
         }
+
+        std::vector<cv::Vec2i>getLinePixel(const cv::Vec2i& p0, const cv::Vec2i& p1)
+        {
+            int diffx01 = p0[0] - p1[0];
+            int diffy01 = p0[1] - p1[1];
+            if (diffx01==0 && diffy01 ==0)
+            {
+                return std::vector<cv::Vec2i>{p0};
+            }
+            if (abs(diffx01)>=abs(diffy01))
+            {
+                float k = (float)diffy01 / diffx01;
+                int minx = p0[0] < p1[0] ? p0[0] : p1[0];
+                int miny = p0[0] < p1[0] ? p0[1] : p1[1];
+                int maxx = p0[0] < p1[0] ? p1[0] : p0[0];
+                std::vector<cv::Vec2i>ret;
+                ret.reserve(abs(diffx01)+1);
+                for (int x = minx; x <= maxx; x++)
+                {
+                    ret.emplace_back(x, k * (x - minx) + miny+0.5);
+                }
+                return ret;
+            }
+            else
+            {
+                float k = (float)diffx01 / diffy01;
+                int minx = p0[1] < p1[1] ? p0[0] : p1[0];
+                int miny = p0[1] < p1[1] ? p0[1] : p1[1];
+                int maxy = p0[1] < p1[1] ? p1[1] : p0[1];
+                std::vector<cv::Vec2i>ret;
+                ret.reserve(abs(diffx01) + 1);
+                for (int y = miny; y <= maxy; y++)
+                {
+                    ret.emplace_back(k * (y - miny) + minx+0.5,y);
+                }
+                return ret;
+            }
+        }
+        std::list<cv::Vec2i> triangle(const cv::Vec2i& p0, const cv::Vec2i& p1, const cv::Vec2i& p2,std::list<Eigen::Vector3f>&weights) {
+            std::list<cv::Vec2i> ret;
+            cv::Vec2i d1 = p2 - p0;
+            cv::Vec2i d2 = p1 - p0;
+            if (d1[0] == 0 && d1[1] == 0 && d2[0] == 0 && d2[1] == 0)
+            {
+                ret.emplace_back(p0);
+                weights.emplace_back(1,0,0);
+                return ret;
+            }
+            int temp_a = d1[0] * d2[1];
+            int temp_b = d1[1] * d2[0];
+            int xmin = (std::min)((std::min)(p0[0], p1[0]), p2[0]);
+            int xmax = (std::max)((std::max)(p0[0], p1[0]), p2[0]);
+            int ymin = (std::min)((std::min)(p0[1], p1[1]), p2[1]);
+            int ymax = (std::max)((std::max)(p0[1], p1[1]), p2[1]);
+            if (temp_a == temp_b)
+            {
+                int widthDiff = xmax - xmin;
+                int heightDiff = ymax - ymin;
+                if (widthDiff>= heightDiff)
+                {
+                    float k = (float)heightDiff / widthDiff;
+                    for (int i = 0; i <= widthDiff; i++)
+                    {
+                        ret.emplace_back(xmin + i, ymin + k * i);
+                    }
+                }
+                else
+                {
+                    float k = (float)widthDiff / heightDiff;
+                    for (int i = 0; i <= widthDiff; i++)
+                    {
+                        ret.emplace_back(xmin + k * i, ymin + i);
+                    } 
+                }
+                
+                for (const auto&d: ret)
+                {
+                    float dists[3] = {
+                     abs(d[0] - p0[0]),
+                     abs(d[0] - p1[0]),
+                     abs(d[0] - p2[0]) };
+                    if (heightDiff> widthDiff)
+                    {
+                        dists[0] = abs(d[1] - p0[1]);
+                        dists[1] = abs(d[1] - p1[1]);
+                        dists[2] = abs(d[1] - p2[1]);
+                    }
+                    int maxDistIdx = 0;
+                    if (dists[0] >= dists[1] && dists[0] >= dists[2] )
+                    {
+
+                    }
+                    else if (dists[1] >= dists[0] && dists[1] >= dists[2])
+                    {
+                        maxDistIdx = 1;
+                    }
+                    else
+                    {
+                        maxDistIdx = 2;
+                    }
+                    float distSum = dists[0] + dists[1] + dists[2] - dists[maxDistIdx];
+                    dists[maxDistIdx] = distSum;
+                    dists[0] = distSum - dists[0];
+                    dists[1] = distSum - dists[1];
+                    dists[2] = distSum - dists[2];
+                    distSum = 1. / distSum;
+                    dists[0] *= distSum;
+                    dists[1] *= distSum;
+                    dists[2] *= distSum;
+                    weights.emplace_back(dists[0], dists[1], dists[2]);
+                } 
+                return ret;
+            }
+            Eigen::Matrix3f A;
+            Eigen::Vector3f b(1, 1, 1);
+            A << p0[0], p1[0], p2[0],
+                p0[1], p1[1], p2[1],
+                1, 1, 1;
+            Eigen::Matrix3f  A_1 = A.inverse();
+
+             
+            std::unordered_map<int, int>y_maxx;
+            std::unordered_map<int, int>y_minx;
+
+            std::vector<cv::Vec2i> linep01 = getLinePixel(p0, p1);
+            std::vector<cv::Vec2i> linep02 = getLinePixel(p0, p2);
+            std::vector<cv::Vec2i> linep12 = getLinePixel(p2, p1);
+
+            for (const auto&d: linep01)
+            {
+                const auto& y = d[1];
+                if (y_maxx.count(y)==0)
+                {
+                    y_minx[y] = std::numeric_limits<int>::max();
+                    y_maxx[y] = -std::numeric_limits<int>::max();
+                }
+                if (d[0] > y_maxx[y])y_maxx[y] = d[0];
+                if (d[0] < y_minx[y])y_minx[y] = d[0];
+            }
+            for (const auto& d : linep02)
+            {
+                const auto& y = d[1];
+                if (y_maxx.count(y) == 0)
+                {
+                    y_minx[y] = std::numeric_limits<int>::max();
+                    y_maxx[y] = -std::numeric_limits<int>::max();
+                }
+                if (d[0] > y_maxx[y])y_maxx[y] = d[0];
+                if (d[0] < y_minx[y])y_minx[y] = d[0];
+            }
+            for (const auto& d : linep12)
+            {
+                const auto& y = d[1];
+                if (y_maxx.count(y) == 0)
+                {
+                    y_minx[y] = std::numeric_limits<int>::max();
+                    y_maxx[y] = -std::numeric_limits<int>::max();
+                }
+                if (d[0] > y_maxx[y])y_maxx[y] = d[0];
+                if (d[0] < y_minx[y])y_minx[y] = d[0];
+            }
+             
+            for (const auto&d: y_maxx)
+            { 
+                const auto&y = d.first;
+                for (int x = y_minx[y]; x <= d.second; x++)
+                {
+                    ret.emplace_back(x, y);
+                }
+            }
+
+             
+            for (const auto&d: ret) {
+                    b[0] = d[0];
+                    b[1] = d[1];
+                    Eigen::Vector3f x = A_1 * (b);
+                    weights.emplace_back(x);
+                
+            }
+            return ret;
+        }
+
 
         std::list<std::pair<cv::Vec2i, Eigen::Vector3f>> triangle(const cv::Vec2i& p0, const cv::Vec2i& p1, const cv::Vec2i& p2,
             const Eigen::Vector3f& value0, const Eigen::Vector3f& value1, const Eigen::Vector3f& value2) { 
@@ -386,6 +533,7 @@ namespace meshdraw
             }
             return ret;
         }
+
     }
 
     Mesh::Mesh() {}
@@ -446,11 +594,13 @@ namespace meshdraw
                 return false;
             }
             Eigen::Matrix3f R_T = cam.R.transpose();
+            Eigen::Vector3f cameraLookDir(R_T(2, 0), R_T(2, 1), R_T(2, 2));
             Eigen::MatrixX3i ptsInPic;
             Eigen::MatrixX3i colorInt = (msh.C * 255.f).cast<int>();
             Eigen::Matrix3f R_inv = R.transpose();
             Eigen::MatrixX3f meshVRotated = (msh.V * R_inv * scale).rowwise() + t;
             Eigen::MatrixX3f meshFacesNormalInCam = msh.facesNormal * R;
+            Eigen::VectorXf dots = msh.facesNormal * cameraLookDir;
             if (cam.cameraType == CmaeraType::Pinhole)
             {
                 Eigen::MatrixX3f ptsInCam = (meshVRotated * R_T).rowwise() + cam.t;
@@ -461,20 +611,7 @@ namespace meshdraw
                 Eigen::MatrixX3f barycenter;
                 igl::barycenter(meshVRotated, msh.F, barycenter);
                 Eigen::MatrixX3f viewFaceDir = (barycenter.rowwise() - cam.t);// .rowwise().norm();
-                Eigen::VectorXf distFromCams = viewFaceDir.rowwise().norm();
-                Eigen::VectorXf faceDists = viewFaceDir.rowwise().norm();
-                Eigen::Index minIndex;
-                faceDists.minCoeff(&minIndex);
-                float nearestFaceDot = viewFaceDir.row(minIndex).dot(meshFacesNormalInCam.row(minIndex));
-                if (nearestFaceDot > 0)
-                {
-                    nearestFaceDot = 1;
-                }
-                else
-                {
-                    nearestFaceDot = -1;
-                } 
-                Eigen::VectorXf dots = viewFaceDir.cwiseProduct(meshFacesNormalInCam).rowwise().sum();
+                Eigen::VectorXf distFromCams = viewFaceDir.rowwise().norm(); 
                 rgbMat = cv::Mat::zeros(cam.height, cam.width, CV_8UC3);
                 cv::Mat drawMatDist = cv::Mat::zeros(cam.height, cam.width, CV_32FC1);
                 mask = cv::Mat::zeros(cam.height, cam.width, CV_8UC1);
@@ -488,12 +625,9 @@ namespace meshdraw
                         ptsInCanvas[i] = false;
                     }
                 }
-
-
-
                 for (int f = 0; f < dots.size(); f++)
                 {
-                    if (dots[f]* nearestFaceDot > 0)
+                    if (dots[f]> 0)
                     {
                         const int& fa = msh.F(f, 0);
                         const int& fb = msh.F(f, 1);
@@ -503,36 +637,45 @@ namespace meshdraw
                             continue;
                         }
                         float distFromCam = distFromCams[f];// (barycenter.row(f) - cam.t).norm();
-                        std::list<std::pair<cv::Vec2i, Eigen::Vector3f>>trianglePixels = utils::triangle({ ptsInPic(fa,0),ptsInPic(fa,1) }, { ptsInPic(fb,0),ptsInPic(fb,1) }, { ptsInPic(fc,0),ptsInPic(fc,1) }, msh.V.row(fa), msh.V.row(fb), msh.V.row(fc));
-                        for (const auto& d : trianglePixels)
-                        {
-                            const cv::Vec2i& pixel = d.first;
-                            const Eigen::Vector3f& value = d.second;
-                            const int& r = pixel[1];
-                            const int& c = pixel[0];
-                            if (c >= 0 && r >= 0 && c < cam.width && r < cam.height)
-                            {
-                                if (mask.ptr<uchar>(r)[c] == 0)
-                                {
-                                    mask.ptr<uchar>(r)[c] = 1;
-                                    drawMatDist.ptr<float>(r)[c] = distFromCam;
-                                    rgbMat.at<cv::Vec3b>(r, c)[0] = colorInt(fa, 2);
-                                    rgbMat.at<cv::Vec3b>(r, c)[1] = colorInt(fa, 1);
-                                    rgbMat.at<cv::Vec3b>(r, c)[2] = colorInt(fa, 0);
-                                    vertexMap.at<cv::Vec3f>(r, c)[0] = value[0];
-                                    vertexMap.at<cv::Vec3f>(r, c)[1] = value[1];
-                                    vertexMap.at<cv::Vec3f>(r, c)[2] = value[2];
+                        std::list<Eigen::Vector3f>weights;
+                        std::list<cv::Vec2i>trianglePixels = utils::triangle({ ptsInPic(fa,0),ptsInPic(fa,1) }, { ptsInPic(fb,0),ptsInPic(fb,1) }, { ptsInPic(fc,0),ptsInPic(fc,1) }, weights);
 
-                                }
-                                else if (drawMatDist.ptr<float>(r)[c] > distFromCam)
+
+                        auto itA = trianglePixels.begin();
+                        auto itB = weights.begin();
+                        int cnt = trianglePixels.size();
+                        for (int i = 0; i < cnt; ++i, ++itA, ++itB) {
+                            const cv::Vec2i& pixel = *itA;
+                            if (pixel[1] > 0 && pixel[1] <= cam.height && pixel[0] >= 0 && pixel[0] < cam.width)
+                            {
+                                const float& w0 = (*itB)[0];
+                                const float& w1 = (*itB)[1];
+                                const float& w2 = (*itB)[2];
+                                const int& r = cam.height - pixel[1];
+                                const int& c = pixel[0];
+                                if (c >= 0 && r >= 0 && c < cam.width && r < cam.height)
                                 {
-                                    drawMatDist.ptr<float>(r)[c] = distFromCam;
-                                    rgbMat.at<cv::Vec3b>(r, c)[0] = colorInt(fa, 2);
-                                    rgbMat.at<cv::Vec3b>(r, c)[1] = colorInt(fa, 1);
-                                    rgbMat.at<cv::Vec3b>(r, c)[2] = colorInt(fa, 0);
-                                    vertexMap.at<cv::Vec3f>(r, c)[0] = value[0];
-                                    vertexMap.at<cv::Vec3f>(r, c)[1] = value[1];
-                                    vertexMap.at<cv::Vec3f>(r, c)[2] = value[2];
+                                    if (mask.ptr<uchar>(r)[c] == 0)
+                                    {
+                                        mask.ptr<uchar>(r)[c] = 1;
+                                        drawMatDist.ptr<float>(r)[c] = distFromCam;
+                                        rgbMat.at<cv::Vec3b>(r, c)[0] = w0 * colorInt(fa, 2) + w1 * colorInt(fb, 2) + w2 * colorInt(fc, 2);
+                                        rgbMat.at<cv::Vec3b>(r, c)[1] = w0 * colorInt(fa, 1) + w1 * colorInt(fb, 1) + w2 * colorInt(fc, 1);
+                                        rgbMat.at<cv::Vec3b>(r, c)[2] = w0 * colorInt(fa, 0) + w1 * colorInt(fb, 0) + w2 * colorInt(fc, 0);
+                                        vertexMap.at<cv::Vec3f>(r, c)[0] = w0 * msh.V(fa, 0) + w1 * msh.V(fb, 0) + w2 * msh.V(fc, 0);
+                                        vertexMap.at<cv::Vec3f>(r, c)[1] = w0 * msh.V(fa, 1) + w1 * msh.V(fb, 1) + w2 * msh.V(fc, 1);
+                                        vertexMap.at<cv::Vec3f>(r, c)[2] = w0 * msh.V(fa, 2) + w1 * msh.V(fb, 2) + w2 * msh.V(fc, 2);
+                                    }
+                                    else if (drawMatDist.ptr<float>(r)[c] > distFromCam)
+                                    {
+                                        drawMatDist.ptr<float>(r)[c] = distFromCam;
+                                        rgbMat.at<cv::Vec3b>(r, c)[0] = w0 * colorInt(fa, 2) + w1 * colorInt(fb, 2) + w2 * colorInt(fc, 2);
+                                        rgbMat.at<cv::Vec3b>(r, c)[1] = w0 * colorInt(fa, 1) + w1 * colorInt(fb, 1) + w2 * colorInt(fc, 1);
+                                        rgbMat.at<cv::Vec3b>(r, c)[2] = w0 * colorInt(fa, 0) + w1 * colorInt(fb, 0) + w2 * colorInt(fc, 0);
+                                        vertexMap.at<cv::Vec3f>(r, c)[0] = w0 * msh.V(fa, 0) + w1 * msh.V(fb, 0) + w2 * msh.V(fc, 0);
+                                        vertexMap.at<cv::Vec3f>(r, c)[1] = w0 * msh.V(fa, 1) + w1 * msh.V(fb, 1) + w2 * msh.V(fc, 1);
+                                        vertexMap.at<cv::Vec3f>(r, c)[2] = w0 * msh.V(fa, 2) + w1 * msh.V(fb, 2) + w2 * msh.V(fc, 2);
+                                    }
                                 }
                             }
                         }
@@ -544,7 +687,7 @@ namespace meshdraw
                 Eigen::Matrix3f intr = cam.intr;
                 int imgWidth = static_cast<int>(intr(0, 2) * 2);
                 int imgHeight = static_cast<int>(intr(1, 2) * 2);
-                Eigen::MatrixX3f ptsFloat = msh.V * R_T;
+                Eigen::MatrixX3f ptsFloat = msh.V * R_T; 
                 Eigen::RowVector3f colMin = ptsFloat.colwise().minCoeff();
                 Eigen::RowVector3f colMax = ptsFloat.colwise().maxCoeff(); 
                 float minx = colMin[0];
@@ -558,25 +701,42 @@ namespace meshdraw
                 rgbMat = cv::Mat::zeros(imgHeight, imgWidth, CV_8UC3);
                 mask = cv::Mat::zeros(imgHeight, imgWidth, CV_8UC1);
                 vertexMap = cv::Mat::zeros(imgHeight, imgWidth, CV_32FC3);
-                for (int v = 0; v < msh.V.rows(); v++)
-                { 
-                    { 
-                        {
-                            const Eigen::Vector3f& value = msh.V.row(v);
-                            const int& r = imgHeight-ptsInPic(v, 1);
-                            const int& c = ptsInPic(v, 0);
-                            if (c >= 0 && r >= 0 && c < cam.width && r < cam.height)
+                cv::Mat depthMat = cv::Mat::ones(imgHeight, imgWidth, CV_32FC1)*std::numeric_limits<float>::max();
+                for (int f = 0; f < msh.F.rows(); f++)
+                {
+                    if (dots[f] > -0.)
+                    {
+                        const int& fa = msh.F(f, 0);
+                        const int& fb = msh.F(f, 1);
+                        const int& fc = msh.F(f, 2);
+                        std::list<Eigen::Vector3f>weights;
+                        std::list<cv::Vec2i>trianglePixels = utils::triangle({ ptsInPic(fa,0),ptsInPic(fa,1) }, { ptsInPic(fb,0),ptsInPic(fb,1) }, { ptsInPic(fc,0),ptsInPic(fc,1) }, weights);
+                        auto itA = trianglePixels.begin();
+                        auto itB = weights.begin();
+                        int cnt = trianglePixels.size();
+                        for (int i = 0; i < cnt; ++i, ++itA, ++itB) {
+                            const cv::Vec2i& xy = *itA;
+                            const float& w0 = (*itB)[0];
+                            const float& w1 = (*itB)[1];
+                            const float& w2 = (*itB)[2];
+                            if (xy[1] > 0 && xy[1] <= imgHeight && xy[0] >= 0 && xy[0] < imgWidth)
                             {
-                               
-                                    mask.ptr<uchar>(r)[c] = 1;
-                                    rgbMat.at<cv::Vec3b>(r, c)[0] = colorInt(v, 2);
-                                    rgbMat.at<cv::Vec3b>(r, c)[1] = colorInt(v, 1);
-                                    rgbMat.at<cv::Vec3b>(r, c)[2] = colorInt(v, 0);
-                                    vertexMap.at<cv::Vec3f>(r, c)[0] = value[0];
-                                    vertexMap.at<cv::Vec3f>(r, c)[1] = value[1];
-                                    vertexMap.at<cv::Vec3f>(r, c)[2] = value[2];
+                                const int& r = imgHeight - xy[1];
+                                const int& c = xy[0];
+                                float depth = w0 * ptsFloat(fa, 2) + w1 * ptsFloat(fb, 2) + w2 * ptsFloat(fc, 2);
+                                if (mask.ptr<uchar>(r)[c] == 0 || depth > depthMat.ptr<float>(r)[c])
+                                {
+                                    depthMat.ptr<float>(r)[c] = depth;
+                                    rgbMat.at<cv::Vec3b>(r, c)[0] = w0 * colorInt(fa, 2) + w1 * colorInt(fb, 2) + w2 * colorInt(fc, 2);
+                                    rgbMat.at<cv::Vec3b>(r, c)[1] = w0 * colorInt(fa, 1) + w1 * colorInt(fb, 1) + w2 * colorInt(fc, 1);
+                                    rgbMat.at<cv::Vec3b>(r, c)[2] = w0 * colorInt(fa, 0) + w1 * colorInt(fb, 0) + w2 * colorInt(fc, 0);
+                                    vertexMap.at<cv::Vec3f>(r, c)[0] = w0 * msh.V(fa, 0) + w1 * msh.V(fb, 0) + w2 * msh.V(fc, 0);
+                                    vertexMap.at<cv::Vec3f>(r, c)[1] = w0 * msh.V(fa, 1) + w1 * msh.V(fb, 1) + w2 * msh.V(fc, 1);
+                                    vertexMap.at<cv::Vec3f>(r, c)[2] = w0 * msh.V(fa, 2) + w1 * msh.V(fb, 2) + w2 * msh.V(fc, 2);
+                                }
+                                mask.ptr<uchar>(r)[c] = 1;
                             }
-                        }
+                        }                         
                     }
                 }
                 LOG_OUT;
