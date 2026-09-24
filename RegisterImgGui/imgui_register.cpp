@@ -16,7 +16,36 @@ static bool showImgDirBrowser = false;
 static std::filesystem::path imgDirPath;
 static browser::Browser* imgDirPicker = nullptr;
 
-  
+std::vector<std::string>listPicName(const std::filesystem::path& imgDir_)
+{ 
+	std::vector<std::string> ret;
+	ret.reserve(256);
+	for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ imgDir_ })
+	{
+		const auto& thisFilename = dir_entry.path();
+		if (thisFilename.has_extension())
+		{
+			const auto& shortName = thisFilename.filename().stem().string(); 
+			if (thisFilename.has_extension())
+			{
+				const auto& shortName = thisFilename.filename().stem().string();
+				const auto& ext = thisFilename.extension().string();
+				if (ext.compare(".json") == 0)
+				{
+					std::map<std::string, Eigen::Vector2d> cornerInfo;
+					Eigen::Vector2i imgSizeWH;
+					std::string imgPath;
+					bool readret = labelme::readPtsFromLabelMeJson(thisFilename, cornerInfo, imgSizeWH, &imgPath);
+					if (readret && std::filesystem::exists(thisFilename.parent_path() / imgPath))
+					{
+						ret.emplace_back(shortName);
+					}
+				}
+			}
+		}
+	}
+	return ret;
+}
 class ImgDir
 {
 public:
@@ -66,7 +95,13 @@ public:
 private:
 	std::filesystem::path imgDir_;
 };
-
+void clearScreen() {
+#ifdef _WIN32
+	std::system("cls");
+#else
+	std::system("clear");
+#endif
+}
 static ProgressThread progress;
 void endThread(ProgressThread&progress)
 {
@@ -108,11 +143,18 @@ bool registFrame(bool* show_regist_window)
 			progress.proc = nullptr;
 		}
 	}
-
+	static bool* imgpicks = nullptr;
+	static std::vector<std::string>picNames;
 	while (isProcRunning == 0)
 	{
 		if (ImGui::Button("pick image dir"))
 		{
+			picNames.clear();
+			if (imgpicks != nullptr)
+			{
+				delete[]imgpicks;
+				imgpicks = nullptr;
+			}
 			imgDirPath = "";
 			if (imgDirPicker == nullptr)
 			{
@@ -131,19 +173,43 @@ bool registFrame(bool* show_regist_window)
 				imgDirPicker = nullptr;
 			}
 		}
-		if (std::filesystem::exists(imgDirPath))
+		if (std::filesystem::exists(imgDirPath) && picNames.size() == 0 && imgpicks == nullptr)
 		{
-			progress.numerator.store(-1);
-			progress.procRunning.fetch_add(1);
-			progress.proc = new std::thread(
-				[&]() {
-					std::filesystem::path imgDirPath_ = imgDirPath;
-					int registRet = register_incremental_loop(imgDirPath_.string());
-					endThread(progress);
+			picNames = listPicName(imgDirPath);
+			imgpicks = new bool[picNames.size()];
+			for (size_t i = 0; i < picNames.size(); i++)
+			{
+				imgpicks[i] = false;
+			}
+		}
+		if (std::filesystem::exists(imgDirPath)  )
+		{
+			if (picNames.size()>3)
+			{
+				for (int i = 0; i < picNames.size(); i++)
+				{
+					ImGui::Checkbox(picNames[i].c_str(), &imgpicks[i]);
+					if (i%5!=0)
+					{
+						ImGui::SameLine();
+					}
 				}
-			);
-			std::this_thread::sleep_for(std::chrono::milliseconds(100)); 
-			imgDirPath = "";
+				ImGui::NewLine();
+			}
+			if (ImGui::Button("figure!"))
+			{
+				progress.numerator.store(-1);
+				progress.procRunning.fetch_add(1);
+				progress.proc = new std::thread(
+					[&]() {
+						//clearScreen();
+						std::filesystem::path imgDirPath_ = imgDirPath;
+						int registRet = register_incremental_loop(imgDirPath_.string());
+						endThread(progress);
+					}
+				);
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			}
 		}
 		break;
 	}

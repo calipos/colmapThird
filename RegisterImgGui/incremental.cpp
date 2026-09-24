@@ -295,6 +295,7 @@ int register_incremental_loop(const std::string& folder)
     std::unordered_map<point3D_t, Eigen::Vector3d>objPts;
     std::unordered_map < image_t, struct Rigid3d>poses;
     std::set<int>pickedImgs;
+    std::unordered_map<std::uint32_t, std::set<std::uint32_t>>blacklist;
     {
         pickedImgs.insert(0);
         {
@@ -305,11 +306,11 @@ int register_incremental_loop(const std::string& folder)
         std::map<std::string, TwoViewGeometry> TwoViewGeometryRecode;
         while (true)
         {
-
             int bestTarget = -1;
             int bestSource = -1;
             int largestAngleRadx100 = -100;
             int sharedPtsCnt = 0;
+            float projectError = std::numeric_limits<float>::max();
             //pick incremental instance
             for (int k = 0; k < incrementalImages.size(); k++)
             {
@@ -319,15 +320,17 @@ int register_incremental_loop(const std::string& folder)
                 }
                 Image& image2 = imageList[k];
                 Camera& camera2 = cameraList[image2.CameraId()];
-                int largestAngleRadxTotalThisIncremental = 0;
                 int largestAngleRadxThisIncremental = -100;
                 int largestAngleRadxThisIncrementalTargetId = -1;
                 for (const auto& targetImgIdx : pickedImgs)
                 {
+                    if (blacklist.count(targetImgIdx) > 0 && blacklist.at(targetImgIdx).count(k)>0)
+                    {
+                        continue;
+                    }
                     Image& image1 = imageList[targetImgIdx];
                     Camera& camera1 = cameraList[image1.CameraId()];
                     std::string recodeKeyStr1 = std::to_string(targetImgIdx) + "_" + std::to_string(k);
-                    std::string recodeKeyStr2 = std::to_string(k) + "_" + std::to_string(targetImgIdx);
                     int sharedPtsCnt_ = countSharedPtsCount(image1, image2);
                     if (sharedPtsCnt_ > 5)
                     {
@@ -336,15 +339,13 @@ int register_incremental_loop(const std::string& folder)
                         {
                             two_view_geometry = TwoViewGeometryRecode[recodeKeyStr1];
                         }
-                        else if (TwoViewGeometryRecode.count(recodeKeyStr2) != 0)
-                        {
-                            two_view_geometry = TwoViewGeometryRecode[recodeKeyStr2];
-                        }
                         else
                         {
-                            two_view_geometry = EstimateCalibratedTwoViewGeometry(camera1, image1, camera2, image2);
+                            two_view_geometry = EstimateCalibratedTwoViewGeometry(camera1, image1, camera2, image2);   
                             bool EstimateRet = EstimateTwoViewGeometryPose(camera1, image1, camera2, image2, &two_view_geometry);
                             TwoViewGeometryRecode[recodeKeyStr1] = two_view_geometry;
+                            two_view_geometry.Invert();
+                            std::string recodeKeyStr2 = std::to_string(k) + "_" + std::to_string(targetImgIdx);
                             TwoViewGeometryRecode[recodeKeyStr2] = two_view_geometry;
                             if (!EstimateRet)
                             {
@@ -352,30 +353,68 @@ int register_incremental_loop(const std::string& folder)
                                 continue;
                             }
                         }
-                        Eigen::AngleAxisd aa(two_view_geometry.cam2_from_cam1.rotation);
-                        int angle_radx100 = abs(aa.angle()) * 100;
-                        const int& angle_threshold = 3.1415926 * 50;//90deg x 100
-                        //if (angle_radx100 > angle_threshold) angle_radx100 = angle_threshold;//30deg x 100                           
-                        double baseLine = two_view_geometry.cam2_from_cam1.translation.norm();
-                        largestAngleRadxTotalThisIncremental += angle_radx100;
-                        if (angle_radx100> largestAngleRadxThisIncremental)
+                        float projectErrorCurr = -1;
+                        if (true)
                         {
-                            largestAngleRadxThisIncremental = angle_radx100;
-                            largestAngleRadxThisIncrementalTargetId = targetImgIdx;
+                            auto guessPose1 = Rigid3d();
+                            auto guessPose2 = TwoViewGeometryRecode[recodeKeyStr1].cam2_from_cam1;
+                            std::vector<point2D_t>matchesPointId;
+                            matchesPointId.reserve(std::min(image1.featPts.size(), image2.featPts.size()));
+                            for (std::map<point2D_t, Eigen::Vector2d>::const_iterator iter = image1.featPts.begin(); iter != image1.featPts.end(); iter++)
+                            {
+                                if (image2.featPts.count(iter->first) != 0)
+                                {
+                                    matchesPointId.emplace_back(iter->first);
+                                }
+                            }
+                            for (const auto& ptId : matchesPointId)
+                            {
+                                const Eigen::Vector2d point2D1 = camera1.CamFromImg(image1.featPts.at(ptId));
+                                const Eigen::Vector2d point2D2 = camera2.CamFromImg(image2.featPts.at(ptId));
+                                Eigen::Vector3d xyz;
+                                bool triangulatePointRet = TriangulatePoint(guessPose1.ToMatrix(), guessPose2.ToMatrix(), point2D1, point2D2, &xyz);
+                                if (triangulatePointRet)
+                                {
+                                    const Eigen::Vector3d point3D_in_cam1 = guessPose1 * xyz;
+                                    const Eigen::Vector3d point3D_in_cam2 = guessPose2 * xyz;
+                                    if (point3D_in_cam1.z() > std::numeric_limits<double>::epsilon()&& point3D_in_cam2.z() > std::numeric_limits<double>::epsilon()) {
+                                        Eigen::Vector2d  imgPt1 = camera1.ImgFromCam(point3D_in_cam1.hnormalized());
+                                        Eigen::Vector2d  imgPt2 = camera2.ImgFromCam(point3D_in_cam2.hnormalized());
+                                        float projectError_ = (std::max)((image1.featPts.at(ptId) - imgPt1).norm(), (image2.featPts.at(ptId) - imgPt2).norm());
+                                        if (projectErrorCurr<0)
+                                        {
+                                            projectErrorCurr = projectError_;
+                                        }
+                                        else if (projectErrorCurr < projectError_)
+                                        {
+                                            projectErrorCurr = projectError_;
+                                        } 
+                                    }
+                                    else
+                                    {
+                                        projectErrorCurr = -1;
+                                        break;
+                                    }
+                                }
+                            }
                         }
+                        if (projectErrorCurr>0)
+                        {
+                            Eigen::AngleAxisd aa(TwoViewGeometryRecode[recodeKeyStr1].cam2_from_cam1.rotation);
+                            double baseLine = TwoViewGeometryRecode[recodeKeyStr1].cam2_from_cam1.translation.norm();
+                            int angle_radx100 = abs(aa.angle()) * 180 / 3.1415926 * 100;
+                            const int& angle_threshold = 20'00;
+                            //LOG_OUT << targetImgIdx << ":" << k << "   angle=" << angle_radx100 << "  projErr=" << projectErrorCurr;
+                            //LOG_OUT << TwoViewGeometryRecode[recodeKeyStr1].cam2_from_cam1;
+                            if (angle_radx100 > angle_threshold && projectErrorCurr< projectError)
+                            {
+                                projectError = projectErrorCurr;
+                                bestTarget = targetImgIdx;
+                                bestSource = k;
+                            }
+                        }  
                     }                     
-                }
-                if (largestAngleRadxTotalThisIncremental==0)
-                {
-                    continue;
-                    LOG_ERR_OUT << "cannot find incremental match: " << image2.Name();
-                }
-                if (largestAngleRadxTotalThisIncremental >= largestAngleRadx100)
-                {
-                    largestAngleRadx100 = largestAngleRadxTotalThisIncremental;
-                    bestTarget = largestAngleRadxThisIncrementalTargetId;
-                    bestSource = k;
-                }
+                } 
             }
             if (bestTarget<0 || bestSource<0)
             {
@@ -414,10 +453,13 @@ int register_incremental_loop(const std::string& folder)
             {
                 //triganlePoints
                 std::unordered_map<point2D_t, std::vector<Eigen::Vector3d>>potentialPts3d;
+                float matchesPointIdEvalue = 0;
                 for (const auto&prevImgId: pickedImgs)
                 {
                     const Image& image0 = imageList[prevImgId];
                     const Camera& camera0 = cameraList[image0.CameraId()];
+                    //LOG_OUT << image0.CamFromWorld(); 
+                    //LOG_OUT << image2.CamFromWorld();
                     const Eigen::Matrix3x4d cam_from_world0 = image0.CamFromWorld().ToMatrix();
                     const Eigen::Matrix3x4d cam_from_world2 = image2.CamFromWorld().ToMatrix();
                     const Eigen::Vector3d proj_center0 = image0.ProjectionCenter();
@@ -447,8 +489,9 @@ int register_incremental_loop(const std::string& folder)
                             potentialPts3d[ptId].emplace_back(xyz);                            
                             std::pair<bool, Eigen::Vector2d>imgPt0 = image0.ProjectPoint(xyz);
                             std::pair<bool, Eigen::Vector2d>imgPt2 = image2.ProjectPoint(xyz);
-                            LOG_OUT << imgPt0.second.transpose() << " , " << image0.featPts.at(ptId).transpose();
-                            LOG_OUT << imgPt2.second.transpose() << " , " << image2.featPts.at(ptId).transpose();
+                            //LOG_OUT << imgPt0.first << " - " << imgPt0.second.transpose() << " , " << image0.featPts.at(ptId).transpose();
+                            //LOG_OUT << imgPt2.first << " - " << imgPt2.second.transpose() << " , " << image2.featPts.at(ptId).transpose();
+                             
                         }
                     }
                 }
@@ -471,14 +514,18 @@ int register_incremental_loop(const std::string& folder)
                     }
                 }
             }
-            pickedImgs.insert(bestSource);
-            if (pickedImgs.size()>2)
+            if (pickedImgs.size() < +2)
+            {
+                pickedImgs.insert(bestSource);
+            }
+            else
             {
                 //ba
                 BundleAdjustmentOptions ba_options;
-                ba_options.solver_options.max_num_iterations = 5000;
-                //ba_options.solver_options.logging_type = ceres::LoggingType::PER_MINIMIZER_ITERATION;
-                //ba_options.solver_options.minimizer_progress_to_stdout = true;
+                ba_options.solver_options.max_num_iterations = 1000;
+                ba_options.solver_options.linear_solver_type = ceres::LinearSolverType::DENSE_QR;
+                ba_options.solver_options.logging_type = ceres::LoggingType::PER_MINIMIZER_ITERATION;
+                ba_options.solver_options.minimizer_progress_to_stdout = true;
                 BundleAdjustmentConfig ba_config;
                 for (const auto& d : pickedImgs)
                 {
@@ -506,23 +553,29 @@ int register_incremental_loop(const std::string& folder)
                 if (solverRet.termination_type != ceres::CONVERGENCE)
                 {
                     LOG_ERR_OUT << "not convergence! incremental at " << imageList[bestSource].Name();
+                    blacklist[bestTarget].insert(bestSource); 
                     //return -1;
                     //break;
                 }
-                //else
+                else
                 {
                     double final_cost = reprojectTotal(pickedImgs, cameraList, imageList, objPts);
                     LOG_OUT << "final_cost = " << final_cost;
-                    if (final_cost > 5)
+                    if (final_cost > 10)
                     {
                         LOG_ERR_OUT << "final_cost>5 at " << imageList[bestSource].Name();
-                        return -1;
-                        break;
+                        blacklist[bestTarget].insert(bestSource);
+                        //return -1;
+                        //break;
                     }
-                    for (const auto& d : pickedImgs)
+                    else
                     {
-                        const Image& imag = imageList[d];
-                        LOG_OUT << d << "qt" << qs[d] << ", " << ts[d] << "    " << imag.CamFromWorld().rotation << ", " << imag.CamFromWorld().translation.transpose();
+                        pickedImgs.insert(bestSource);
+                        for (const auto& d : pickedImgs)
+                        {
+                            const Image& imag = imageList[d];
+                            LOG_OUT << d << "qt" << qs[d] << ", " << ts[d] << "    " << imag.CamFromWorld().rotation << ", " << imag.CamFromWorld().translation.transpose();
+                        }
                     }
                 }
             }
@@ -531,48 +584,48 @@ int register_incremental_loop(const std::string& folder)
             {
                 break;
             }
-            if (prevPickedImgsSize== pickedImgs.size())
-            {
-                for (int k = 0; k < incrementalImages.size(); k++)
-                {
-                    if (pickedImgs.count(k) != 0)
-                        LOG_OUT << imageList[k].Name();
-                }
-                for (int k = 0; k < incrementalImages.size(); k++)
-                {
-                    if (pickedImgs.count(k) == 0)
-                    {
-                        LOG_OUT << imageList[k].Name() << " not find a pair";
-                        for (const auto& l : pickedImgs)
-                        {
-                            std::string recodeKeyStr = std::to_string(k) + "_" + std::to_string(l);
-                            TwoViewGeometry two_view_geometry;
-                            if (TwoViewGeometryRecode.count(recodeKeyStr) != 0)
-                            {
-                                two_view_geometry = TwoViewGeometryRecode[recodeKeyStr];
-                            }
-                            else
-                            {
-                                LOG_ERR_OUT << "cannot be here.";
-                                return -1;
-                            }
-                            Eigen::AngleAxisd aa(two_view_geometry.cam2_from_cam1.rotation);
-                            Image& image1 = imageList[l];
-                            Image& image2 = imageList[k];
-                            int sharedPtsCnt_ = countSharedPtsCount(image1, image2);
-                            if (sharedPtsCnt_ > 5)
-                            {
-                                LOG_OUT << "\t\t" << imageList[l].Name() << " : deg=" << aa.angle() * 180 / 3.1415926 << "; sharedPtsCnt=" << sharedPtsCnt_;
-                            }
-                        }
+            //if (prevPickedImgsSize== pickedImgs.size())
+            //{
+            //    for (int k = 0; k < incrementalImages.size(); k++)
+            //    {
+            //        if (pickedImgs.count(k) != 0)
+            //            LOG_OUT << imageList[k].Name();
+            //    }
+            //    for (int k = 0; k < incrementalImages.size(); k++)
+            //    {
+            //        if (pickedImgs.count(k) == 0)
+            //        {
+            //            LOG_OUT << imageList[k].Name() << " not find a pair";
+            //            for (const auto& l : pickedImgs)
+            //            {
+            //                std::string recodeKeyStr = std::to_string(k) + "_" + std::to_string(l);
+            //                TwoViewGeometry two_view_geometry;
+            //                if (TwoViewGeometryRecode.count(recodeKeyStr) != 0)
+            //                {
+            //                    two_view_geometry = TwoViewGeometryRecode[recodeKeyStr];
+            //                }
+            //                else
+            //                {
+            //                    LOG_ERR_OUT << "cannot be here.";
+            //                    return -1;
+            //                }
+            //                Eigen::AngleAxisd aa(two_view_geometry.cam2_from_cam1.rotation);
+            //                Image& image1 = imageList[l];
+            //                Image& image2 = imageList[k];
+            //                int sharedPtsCnt_ = countSharedPtsCount(image1, image2);
+            //                if (sharedPtsCnt_ > 5)
+            //                {
+            //                    LOG_OUT << "\t\t" << imageList[l].Name() << " : deg=" << aa.angle() * 180 / 3.1415926 << "; sharedPtsCnt=" << sharedPtsCnt_;
+            //                }
+            //            }
 
 
-                    }
-                }
-                LOG_ERR_OUT << "annotation need fixs.";
-                return -1;
-            }
-            prevPickedImgsSize = pickedImgs.size();
+            //        }
+            //    }
+            //    LOG_ERR_OUT << "annotation need fixs.";
+            //    return -1;
+            //}
+            //prevPickedImgsSize = pickedImgs.size();
         }
     }
     for (auto& d : poses)
@@ -623,13 +676,14 @@ int register_incremental_loop(const std::string& folder)
         for (int j = 0; j < cameraList.size(); j++) LOG_OUT << cameraList[j];
         if (solverRet.termination_type != ceres::CONVERGENCE)
         {
-            LOG_ERR_OUT << "not convergence! incremental at total"; 
+            LOG_ERR_OUT << "not convergence! incremental at total";
+            return -1;
         }
         //else
         {
             double final_cost = reprojectTotal(pickedImgs, cameraList, imageList, objPts);
             LOG_OUT << "final_cost = " << final_cost;
-            if (final_cost > 5)
+            if (final_cost > 50)
             {
                 LOG_ERR_OUT << "final_cost>5 at total";
                 return -1;
