@@ -18,6 +18,7 @@
 #include "bitmap.h"
 #include "undistortion.h"
 #include "opencv2/opencv.hpp"
+#include "labelme.h"
 #include "registerFrame.h"
 int test_bitmap()
 {
@@ -703,8 +704,48 @@ int register_incremental_loop(const std::string& folder)
     return 0;
 }
 int test_incremental()
-{
-    register_incremental("../data/a");
+{ 
+    std::map<Camera, std::vector<Image>> dataset = loadImageData("D:/repo/colmap-third/data/d", ImageIntrType::SHARED_ALL);
+    std::vector<Camera>cameraList;
+    std::vector<Image> imageList;
+    convertDataset(dataset, cameraList, imageList);
 
+    Image& image0 = imageList[0];
+    Camera& camera0 = cameraList[image0.CameraId()];
+    Image& image1 = imageList[1];
+    Camera& camera1 = cameraList[image1.CameraId()];
+
+    TwoViewGeometry  two_view_geometry = EstimateCalibratedTwoViewGeometry(camera0, image0, camera1, image1); ;
+    bool EstimateRet = EstimateTwoViewGeometryPose(camera0, image0, camera1, image1, &two_view_geometry);
+    image0.SetCamFromWorld(Rigid3d()); 
+    image1.SetCamFromWorld(two_view_geometry.cam2_from_cam1 * Rigid3d());
+
+    const Eigen::Matrix3x4d cam_from_world0 = image0.CamFromWorld().ToMatrix();
+    const Eigen::Matrix3x4d cam_from_world1 = image1.CamFromWorld().ToMatrix(); 
+    // Update Reconstruction
+    std::vector<point2D_t>matchesPointId;
+    matchesPointId.reserve(std::min(image0.featPts.size(), image1.featPts.size()));
+    for (std::map<point2D_t, Eigen::Vector2d>::const_iterator iter = image0.featPts.begin(); iter != image0.featPts.end(); iter++)
+    {
+        if (image1.featPts.count(iter->first) != 0  )
+        {
+            matchesPointId.emplace_back(iter->first);
+        }
+    }
+    for (const auto& ptId : matchesPointId)
+    {
+        const Eigen::Vector2d point2D0 = camera0.CamFromImg(image0.featPts.at(ptId));
+        const Eigen::Vector2d point2D1 = camera1.CamFromImg(image1.featPts.at(ptId));
+        Eigen::Vector3d xyz;
+        bool triangulatePointRet = TriangulatePoint(cam_from_world0, cam_from_world1, point2D0, point2D1, &xyz);
+        if (triangulatePointRet)
+        {  
+            std::pair<bool, Eigen::Vector2d>imgPt0 = image0.ProjectPoint(xyz);
+            std::pair<bool, Eigen::Vector2d>imgPt1 = image1.ProjectPoint(xyz);
+            LOG_OUT << imgPt0.first << " - " << imgPt0.second.transpose() << " , " << image0.featPts.at(ptId).transpose();
+            LOG_OUT << imgPt1.first << " - " << imgPt1.second.transpose() << " , " << image1.featPts.at(ptId).transpose();
+
+        }
+    }
     return 0;
 }

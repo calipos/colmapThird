@@ -21,7 +21,7 @@ static void glfw_error_callback(int error, const char* description)
 {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
-bool show_imgRegister_window = true;
+bool show_imgRegister_window = false;
 bool show_segment_window = false;
 bool show_annotation_window = false;
 bool show_bfmIter_window = false;

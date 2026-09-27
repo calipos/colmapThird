@@ -189,7 +189,7 @@ bool registFrame(bool* show_regist_window)
 				for (int i = 0; i < picNames.size(); i++)
 				{
 					ImGui::Checkbox(picNames[i].c_str(), &imgpicks[i]);
-					if (i%5!=0)
+					if (i%9!=0)
 					{
 						ImGui::SameLine();
 					}
