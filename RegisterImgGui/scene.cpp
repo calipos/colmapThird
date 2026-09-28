@@ -52,6 +52,8 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 
 	Image::keypointNameToIndx.clear();;
 	Image::keypointIndexToName.clear();;
+	Image::picNameToIndx.clear();
+	Image::picIndexTopicName.clear();
 	std::map<Camera, std::vector<Image>>dataSet;
 	const auto& defaultCameraType = CameraModelId::kSimplePinhole;
 	LOG_OUT << "use default focus length = 1.2*max(w,h)";
@@ -64,10 +66,14 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 		const auto& cornerInfo = d.second;
 		const auto& sizeWH = imgSizeWHs[path];
 		Image thisImg;
-		thisImg.SetImageId(image_id++);
+		
+
 		std::string imgName = path.filename().stem().string();
 		std::string imgDirName = path.parent_path().filename().stem().string();
 		//imgName = imgDirName + '@' + imgName;
+		Image::picNameToIndx[imgName] = image_id;
+		Image::picIndexTopicName[image_id] = imgName;
+		thisImg.SetImageId(image_id++);
 		thisImg.SetName(picPath[path].string());
 		for (const auto&feat: cornerInfo)
 		{

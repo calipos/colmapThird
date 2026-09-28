@@ -133,6 +133,8 @@ std::pair<bool, Eigen::Vector2d> Image::ProjectPoint(
 
 std::map<std::string, point2D_t>Image::keypointNameToIndx;
 std::map<point2D_t, std::string>Image::keypointIndexToName;
+std::map<std::string, point2D_t>Image::picNameToIndx;
+std::map<point2D_t, std::string>Image::picIndexTopicName;
 std::ostream& operator<<(std::ostream& stream, const Image& image) {
     stream << "Image(image_id="
         << (image.ImageId() != kInvalidImageId

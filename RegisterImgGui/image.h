@@ -90,6 +90,8 @@ public:
 
     static std::map<std::string, point2D_t>keypointNameToIndx;
     static std::map<point2D_t,std::string>keypointIndexToName;
+    static std::map<std::string, point2D_t>picNameToIndx;
+    static std::map<point2D_t, std::string>picIndexTopicName;
     std::map<point2D_t, Eigen::Vector2d>featPts;
     bool SetPoints2D(const std::map<point2D_t, Eigen::Vector2d>&featPts);
     int writeRegisterJson(const std::filesystem::path& imgJsonPath,

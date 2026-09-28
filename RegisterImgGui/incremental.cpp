@@ -234,7 +234,7 @@ int register_incremental(const std::string& folder)
 
     return 0;
 }
-double reprojectTotal(const std::set<int>&pickedImgs,const std::vector<Camera>&cameraList,const std::vector<Image>& imageList,const std::unordered_map<point3D_t, Eigen::Vector3d>&objPts)
+double reprojectTotal(const std::set<image_t>&pickedImgs,const std::vector<Camera>&cameraList,const std::vector<Image>& imageList,const std::unordered_map<point3D_t, Eigen::Vector3d>&objPts)
 {
 
     std::vector<double>errs;
@@ -295,7 +295,7 @@ int register_incremental_loop(const std::string& folder)
     std::iota(incrementalImages.begin(), incrementalImages.end(), 0);
     std::unordered_map<point3D_t, Eigen::Vector3d>objPts;
     std::unordered_map < image_t, struct Rigid3d>poses;
-    std::set<int>pickedImgs;
+    std::set<image_t>pickedImgs;
     std::unordered_map<std::uint32_t, std::set<std::uint32_t>>blacklist;
     {
         pickedImgs.insert(0);
@@ -515,7 +515,7 @@ int register_incremental_loop(const std::string& folder)
                     }
                 }
             }
-            if (pickedImgs.size() < +2)
+            if (pickedImgs.size() < 2)
             {
                 pickedImgs.insert(bestSource);
             }
@@ -532,6 +532,7 @@ int register_incremental_loop(const std::string& folder)
                 {
                     ba_config.AddImage(incrementalImages[d]);
                 }
+                ba_config.AddImage(bestSource);//try
                 for (const auto& d : objPts) ba_config.AddVariablePoint(d.first);
                 std::unique_ptr<BundleAdjuster> bundle_adjuster;
                 ba_config.SetConstantCamPose(incrementalImages[0]);  // 1st image
@@ -705,17 +706,41 @@ int register_incremental_loop(const std::string& folder)
 }
 int test_incremental()
 { 
-    std::map<Camera, std::vector<Image>> dataset = loadImageData("D:/repo/colmap-third/data/d", ImageIntrType::SHARED_ALL);
+    std::map<Camera, std::vector<Image>> dataset = loadImageData("D:/repo/colmapThird/data/c", ImageIntrType::SHARED_ALL);
     std::vector<Camera>cameraList;
     std::vector<Image> imageList;
     convertDataset(dataset, cameraList, imageList);
-
-    Image& image0 = imageList[0];
+    image_t seed0 = -1, seed1 = -1, seed2 = -1;
+    try
+    {
+        seed0 = Image::picNameToIndx.at("00000");
+        seed1 = Image::picNameToIndx.at("00087");
+        seed2 = Image::picNameToIndx.at("00129");
+    }
+    catch (const std::exception&)
+    {
+        LOG_ERR_OUT << "not found seed";
+        return -1;
+    }
+    LOG_OUT << "seed0 = " << seed0;
+    LOG_OUT << "seed1 = " << seed1;
+    LOG_OUT << "seed2 = " << seed2;
+ 
+    std::set<image_t>seedImgs;
+    seedImgs.insert(seed0);
+    seedImgs.insert(seed1);
+    seedImgs.insert(seed2);
+    Image& image0 = imageList[seed0];
     Camera& camera0 = cameraList[image0.CameraId()];
-    Image& image1 = imageList[1];
+    Image& image1 = imageList[seed1];
     Camera& camera1 = cameraList[image1.CameraId()];
 
-    TwoViewGeometry  two_view_geometry = EstimateCalibratedTwoViewGeometry(camera0, image0, camera1, image1); ;
+    TwoViewGeometry  two_view_geometry = EstimateCalibratedTwoViewGeometry(camera0, image0, camera1, image1);
+    if (two_view_geometry.config == TwoViewGeometry::ConfigurationType::DEGENERATE)
+    {
+        LOG_ERR_OUT << "not enough match.";
+        return -1;
+    }
     bool EstimateRet = EstimateTwoViewGeometryPose(camera0, image0, camera1, image1, &two_view_geometry);
     image0.SetCamFromWorld(Rigid3d()); 
     image1.SetCamFromWorld(two_view_geometry.cam2_from_cam1 * Rigid3d());
@@ -732,6 +757,7 @@ int test_incremental()
             matchesPointId.emplace_back(iter->first);
         }
     }
+    std::unordered_map<point2D_t, Eigen::Vector3d>objPts;
     for (const auto& ptId : matchesPointId)
     {
         const Eigen::Vector2d point2D0 = camera0.CamFromImg(image0.featPts.at(ptId));
@@ -744,7 +770,360 @@ int test_incremental()
             std::pair<bool, Eigen::Vector2d>imgPt1 = image1.ProjectPoint(xyz);
             LOG_OUT << imgPt0.first << " - " << imgPt0.second.transpose() << " , " << image0.featPts.at(ptId).transpose();
             LOG_OUT << imgPt1.first << " - " << imgPt1.second.transpose() << " , " << image1.featPts.at(ptId).transpose();
+            if (imgPt0.first == false || imgPt1.first == false)
+            {
+                LOG_ERR_OUT << "TriangulatePoint error.";
+                return -1;
+            }
+            objPts[ptId] = xyz;
+        }
+    }
+    {
+        Image& image2 = imageList[seed2];
+        Camera& camera2 = cameraList[image2.CameraId()];
+        std::vector<cv::Point2d>imgPtsPnp;
+        std::vector<cv::Point3d>objPtsPnp;
+        imgPtsPnp.reserve(image2.featPts.size());
+        objPtsPnp.reserve(image2.featPts.size());
+        for (const auto& [ptId, imgPt] : image2.featPts)
+        {
+            if (objPts.count(ptId) > 0)
+            {
+                imgPtsPnp.emplace_back(imgPt[0], imgPt[1]);
+                objPtsPnp.emplace_back(objPts[ptId][0], objPts[ptId][1], objPts[ptId][2]);
+            }
+        }
+        if (objPtsPnp.size() < 6)
+        {
+            LOG_ERR_OUT << "not enough match.";
+            for (const auto& d : objPts)
+            {
 
+                LOG_OUT << "label = " << Image::keypointIndexToName[d.first];
+            }
+            return -1;
+        }
+        cv::Mat intrMat = utils::intrConvert(camera0.CalibrationMatrix());
+        cv::Mat rvec, tvec;
+        cv::solvePnP(objPtsPnp, imgPtsPnp, intrMat, cv::Mat(), rvec, tvec);
+        Eigen::AngleAxisd eulerAngle(cv::norm(rvec), Eigen::Vector3d(rvec.ptr<double>(0)[0] / cv::norm(rvec), rvec.ptr<double>(1)[0] / cv::norm(rvec), rvec.ptr<double>(2)[0] / cv::norm(rvec)));
+        Rigid3d pnpRt(Eigen::Quaterniond(eulerAngle), Eigen::Vector3d(tvec.ptr<double>(0)[0], tvec.ptr<double>(1)[0], rvec.ptr<double>(2)[0]));
+        image2.SetCamFromWorld(pnpRt);
+    }
+    std::set<image_t>pickedImgs;
+    pickedImgs.insert(seed0);
+    pickedImgs.insert(seed1);
+    pickedImgs.insert(seed2);
+    const auto&baFun=[&](const bool& refine_focal_length=false, const bool& refine_principal_point = false)->double
+    {
+        //ba
+        BundleAdjustmentOptions ba_options;
+        ba_options.refine_focal_length = refine_focal_length;
+        ba_options.refine_principal_point = refine_principal_point;
+        ba_options.solver_options.max_num_iterations = 10000;
+        //ba_options.solver_options.logging_type = ceres::LoggingType::PER_MINIMIZER_ITERATION;
+        //ba_options.solver_options.minimizer_progress_to_stdout = true;
+        BundleAdjustmentConfig ba_config;
+        for (const auto& d : pickedImgs)
+        {
+            ba_config.AddImage(d);
+        }
+        for (const auto& d : objPts) ba_config.AddVariablePoint(d.first);
+        std::unique_ptr<BundleAdjuster> bundle_adjuster;
+        ba_config.SetConstantCamPose(seed0);  // 1st image
+        //ba_config.SetConstantCamIntrinsics(0);
+        bundle_adjuster = CreateDefaultBundleAdjuster(std::move(ba_options), std::move(ba_config), cameraList, imageList, objPts);
+
+
+        std::map<int, Eigen::Quaterniond>qs;
+        std::map<int, Eigen::RowVector3d>ts;
+        for (const auto& d : pickedImgs)
+        {
+            const Image& imag = imageList[d];
+            qs[d] = imag.CamFromWorld().rotation;
+            ts[d] = imag.CamFromWorld().translation.transpose();
+        }
+
+
+        auto solverRet = bundle_adjuster->Solve();
+
+        for (int j = 0; j < cameraList.size(); j++) LOG_OUT << cameraList[j];
+        if (solverRet.termination_type != ceres::CONVERGENCE)
+        {
+            LOG_ERR_OUT << "not convergence! incremental at total";
+            return -1;
+        }
+        //else
+        {
+            double final_cost = reprojectTotal(pickedImgs, cameraList, imageList, objPts);
+            LOG_OUT << "final_cost = " << final_cost;
+            if (final_cost > 6)
+            {
+                LOG_ERR_OUT << "final_cost>6 at total @ ";
+                return final_cost;
+            }
+            for (const auto& d : pickedImgs)
+            {
+                const Image& imag = imageList[d];
+                LOG_OUT << d << "qt" << qs[d] << ", " << ts[d] << "    " << imag.CamFromWorld().rotation << ", " << imag.CamFromWorld().translation.transpose();
+            }
+        }
+        return 0;
+    };
+    baFun();
+    const auto&refigureAfterBa = [&](const std::set<image_t>&pickedImgs)
+    {
+        std::unordered_map<point2D_t, std::list<image_t>>cnts;
+        for (const auto&imgId: pickedImgs)
+        {
+            for (const auto& [featId, _] : imageList[imgId].featPts) {
+                cnts.try_emplace(featId, std::list<image_t>()).first->second.emplace_back(imgId);
+            }
+        } 
+        std::unordered_map<point2D_t, Eigen::Vector3d>newObjPts;
+        for (const auto& [featId, cnt] : cnts)
+        {
+            if (cnt.size()>=3)
+            {
+                if (objPts.count(featId))
+                {
+                    newObjPts[featId] = objPts[featId];
+                }
+                else
+                {
+                    //std::vector<Eigen::Matrix3x4d> cams_from_world;
+                    //std::vector<Eigen::Vector2d> points;
+                    //cams_from_world.reserve(cnt.size());
+                    //points.reserve(cnt.size());
+                    //for (const auto&d: cnt)
+                    //{
+                    //    cams_from_world.emplace_back(imageList[d].CamFromWorld().ToMatrix());
+                    //    points.emplace_back(imageList[d].featPts.at(featId));
+                    //}
+                    //Eigen::Vector3d xyz;
+                    //bool triangulatePointRet = TriangulateMultiViewPoint(cams_from_world, points, &xyz);
+                    //if (triangulatePointRet)
+                    //{
+                    //    for (const auto& d : cnt)
+                    //    {
+                    //        std::pair<bool, Eigen::Vector2d>imgPt_ = imageList[d].ProjectPoint(xyz);
+                    //        LOG_OUT << imgPt_.first << " - " << imgPt_.second.transpose() << " , " << imageList[d].featPts.at(featId).transpose();
+                    //        if (imgPt_.first == false  )
+                    //        {
+                    //            LOG_ERR_OUT << "TriangulatePoint error.";
+                    //            return -1;
+                    //        }
+                    //    } 
+                    //    newObjPts[featId] = xyz;
+                    //} 
+                }
+            }
+            else if (cnt.size() ==2)
+            {
+                const auto&img0Id = *cnt.begin();
+                const auto&img1Id = cnt.back();
+                const Image& image0 = imageList[img0Id];
+                const Camera& camera0 = cameraList[image0.CameraId()];
+                const Image& image1 = imageList[img1Id];
+                const Camera& camera1 = cameraList[image1.CameraId()];
+                const Eigen::Vector2d point2D0 = camera0.CamFromImg(image0.featPts.at(featId));
+                const Eigen::Vector2d point2D1 = camera1.CamFromImg(image1.featPts.at(featId));
+                Eigen::Vector3d xyz;
+                bool triangulatePointRet = TriangulatePoint(image0.CamFromWorld().ToMatrix(), image1.CamFromWorld().ToMatrix(), point2D0, point2D1, &xyz);
+                if (triangulatePointRet)
+                {
+                    std::pair<bool, Eigen::Vector2d>imgPt0 = image0.ProjectPoint(xyz);
+                    std::pair<bool, Eigen::Vector2d>imgPt1 = image1.ProjectPoint(xyz);
+                    LOG_OUT << imgPt0.first << " - " << imgPt0.second.transpose() << " , " << image0.featPts.at(featId).transpose();
+                    LOG_OUT << imgPt1.first << " - " << imgPt1.second.transpose() << " , " << image1.featPts.at(featId).transpose();
+                    if (imgPt0.first == false || imgPt1.first == false)
+                    {
+                        LOG_ERR_OUT << "TriangulatePoint error.";
+                        return -1;
+                    }
+                    newObjPts[featId] = xyz;
+                }
+            }
+        }
+        objPts = newObjPts;
+        for (const auto& [ptId, pt3d] : objPts)
+        {
+            LOG_OUT << ptId << "  " << pt3d.transpose();;
+        }
+        return 0;
+    };
+    int refigureRet = refigureAfterBa(pickedImgs);
+    if (refigureRet!=0)
+    {
+        return -1;
+    }
+    const auto& resortImgDistOrder = [&](const std::set<image_t>&hasRegisterd)
+    {
+        std::vector<std::uint32_t>dists(imageList.size(), imageList.size());
+        for (const auto&img:imageList)
+        {
+            const auto& thisImgId = img.ImageId();
+            if (seedImgs.count(thisImgId)!=0 || hasRegisterd.count(thisImgId)!=0)
+            {
+                continue;
+            }            
+            else
+            { 
+                for (const auto&d: seedImgs)
+                {
+                    int dist = (d > thisImgId) ? (d - thisImgId) : (thisImgId - d);
+                    if (dists[thisImgId]> dist)
+                    {
+                        dists[thisImgId] = dist;
+                    }
+                }
+            }
+        }
+        return dists;
+    };
+
+    const auto& resortImgDistOrder2 = [&](const std::set<image_t>& hasRegisterd)
+    {
+        std::unordered_map<point2D_t, std::list<image_t>>cnts;
+        for (const auto& imgId : hasRegisterd)
+        {
+            for (const auto& [featId, _] : imageList[imgId].featPts) {
+                cnts.try_emplace(featId, std::list<image_t>()).first->second.emplace_back(imgId);
+            }
+        }
+        std::vector<std::uint32_t>scores(imageList.size(), 0);
+        for (const auto& img : imageList)
+        {
+            const auto& thisImgId = img.ImageId();
+            if (seedImgs.count(thisImgId) != 0 || hasRegisterd.count(thisImgId) != 0)
+            {
+                continue;
+            }
+            else
+            {
+                for (const auto& [featId, _] : img.featPts)
+                {
+                    const std::uint32_t& score = cnts[featId].size();
+                    if (score >=2)
+                    {
+                        scores[thisImgId] += score*10;
+                    }
+                } 
+                int neighberScore = imageList.size();
+                for (const auto& d : hasRegisterd)
+                {
+                    int dist = (d > thisImgId) ? (d - thisImgId) : (thisImgId - d);
+                    if (neighberScore > dist)
+                    {
+                        neighberScore = dist;
+                    }
+                }
+                scores[thisImgId] += neighberScore;
+            }
+        }
+        return scores;
+    };
+    while (true)
+    {
+        //std::vector<std::uint32_t> imgDistOrder = resortImgDistOrder(pickedImgs);
+        std::vector<std::uint32_t> imgDistOrder = resortImgDistOrder2(pickedImgs);
+        int addImgId= -1;
+        
+        auto minIter = std::max_element(imgDistOrder.begin(), imgDistOrder.end());
+        {
+            image_t nextImgId = std::distance(imgDistOrder.begin(), minIter);;
+            Image& image2 = imageList[nextImgId];
+            Camera& camera2 = cameraList[image2.CameraId()];
+            std::vector<cv::Point2d>imgPtsPnp;
+            std::vector<cv::Point3d>objPtsPnp;
+            imgPtsPnp.reserve(image2.featPts.size());
+            objPtsPnp.reserve(image2.featPts.size());
+            for (const auto& [ptId, imgPt] : image2.featPts)
+            {
+                if (objPts.count(ptId) > 0)
+                {
+                    imgPtsPnp.emplace_back(imgPt[0], imgPt[1]);
+                    objPtsPnp.emplace_back(objPts[ptId][0], objPts[ptId][1], objPts[ptId][2]);
+                }
+            }
+            if (objPtsPnp.size() < 6)
+            {
+                LOG_ERR_OUT << "not enough match.@"<< nextImgId;
+                for (const auto& d : objPts)
+                {
+                    LOG_OUT << "label = " << Image::keypointIndexToName[d.first];
+                }
+                return -1;
+            }
+            cv::Mat intrMat = utils::intrConvert(camera0.CalibrationMatrix());
+            cv::Mat rvec, tvec;
+            bool useNeighbor = false;
+            //if (pickedImgs.count(nextImgId + 1) > 0)
+            //{
+            //    useNeighbor = true;
+            //    tvec = cv::Mat(3, 1, CV_64FC1);
+            //    rvec = cv::Mat(3, 1, CV_64FC1);
+            //    const Rigid3d& neighborRt = imageList[nextImgId + 1].CamFromWorld();
+            //    Eigen::Quaterniond rotation = neighborRt.rotation;
+            //    Eigen::Vector3d translation = neighborRt.translation;
+            //    Eigen::AngleAxisd aa(rotation);
+            //    Eigen::Vector3d rotatervec = aa.axis() * aa.angle();
+            //    rvec.ptr<double>(0)[0] = rotatervec[0];
+            //    rvec.ptr<double>(1)[0] = rotatervec[1];
+            //    rvec.ptr<double>(2)[0] = rotatervec[2];
+            //    tvec.ptr<double>(0)[0] = translation[0];
+            //    tvec.ptr<double>(1)[0] = translation[1];
+            //    tvec.ptr<double>(2)[0] = translation[2];
+            //}
+            //else if (pickedImgs.count(nextImgId - 1) > 0)
+            //{
+            //    useNeighbor = true;
+            //    tvec = cv::Mat(3, 1, CV_64FC1);
+            //    rvec = cv::Mat(3, 1, CV_64FC1);
+            //    const Rigid3d& neighborRt = imageList[nextImgId - 1].CamFromWorld();
+            //    Eigen::Quaterniond rotation = neighborRt.rotation;
+            //    Eigen::Vector3d translation = neighborRt.translation;
+            //    Eigen::AngleAxisd aa(rotation);
+            //    Eigen::Vector3d rotatervec = aa.axis() * aa.angle();
+            //    rvec.ptr<double>(0)[0] = rotatervec[0];
+            //    rvec.ptr<double>(1)[0] = rotatervec[1];
+            //    rvec.ptr<double>(2)[0] = rotatervec[2];
+            //    tvec.ptr<double>(0)[0] = translation[0];
+            //    tvec.ptr<double>(1)[0] = translation[1];
+            //    tvec.ptr<double>(2)[0] = translation[2];
+            //}
+            cv::solvePnP(objPtsPnp, imgPtsPnp, intrMat, cv::Mat(), rvec, tvec, useNeighbor);
+            Eigen::AngleAxisd eulerAngle(cv::norm(rvec), Eigen::Vector3d(rvec.ptr<double>(0)[0] / cv::norm(rvec), rvec.ptr<double>(1)[0] / cv::norm(rvec), rvec.ptr<double>(2)[0] / cv::norm(rvec)));
+            Rigid3d pnpRt(Eigen::Quaterniond(eulerAngle), Eigen::Vector3d(tvec.ptr<double>(0)[0], tvec.ptr<double>(1)[0], rvec.ptr<double>(2)[0]));
+            image2.SetCamFromWorld(pnpRt);
+            addImgId = nextImgId;
+            pickedImgs.insert(nextImgId);
+        }
+        
+        if (addImgId<0)
+        {
+            LOG_ERR_OUT << "size_t tryI = 0; tryI < seedImgs.size() * 2; tryI++";
+            return -1;
+        }
+        int baRet = baFun();
+        if (baRet<0)
+        { 
+            LOG_ERR_OUT << "not convergence. " << addImgId;
+            return -1;
+        }
+        else if (baRet > 6)
+        {
+            LOG_ERR_OUT << "baRet > 6. @" << Image::picIndexTopicName[addImgId];
+            return -1;
+        }
+        if (imageList.size()== pickedImgs.size())
+        {
+            break;
+        }
+        int refigureRet = refigureAfterBa(pickedImgs);
+        if (refigureRet != 0)
+        {
+            return -1;
         }
     }
     return 0;
