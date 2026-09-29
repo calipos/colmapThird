@@ -145,6 +145,8 @@ bool registFrame(bool* show_regist_window)
 	}
 	static bool* imgpicks = nullptr;
 	static std::vector<std::string>picNames;
+	static std::vector<std::string>initView;
+	static std::vector<std::string>discardView;
 	while (isProcRunning == 0)
 	{
 		if (ImGui::Button("pick image dir"))
@@ -176,6 +178,11 @@ bool registFrame(bool* show_regist_window)
 		if (std::filesystem::exists(imgDirPath) && picNames.size() == 0 && imgpicks == nullptr)
 		{
 			picNames = listPicName(imgDirPath);
+			for (auto&d: picNames)
+			{
+#define NAME_TAIL_SPACE_CNT 4
+				d += std::string(NAME_TAIL_SPACE_CNT, ' ');
+			}
 			imgpicks = new bool[picNames.size()];
 			for (size_t i = 0; i < picNames.size(); i++)
 			{
@@ -188,26 +195,85 @@ bool registFrame(bool* show_regist_window)
 			{
 				for (int i = 0; i < picNames.size(); i++)
 				{
-					ImGui::Checkbox(picNames[i].c_str(), &imgpicks[i]);
-					if (i%9!=0)
+					if (i%9==0)
+					{
+					}
+					else
 					{
 						ImGui::SameLine();
 					}
+					bool picNamesButton = ImGui::Button(picNames[i].c_str());
+					if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+						if (picNames[i].back() == 'x')
+						{
+							picNames[i].back() = ' ';
+						}
+						else
+						{
+							picNames[i].back() = 'x';
+						}
+					}
+					if (picNamesButton)
+					{
+						if (picNames[i].back() == 'O')
+						{
+							picNames[i].back() = ' ';
+						}
+						else
+						{
+							initView.clear();
+							initView.reserve(4);
+							for (size_t j = 0; j < picNames.size(); j++)
+							{
+								if (picNames[j].back() == 'O')
+								{
+									initView.emplace_back(picNames[j]);
+								}
+							}
+							if (initView.size()<3)
+							{
+								picNames[i].back() = 'O';
+							}
+						}						
+					} 
 				}
 				ImGui::NewLine();
 			}
 			if (ImGui::Button("figure!"))
 			{
-				progress.numerator.store(-1);
-				progress.procRunning.fetch_add(1);
-				progress.proc = new std::thread(
-					[&]() {
-						//clearScreen();
-						std::filesystem::path imgDirPath_ = imgDirPath;
-						int registRet = register_incremental_loop(imgDirPath_.string());
-						endThread(progress);
+				initView.clear();
+				discardView.clear();
+				initView.reserve(4);
+				discardView.reserve(64);
+				for (size_t j = 0; j < picNames.size(); j++)
+				{
+					if (picNames[j].back() == 'O')
+					{
+						int len = picNames[j].length();
+						initView.emplace_back(picNames[j].substr(0, len - NAME_TAIL_SPACE_CNT));
+					}if (picNames[j].back() == 'x')
+					{
+						int len = picNames[j].length();
+						discardView.emplace_back(picNames[j].substr(0, len - NAME_TAIL_SPACE_CNT));
 					}
-				);
+				}
+				if (initView.size() == 3)
+				{
+					progress.numerator.store(-1);
+					progress.procRunning.fetch_add(1);
+					progress.proc = new std::thread(
+						[&]() {
+							//clearScreen();
+							std::filesystem::path imgDirPath_ = imgDirPath;
+							int registRet = register_incremental_base_hint(imgDirPath_.string(), initView, discardView);
+							endThread(progress);
+						}
+					);
+				}
+				else
+				{
+					LOG_WARN_OUT << "pick initialed 3 views!";
+				}
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			}
 		}

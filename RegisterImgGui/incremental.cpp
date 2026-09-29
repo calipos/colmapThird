@@ -704,18 +704,28 @@ int register_incremental_loop(const std::string& folder)
 
     return 0;
 }
-int test_incremental()
+int register_incremental_base_hint(const std::string& folder, const std::vector<std::string>&initViewName, const std::vector<std::string>&discardViewName)
 { 
     std::map<Camera, std::vector<Image>> dataset = loadImageData("D:/repo/colmapThird/data/c", ImageIntrType::SHARED_ALL);
     std::vector<Camera>cameraList;
     std::vector<Image> imageList;
     convertDataset(dataset, cameraList, imageList);
     image_t seed0 = -1, seed1 = -1, seed2 = -1;
+    if (initViewName.size()!=3)
+    {
+        LOG_ERR_OUT << "initViewName.size()!=3";
+        return -1;
+    }
     try
     {
-        seed0 = Image::picNameToIndx.at("00000");
-        seed1 = Image::picNameToIndx.at("00087");
-        seed2 = Image::picNameToIndx.at("00129");
+        seed0 = Image::picNameToIndx.at(initViewName[0]);
+        seed1 = Image::picNameToIndx.at(initViewName[1]);
+        seed2 = Image::picNameToIndx.at(initViewName[2]);
+        if (seed0 == seed1 || seed0 == seed2 || seed1 == seed2)
+        {
+            LOG_ERR_OUT << "seed0 == seed1 || seed0 == seed2 || seed1 == seed2";
+            return -1;
+        }
     }
     catch (const std::exception&)
     {
@@ -725,7 +735,22 @@ int test_incremental()
     LOG_OUT << "seed0 = " << seed0;
     LOG_OUT << "seed1 = " << seed1;
     LOG_OUT << "seed2 = " << seed2;
- 
+
+    std::vector<int>discardIds;
+    discardIds.reserve(discardViewName.size());
+    for (size_t i = 0; i < discardViewName.size(); i++)
+    {
+        try
+        {
+            int discardId = Image::picNameToIndx.at(discardViewName[i]); 
+            discardIds.emplace_back(discardId);
+        }
+        catch (const std::exception&)
+        {
+            LOG_ERR_OUT << "not found discardId = "<< discardViewName[i];
+            return -1;
+        }
+    }
     std::set<image_t>seedImgs;
     seedImgs.insert(seed0);
     seedImgs.insert(seed1);
@@ -1027,6 +1052,10 @@ int test_incremental()
     {
         //std::vector<std::uint32_t> imgDistOrder = resortImgDistOrder(pickedImgs);
         std::vector<std::uint32_t> imgDistOrder = resortImgDistOrder2(pickedImgs);
+        for (const auto&d: discardIds)
+        {
+            imgDistOrder[d] = 0;
+        }
         int addImgId= -1;
         
         auto minIter = std::max_element(imgDistOrder.begin(), imgDistOrder.end());
@@ -1116,7 +1145,7 @@ int test_incremental()
             LOG_ERR_OUT << "baRet > 6. @" << Image::picIndexTopicName[addImgId];
             return -1;
         }
-        if (imageList.size()== pickedImgs.size())
+        if (imageList.size()== pickedImgs.size()+ discardIds.size())
         {
             break;
         }
@@ -1126,5 +1155,9 @@ int test_incremental()
             return -1;
         }
     }
+    return 0;
+}
+int test_incremental()
+{
     return 0;
 }
