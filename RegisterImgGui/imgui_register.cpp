@@ -239,6 +239,8 @@ bool registFrame(bool* show_regist_window)
 				}
 				ImGui::NewLine();
 			}
+			static bool optimCameraIntr = false;
+			ImGui::Checkbox("optimCameraIntr", &optimCameraIntr);
 			if (ImGui::Button("figure!"))
 			{
 				initView.clear();
@@ -265,7 +267,7 @@ bool registFrame(bool* show_regist_window)
 						[&]() {
 							//clearScreen();
 							std::filesystem::path imgDirPath_ = imgDirPath;
-							int registRet = register_incremental_base_hint(imgDirPath_.string(), initView, discardView);
+							int registRet = register_incremental_base_hint(imgDirPath_.string(), initView, discardView, optimCameraIntr);
 							endThread(progress);
 						}
 					);

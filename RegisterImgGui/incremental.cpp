@@ -704,7 +704,7 @@ int register_incremental_loop(const std::string& folder)
 
     return 0;
 }
-int register_incremental_base_hint(const std::string& folder, const std::vector<std::string>&initViewName, const std::vector<std::string>&discardViewName)
+int register_incremental_base_hint(const std::string& folder, const std::vector<std::string>&initViewName, const std::vector<std::string>&discardViewName, const bool& optimCameraIntr)
 { 
     std::map<Camera, std::vector<Image>> dataset = loadImageData("D:/repo/colmapThird/data/c", ImageIntrType::SHARED_ALL);
     std::vector<Camera>cameraList;
@@ -1147,6 +1147,7 @@ int register_incremental_base_hint(const std::string& folder, const std::vector<
         }
         if (imageList.size()== pickedImgs.size()+ discardIds.size())
         {
+            LOG_OUT << "ok";
             break;
         }
         int refigureRet = refigureAfterBa(pickedImgs);
@@ -1154,6 +1155,10 @@ int register_incremental_base_hint(const std::string& folder, const std::vector<
         {
             return -1;
         }
+    }
+    if (imageList.size() == pickedImgs.size() + discardIds.size() && optimCameraIntr)
+    {
+        baFun(true,true);
     }
     return 0;
 }
