@@ -23,6 +23,11 @@ std::vector<std::string>listPicName(const std::filesystem::path& imgDir_)
 	for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ imgDir_ })
 	{
 		const auto& thisFilename = dir_entry.path();
+		auto parentName = thisFilename.parent_path().filename().string();
+		if (parentName.compare("result") == 0)
+		{
+			continue;
+		}
 		if (thisFilename.has_extension())
 		{
 			const auto& shortName = thisFilename.filename().stem().string(); 
@@ -240,7 +245,9 @@ bool registFrame(bool* show_regist_window)
 				ImGui::NewLine();
 			}
 			static bool optimCameraIntr = false;
+			static bool saveResult = false;
 			ImGui::Checkbox("optimCameraIntr", &optimCameraIntr);
+			ImGui::Checkbox("saveResult", &saveResult);
 			if (ImGui::Button("figure!"))
 			{
 				initView.clear();
@@ -267,7 +274,7 @@ bool registFrame(bool* show_regist_window)
 						[&]() {
 							//clearScreen();
 							std::filesystem::path imgDirPath_ = imgDirPath;
-							int registRet = register_incremental_base_hint(imgDirPath_.string(), initView, discardView, optimCameraIntr);
+							int registRet = register_incremental_base_hint(imgDirPath_.string(), initView, discardView, optimCameraIntr, saveResult);
 							endThread(progress);
 						}
 					);

@@ -704,9 +704,9 @@ int register_incremental_loop(const std::string& folder)
 
     return 0;
 }
-int register_incremental_base_hint(const std::string& folder, const std::vector<std::string>&initViewName, const std::vector<std::string>&discardViewName, const bool& optimCameraIntr)
+int register_incremental_base_hint(const std::string& folder, const std::vector<std::string>&initViewName, const std::vector<std::string>&discardViewName, const bool& optimCameraIntr,const bool&saveResult)
 { 
-    std::map<Camera, std::vector<Image>> dataset = loadImageData("D:/repo/colmapThird/data/c", ImageIntrType::SHARED_ALL);
+    std::map<Camera, std::vector<Image>> dataset = loadImageData(folder, ImageIntrType::SHARED_ALL);
     std::vector<Camera>cameraList;
     std::vector<Image> imageList;
     convertDataset(dataset, cameraList, imageList);
@@ -1159,6 +1159,22 @@ int register_incremental_base_hint(const std::string& folder, const std::vector<
     if (imageList.size() == pickedImgs.size() + discardIds.size() && optimCameraIntr)
     {
         baFun(true,true);
+
+        
+    }
+    if (saveResult)
+    {
+        std::unordered_map < image_t, struct Rigid3d>poses;
+        for (size_t i = 0; i < imageList.size(); i++)
+        {
+            const image_t& imageId = imageList[i].ImageId();
+            if (discardIds.end() == std::find(discardIds.begin(), discardIds.end(), i))
+            {
+                poses[imageId] = imageList[i].CamFromWorld();
+            }
+        }
+        removeDirRecursive(std::filesystem::path(folder) / "result");
+        writeResult(std::filesystem::path(folder) / "result", cameraList, imageList, objPts, poses);
     }
     return 0;
 }
