@@ -416,6 +416,48 @@ namespace draw
 	int Draw::canvasMaxSide = 0;
 	float Draw::resizeFactor = 1;
 }
+Eigen::Matrix<float, 3, 4> solveAffine(const Eigen::Matrix3f& A,
+	const Eigen::Matrix3f& B)
+{
+
+	Eigen::Vector3f u = A.row(1).transpose() - A.row(0).transpose();
+	Eigen::Vector3f v = A.row(2).transpose() - A.row(0).transpose();
+	Eigen::Vector3f w = u.cross(v);
+
+	Eigen::Vector3f u2 = B.row(1).transpose() - B.row(0).transpose();
+	Eigen::Vector3f v2 = B.row(2).transpose() - B.row(0).transpose();
+	Eigen::Vector3f w2 = u2.cross(v2);
+
+	// X = [u, v, w]£¬Y = [u2, v2, w2]
+	Eigen::Matrix3f X;
+	X.col(0) = u;
+	X.col(1) = v;
+	X.col(2) = w;
+
+	Eigen::Matrix3f Y;
+	Y.col(0) = u2;
+	Y.col(1) = v2;
+	Y.col(2) = w2;
+
+	if (std::abs(X.determinant()) < 1e-12)
+		throw std::runtime_error("source points are collinear");
+
+	Eigen::Matrix<float, 3, 4> Mt;
+	// M = Y * X^{-1}
+	// Eigen::Matrix3f M = Y * X.inverse();
+	Mt.block(0, 0, 3, 3) = Y * X.inverse();
+
+	// t = B0 - M * A0
+	// Eigen::Matrix3f t = B[0] - M * A[0];
+	Mt.col(3) =
+		B.row(0).transpose() - Mt.block(0, 0, 3, 3) * A.row(0).transpose();
+
+	return Mt;
+}
+bool initRts(const Eigen::MatrixX3f& bfmV)
+{
+	return true;
+}
 int figureDlibLandMarks(const  std::filesystem::path& mvsResultDir)
 {
 	for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ mvsResultDir })
@@ -523,13 +565,17 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 	}
 	bfmIns = new bfm::Bfm2019(bfmFacePath);
 	bfmIns->generateRandomFace(bfmMsh.V, bfmMsh.C);
-	//meshdraw::utils::savePts("0.txt", bfmMsh.V);
+	meshdraw::utils::savePts("0.txt", bfmMsh.V);
 	this->bfmMsh.F = bfmIns->F;
 	if (meshdraw::isEmpty(this->bfmMsh.facesNormal))
 	{
 		this->bfmMsh.figureFacesNomral();
 	}
+	
+	if(std::filesystem::exists(mvsResultDir/"pts.json"))
+	{
 
+	}
     bfm_R << 1, 0, 0, 0, -1, 0, 0, 0, -1;
     bfm_t << 0, 0, 300;  
 	bfm_scale = 1.f; 

@@ -1173,7 +1173,11 @@ int register_incremental_base_hint(const std::string& folder, const std::vector<
                 poses[imageId] = imageList[i].CamFromWorld();
             }
         }
-        removeDirRecursive(std::filesystem::path(folder) / "result");
+        if (std::filesystem::exists(std::filesystem::path(folder) / "result"))
+        {
+            removeDirRecursive(std::filesystem::path(folder) / "result");
+        }
+        std::filesystem::create_directories(std::filesystem::path(folder) / "result");
         writeResult(std::filesystem::path(folder) / "result", cameraList, imageList, objPts, poses);
     }
     return 0;
