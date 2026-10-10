@@ -565,16 +565,30 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 	}
 	bfmIns = new bfm::Bfm2019(bfmFacePath);
 	bfmIns->generateRandomFace(bfmMsh.V, bfmMsh.C);
-	meshdraw::utils::savePts("0.txt", bfmMsh.V);
+	//meshdraw::utils::savePts("0.txt", bfmMsh.V);
 	this->bfmMsh.F = bfmIns->F;
 	if (meshdraw::isEmpty(this->bfmMsh.facesNormal))
 	{
 		this->bfmMsh.figureFacesNomral();
 	}
-	
-	if(std::filesystem::exists(mvsResultDir/"pts.json"))
+	 
 	{
+		std::ifstream file(mvsResultDir / "match3.txt"); 
+		if (!file.is_open()) {
+			throw std::runtime_error("无法打开文件: " + filename);
+		}
 
+		// 读取整个文件内容
+		std::string content(
+			(std::istreambuf_iterator<char>(file)),
+			std::istreambuf_iterator<char>()
+		);
+
+		progress.procRunning.store(0);
+		progress.denominator.store(-1);
+		progress.numerator.store(-1);
+		LOG_WARN_OUT << "not found : " << mvsResultDir / "match3.txt";
+		return;
 	}
     bfm_R << 1, 0, 0, 0, -1, 0, 0, 0, -1;
     bfm_t << 0, 0, 300;  
