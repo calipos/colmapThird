@@ -15,7 +15,8 @@
 #include "labelme.h"
 #include "bfm.h"
 #include "meshDraw.h"
-
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
 static ProgressThread progress;
  
 static BfmIter* BfmIterManger = nullptr;
@@ -458,6 +459,74 @@ bool initRts(const Eigen::MatrixX3f& bfmV)
 {
 	return true;
 }
+bool readInitBfmRts(const  std::filesystem::path& path, const Eigen::MatrixX3f& bfmMshV,
+	Eigen::Matrix3f&bfm_R, Eigen::RowVector3f&bfm_t, float&bfm_scale)
+{
+	std::list<Eigen::Vector3f>bfmPts, objPts;
+	std::ifstream file(path);
+	if (!file.is_open()) {
+		LOG_WARN_OUT << "not found : " << path;
+		return false;
+	}
+	else
+	{
+		std::string aline;
+		while (std::getline(file, aline))
+		{
+			if (aline.length() > 0)
+			{
+				if (aline[0] == '#')
+				{
+					continue;
+				}
+				else
+				{
+					for (auto&d: aline)
+					{
+						if (d==',')
+						{
+							d = ' ';
+						}
+					}
+					std::uint32_t bfmIdx;
+					float a, b, c;
+					std::istringstream iss(aline);
+					if (iss >> bfmIdx >> a >> b >> c) {
+						bfmPts.emplace_back(bfmMshV.row(bfmIdx));
+						objPts.emplace_back(a, b, c);
+					}
+					else {
+						LOG_WARN_OUT << "parse failed : " << path;
+						return false;
+					}
+				}
+			}
+		}
+	}
+	if (bfmPts.size()<3 || objPts.size()!= bfmPts.size())
+	{
+		LOG_WARN_OUT << "bfmPts.size()<3";
+		return false;
+	}
+	Eigen::Matrix3Xf ptsTgt(3,bfmPts.size());
+	Eigen::Matrix3Xf ptsSrc(3,bfmPts.size());
+	int ii = 0;
+	for (auto it1 = bfmPts.begin(), it2 = objPts.begin(); it1 != bfmPts.end(); ++it1, ++it2,++ii) 
+	{
+		ptsTgt(0,ii) = it2->x();
+		ptsTgt(1,ii) = it2->y();
+		ptsTgt(2,ii) = it2->z();
+		ptsSrc(0,ii) = it1->x();
+		ptsSrc(1,ii) = it1->y();
+		ptsSrc(2,ii) = it1->z();
+	}
+	Eigen::Matrix4f T = Eigen::umeyama(ptsSrc, ptsTgt, true);
+	Eigen::Matrix3f sR = T.block<3, 3>(0, 0);
+	bfm_scale = std::cbrt(sR.determinant());
+	bfm_R = sR / bfm_scale;
+	bfm_t = T.block<3, 1>(0, 3);	 
+	return true;
+}
 int figureDlibLandMarks(const  std::filesystem::path& mvsResultDir)
 {
 	for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ mvsResultDir })
@@ -570,34 +639,22 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 	if (meshdraw::isEmpty(this->bfmMsh.facesNormal))
 	{
 		this->bfmMsh.figureFacesNomral();
-	}
-	 
+	}	 
 	{
-		std::ifstream file(mvsResultDir / "match3.txt"); 
-		if (!file.is_open()) {
-			throw std::runtime_error("无法打开文件: " + filename);
-		}
-
-		// 读取整个文件内容
-		std::string content(
-			(std::istreambuf_iterator<char>(file)),
-			std::istreambuf_iterator<char>()
-		);
-
-		progress.procRunning.store(0);
-		progress.denominator.store(-1);
-		progress.numerator.store(-1);
-		LOG_WARN_OUT << "not found : " << mvsResultDir / "match3.txt";
-		return;
-	}
-    bfm_R << 1, 0, 0, 0, -1, 0, 0, 0, -1;
-    bfm_t << 0, 0, 300;  
-	bfm_scale = 1.f; 
+		if (!readInitBfmRts(mvsResultDir / "match3.txt", bfmMsh.V, bfm_R, bfm_t, bfm_scale))
+		{ 
+			progress.procRunning.store(0);
+			progress.denominator.store(-1);
+			progress.numerator.store(-1);
+		} 
+		//Eigen::MatrixX3f meshVRotated = (bfmMsh.V * bfm_R.transpose() * bfm_scale).rowwise() + bfm_t;
+		//meshdraw::utils::savePts(mvsResultDir / "1.txt", meshVRotated);
+	} 
 
 
 	//meshdraw::Camera cam;
-	//cam.cameraType = meshdraw::CmaeraType::Ortho;
-	//cam.intr << 100, 0, 197, 0, 100, 197, 0, 0, 1;
+	//cam.cameraType = meshdraw::CmaeraType::Pinhole;
+	//cam.intr << 1536, 0, 360, 0, 1536, 640, 0, 0, 1;
 	//cam.R  << 1, 0, 0, 0, 1, 0, 0, 0, 1;
 	//cam.t  <<0,0,0;
 	//cam.height = 384;
@@ -622,7 +679,7 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 			{
 				std::string stem = thisFilename.filename().stem().string();
 				auto maskPath = thisFilename.parent_path() / ("mask_" + stem + ".dat");
-				if (std::filesystem::exists(maskPath))
+				//if (std::filesystem::exists(maskPath))
 				{
 					Eigen::Matrix4d cameraMatrix, Rt;
 					bool readRet = labelme::readCmaeraFromRegisterJson(thisFilename, cameraMatrix, Rt);
@@ -667,20 +724,7 @@ BfmIter::BfmIter(const  std::filesystem::path& mvsResultDir, const  std::filesys
 						bfmRenders.emplace_back(render3d);
 						bfmRenderPts.emplace_back(render3dPts);
 						bfmRenderMasks.emplace_back(mask);
-						cv::Mat borderMshRender3dPts;
-						cv::Mat borderMshMask;
-						if (meshdraw::isEmpty(this->borderMsh.facesNormal))
-						{
-							this->borderMsh.figureFacesNomral();
-						}
-						meshdraw::render(this->borderMsh, cam, borderMshRender3dPts, borderMshMask);
-						this->borderMshRenderPts.emplace_back(borderMshRender3dPts);
-						this->borderMshMasks.emplace_back(borderMshMask);
-						shifts.emplace_back(ImVec2(0, 0));
-						if (this->borderMshMasks.size()>=9)
-						{
-							break;
-						}
+						
 						progress.denominator.fetch_add(1);
 						progress.numerator.fetch_add(1);
 					}

@@ -646,12 +646,13 @@ namespace meshdraw
                         int cnt = trianglePixels.size();
                         for (int i = 0; i < cnt; ++i, ++itA, ++itB) {
                             const cv::Vec2i& pixel = *itA;
-                            if (pixel[1] > 0 && pixel[1] <= cam.height && pixel[0] >= 0 && pixel[0] < cam.width)
+                            if (pixel[1] >= 0 && pixel[1] < cam.height && pixel[0] >= 0 && pixel[0] < cam.width)
                             {
                                 const float& w0 = (*itB)[0];
                                 const float& w1 = (*itB)[1];
                                 const float& w2 = (*itB)[2];
-                                const int& r = cam.height - pixel[1];
+                                //const int& r = cam.height - pixel[1];
+                                const int& r = pixel[1];
                                 const int& c = pixel[0];
                                 if (c >= 0 && r >= 0 && c < cam.width && r < cam.height)
                                 {
