@@ -24,7 +24,7 @@ static void glfw_error_callback(int error, const char* description)
 bool show_imgRegister_window = false;
 bool show_segment_window = false;
 bool show_annotation_window = false;
-bool show_bfmIter_window = false;
+bool show_bfmIter_window = true;
 
 
 extern int test_sam2();

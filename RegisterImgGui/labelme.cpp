@@ -143,6 +143,11 @@ namespace labelme
 			&err)) {
 			return  false;
 		}
+		if (!newRoot.isObject())
+		{
+			LOG_ERR_OUT << "is not a Object";
+			return  false;
+		}
 		auto newMemberNames = newRoot.getMemberNames();
 		if (newMemberNames.end() == std::find(newMemberNames.begin(), newMemberNames.end(), "fx"))
 		{

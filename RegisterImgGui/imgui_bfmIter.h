@@ -27,8 +27,6 @@ public:
 	std::vector<cv::Mat>bfmRenders;
 	std::vector<cv::Mat>bfmRenderPts;
 	std::vector<cv::Mat>bfmRenderMasks;
-	std::vector<cv::Mat>borderMshRenderPts;
-	std::vector<cv::Mat>borderMshMasks;
 	std::vector<ImVec2>shifts;;
 	std::vector<std::filesystem::path>imgPaths;
 	std::vector<std::string>imgNameForlist;
@@ -39,7 +37,6 @@ public:
 	static int viewWindowWidth;
 	static int imgPickIdx;
 	meshdraw::Mesh bfmMsh;
-	meshdraw::Mesh borderMsh;
 	std::vector<meshdraw::Camera> imgCameras;
 	static bool figureSharedPoint(const std::vector<Eigen::Vector2f>& imgPts, const std::vector<meshdraw::Camera>& ts, Eigen::Vector3f& pt);
 	static bool readObj(const std::filesystem::path& objPath, Eigen::MatrixX3f& vertex, Eigen::MatrixX3i& faces);
