@@ -380,7 +380,19 @@ int test_undistortFoxImg()
 	undistorted_bitmap.Write("D:/repo/Instant-NGP-for-GTX-1000/data/nerf/fox/images/0001a.jpg");
 	return 0;
 }
+cv::Mat findAndFillFirstLevelContours(const cv::Mat& binaryImage) {
+	cv::Mat result = cv::Mat::zeros(binaryImage.size(), CV_8UC1);
 
+	// 找轮廓（只找最外层轮廓）
+	std::vector<std::vector<cv::Point>> contours;
+	std::vector<cv::Vec4i> hierarchy;
+	findContours(binaryImage, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+	// 填充所有最外层轮廓
+	drawContours(result, contours, -1, cv::Scalar(255), cv::FILLED);
+
+	return result;
+}
 int test_sdf()
 {
 	//return test_undistortFoxImg();
@@ -393,7 +405,7 @@ int test_sdf()
 	double z_end = landmarkPts.col(2).maxCoeff();
 
 
-	sdf::VolumeDat a(static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()*0.001), x_strat, y_strat, z_strat-0.2*(z_end- z_strat), x_end, y_end, z_end);
+	sdf::VolumeDat a(static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()*0.01), x_strat, y_strat, z_strat-0.2*(z_end- z_strat), x_end, y_end, z_end);
 
 	std::vector<std::filesystem::path> maskPaths;
 	std::vector<std::filesystem::path> imgPaths;
@@ -412,6 +424,7 @@ int test_sdf()
 				if (std::filesystem::exists(maskPath))
 				{
 					cv::Mat mask = tools::loadMask(maskPath.string());
+					mask = findAndFillFirstLevelContours(mask);
 					if (!mask.empty())
 					{
 						Eigen::Matrix4d cameraMatrix, Rt;
