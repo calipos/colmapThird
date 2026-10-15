@@ -183,6 +183,9 @@
     <ClCompile Include="pips2iter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="BSplineIcp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="log.h">

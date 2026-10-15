@@ -67,7 +67,7 @@ namespace sdf
 
 		std::uint32_t totalCnt = x_size * y_size * z_size;
 		int yx_size = x_size * y_size;
-		gridCenterHitValue = std::vector<float>(x_size * y_size * z_size, 1.0f);
+		gridCenterHitValue = std::vector<float>(x_size * y_size * z_size, 0.0f);
 		grid = Eigen::Matrix4Xf(4, gridCenterHitValue.size());
 		int numX_1 = x_size - 1;
 		int numY_1 = y_size - 1;
@@ -173,7 +173,7 @@ namespace sdf
 			fout << "property float x" << std::endl;
 			fout << "property float y" << std::endl;
 			fout << "property float z" << std::endl;
-			fout << "property float hitcount" << std::endl;
+			fout << "property float Intensity" << std::endl;
 			fout << "end_header" << std::endl;
 			fout.close();
 		}
@@ -457,6 +457,8 @@ int test_sdf()
 						cv::Mat contorMap;
 						cv::erode(mask, contorMap, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)));
 						contorMap ^= mask;
+						cv::dilate(contorMap, contorMap, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)));
+						cv::dilate(mask, mask, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)));
 
 
 
@@ -466,14 +468,15 @@ int test_sdf()
 							int v = static_cast<int>(gridInCamera(1, i) / gridInCamera(2, i));
 							if (u >= 0 && v >= 0 && u < mask.cols && v < mask.rows)
 							{
-								if (mask.ptr<uchar>(v)[u] == 0)
-								{
-									a.gridCenterHitValue[i] = -1;
-								}
 								if (contorMap.ptr<uchar>(v)[u] != 0)
 								{
-									a.gridCenterHitValue[i] += (a.gridCenterHitValue[i] < 0 ? 0 : 1);
+									a.gridCenterHitValue[i] += 1;
 								}
+								if (mask.ptr<uchar>(v)[u] == 0)
+								{
+									a.gridCenterHitValue[i] = 0;
+								}
+								 
 							}
 						}
 					}
@@ -485,11 +488,11 @@ int test_sdf()
 
 	//a.emptyShellPts(0);
 	std::vector<float> hitValues;
-	Eigen::Matrix3Xf pts = a.getCloud(0, &hitValues);
+	Eigen::Matrix3Xf pts = a.getCloud(1, &hitValues);
 	//std::vector<std::uint8_t> colors = sdf::fuseColor(pts, imgPaths, cameraPs);
 	//sdf::saveCloud("../data/a/result/c.ply", pts, colors);
 	sdf::saveCloud("../data/a/result/c.ply", pts, hitValues);
-	mc::Mesh mesh = mc::marchcube(a.grid, a.gridCenterHitValue, a.x_size, a.y_size, a.z_size, a.unit, 0);
-	mesh.saveMesh("../data/a/result/dense.obj");
+	//mc::Mesh mesh = mc::marchcube(a.grid, a.gridCenterHitValue, a.x_size, a.y_size, a.z_size, a.unit, 0);
+	//mesh.saveMesh("../data/a/result/dense.obj");
 	return 0;
 }

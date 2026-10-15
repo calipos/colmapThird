@@ -13,6 +13,7 @@ def review_h5_file(file_path):
                 print(f"Group: {name}")
 
         h5_file.visititems(print_hierarchy)
+        print()
  
 def print_first_line(file_path, name_group_or_dataset):
     with h5py.File(file_path, 'r') as h5_file:
@@ -137,8 +138,9 @@ def figureBFM2019CorrespondTo2009():
     print()
 if __name__ == '__main__': 
 
-    figureBFM2019CorrespondTo2009()
-    # review_h5_file('C:/Users/Administrator/Downloads/model2019_face12.h5')
+    # figureBFM2019CorrespondTo2009()
+    review_h5_file('D:/repo/colmapThird/models/model2019_face12.h5')
+    exit(0)
     # review_h5_file('C:/Users/Administrator/Downloads/model2019_fullHead.h5')
     # print(vertices.shape, faces.shape, colors.shape)
 

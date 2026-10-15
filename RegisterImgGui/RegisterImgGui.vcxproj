@@ -164,6 +164,7 @@
     <ClCompile Include="bfm2019.cpp" />
     <ClCompile Include="bitmap.cpp" />
     <ClCompile Include="browser.cpp" />
+    <ClCompile Include="BSplineIcp.cpp" />
     <ClCompile Include="bundle_adjustment.cpp" />
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="camera_rig.cpp" />
