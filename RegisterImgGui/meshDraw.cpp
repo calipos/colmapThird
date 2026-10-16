@@ -170,21 +170,40 @@ namespace meshdraw
         }
         bool savePtsMat(const std::filesystem::path& path, const cv::Mat& ptsMat, const cv::Mat& mask)
         {
-            if (ptsMat.size()!=mask.size())
+            if (ptsMat.size() != mask.size())
             {
                 LOG_ERR_OUT << "ptsMat.size()!=mask.size()";
                 return false;
             }
-            std::fstream fout(path,std::ios::out);
+            std::fstream fout(path, std::ios::out);
             for (int r = 0; r < ptsMat.rows; r++)
             {
                 for (int c = 0; c < ptsMat.cols; c++)
                 {
-                    if (mask.ptr<uchar>(r)[c]>0)
+                    if (mask.ptr<uchar>(r)[c] > 0)
                     {
                         fout << ptsMat.at<cv::Vec3f>(r, c)[0] << " " << ptsMat.at<cv::Vec3f>(r, c)[1] << " " << ptsMat.at<cv::Vec3f>(r, c)[2] << std::endl;
                     }
                 }
+            }
+            fout.close();
+            return true;
+        }
+        bool savePtsMat(const std::filesystem::path& path, const cv::Mat& ptsMat,const std::vector<float>*intensity)
+        {
+            if (intensity!=nullptr && intensity->size() != ptsMat.rows)
+            {
+                LOG_ERR_OUT << "intensity!=nullptr && intensity->size() != ptsMat.rows";
+                return false;
+            }
+            std::fstream fout(path, std::ios::out);
+            for (int r = 0; r < ptsMat.rows; r++)
+            {
+                for (int c = 0; c < ptsMat.cols; c++)
+                {
+                    fout << ptsMat.ptr<float>(r)[c] << " ";
+                }if (intensity != nullptr)fout << (*intensity)[r];
+                fout << std::endl;
             }
             fout.close();
             return true;
