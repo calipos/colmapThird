@@ -809,7 +809,7 @@ bool segmentFrame(bool* show_regist_window)
 							mc::Mesh mesh = mc::marchcube(volumeInstance.grid, volumeInstance.gridCenterHitValue, volumeInstance.x_size, volumeInstance.y_size, volumeInstance.z_size, volumeInstance.unit, 0);
 							mesh.saveMesh(imgDirPath / "dense.obj");
 							volumeInstance.emptyShellPts(0);
-							Eigen::Matrix3Xf shellPts = volumeInstance.getCloud(0);
+							Eigen::Matrix3Xf shellPts = volumeInstance.getCloud(0,200);
 							std::vector<std::uint8_t> colors = sdf::fuseColor(shellPts, imgPaths, cameraPs);
 							sdf::saveCloud(imgDirPath / "dense.ply", shellPts, colors);
 							progress.procRunning.store(0);

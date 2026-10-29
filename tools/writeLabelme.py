@@ -9,7 +9,7 @@ from enum import Enum
 
 class LabelmeShapeType(Enum):
     POINT = 1
-    HULL = 2
+    POLYGON = 2
 
 
 def encodeImgToBase64(cv_mat, fmt):
@@ -38,7 +38,7 @@ def writeLabelmeJson(imgDir, imgPath, jsonPath, frontLandmarks2d, keyType, shape
             shape = {"label": keyType+'_' + str(i), "points": ptSerialize, "group_id": "",
                     "description": "", "shape_type": "point", "flags": {}, "mask": ""}
             shapes.append(shape)
-    elif shapeType == LabelmeShapeType.HULL:
+    elif shapeType == LabelmeShapeType.POLYGON:
         points = []
         for i, pt in enumerate(pts):
             ptSerialize = np.array([pt[0], pt[1]])

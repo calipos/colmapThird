@@ -10,6 +10,7 @@
 #include "undistortion.h"
 #include "misc.h"
 #include "warp.h"
+#include "opencv2/opencv.hpp"
 std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& dir, const ImageIntrType& type)
 {
 	std::map<std::filesystem::path, std::map<std::string, Eigen::Vector2d>>corners;
@@ -22,6 +23,10 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 		const auto& thisFilename = dir_entry.path();
 		auto parentName = thisFilename.parent_path().filename().string();
 		if (parentName.compare("result") == 0)
+		{
+			continue;
+		}
+		if (parentName.compare("temp") == 0)
 		{
 			continue;
 		}
@@ -153,6 +158,7 @@ bool writeResult(const std::filesystem::path& dataDir,
 
 	UndistortCameraOptions undistortion_options;
 	std::unordered_map<camera_t, Camera>undistortedCameraMap;
+	std::unordered_map<std::string, BitmapColor<std::uint8_t>>labelColors;
 	for (const auto&[imgId,Rt]: poses)
 	{
 		const Image& image1 = imageList[imgId];
@@ -190,6 +196,28 @@ bool writeResult(const std::filesystem::path& dataDir,
 
 		distorted_bitmap.CloneMetadata(&undistorted_bitmap);
 		undistorted_bitmap.Write(newImgPath.string());
+
+		{
+			for (const auto& d__ : image1.featPts)
+			{
+				int x = d__.second.x();
+				int y = d__.second.y();
+				int x2 = -1;
+				int y2 = -1;
+				if (x >= 0 && x < undistorted_camera.width && y >= 0 && y < undistorted_camera.height)
+				{
+					x2 = source_to_target_x_map(y, x);
+					y2 = source_to_target_y_map(y, x);
+				}
+				const std::string&labelName = Image::keypointIndexToName[d__.first];
+				if (labelColors.count(labelName)==0)
+				{
+					labelColors[labelName] = BitmapColor<std::uint8_t>::randColor();
+				}
+				undistorted_bitmap.circle(x2,y2,5, labelColors[labelName]);
+			}
+			undistorted_bitmap.Write(newImgPath.string()+".png");
+		}
 
 		newImgPath = std::filesystem::canonical(newImgPath);
 		image1.writeRegisterJson(imgJsonPath, 1, newImgPath,

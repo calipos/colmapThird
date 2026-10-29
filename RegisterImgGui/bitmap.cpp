@@ -241,6 +241,27 @@ bool Bitmap::SetPixel(const int x,
     return false;
 }
 
+bool Bitmap::circle(const int x,
+    const int y, int radius,
+    const BitmapColor<uint8_t>& color)
+{
+    int radiusSquare = radius * radius;
+    for (int y_ = y- radius; y_ <= y + radius; y_++)
+    {
+        for (int x_ = x - radius; x_ <= x + radius; x_++)
+        {
+            int deltaY = abs(y_ - y);
+            int deltaX = abs(x_ - x);
+            if (deltaY* deltaY+ deltaX* deltaX<= radiusSquare)
+            {
+                SetPixel(x_, y_, color);
+            }
+        }
+    }
+    return true;
+}
+
+
 const uint8_t* Bitmap::GetScanline(const int y) const {
     if (y < 0)
     {

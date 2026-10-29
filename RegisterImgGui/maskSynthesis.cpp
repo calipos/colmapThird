@@ -13,6 +13,23 @@
 #include "warp.h"
 namespace sdf
 {
+	VolumeDat::VolumeDat(const VolumeDat& other)
+	{
+		maxIndex= other.maxIndex;
+		 unit = other.unit;
+		 resolution = other.resolution;
+		 x_start = other.x_start;
+		 y_start = other.y_start;
+		 z_start = other.z_start;
+		 x_end = other.x_end;
+		 y_end = other.y_end;
+		 z_end = other.z_end;
+		 x_size = other.x_size;
+		 y_size = other.y_size;
+		 z_size = other.z_size;
+		gridCenterHitValue= other.gridCenterHitValue;;
+		grid = other.grid;
+	}
 	VolumeDat::VolumeDat(const std::uint32_t& indexMax, const double& startX, const double& startY, const double& startZ, const double& endX, const double& endY, const double& endZ)
 	{
 		if (endX <= startX || endY <= startY|| endY <= startY)
@@ -84,7 +101,7 @@ namespace sdf
 			grid(3, i) = 1;
 			if (i_x == numX_1 || i_y == numY_1 || i_z == numZ_1 || i_x == 0 || i_y == 0 || i_z == 0)
 			{
-				gridCenterHitValue[i]=-1;//border
+				gridCenterHitValue[i] = 0;// -std::numeric_limits<float>::max();
 			}
 		}
 		LOG_OUT << grid.row(0).maxCoeff() << " " << grid.row(0).minCoeff();;
@@ -190,7 +207,7 @@ namespace sdf
 		}
 		return true;
 	}
-	Eigen::Matrix3Xf VolumeDat::getCloud(const int& thre,std::vector<float>*hitValues)const
+	Eigen::Matrix3Xf VolumeDat::getCloud(const int& thre1, const int& thre2, std::vector<float>*hitValues)const
 	{
 		int flagCnt = this->gridCenterHitValue.size();
 		int gridCnt = grid.cols();
@@ -213,7 +230,7 @@ namespace sdf
 			const int yx_size = x_size * y_size;
 			for (int i = 0; i < gridCnt; i++)
 			{
-				if (gridCenterHitValue[i] > thre)
+				if (gridCenterHitValue[i] > thre1&& gridCenterHitValue[i] <thre2)
 				{
 					ptsList.emplace_back(this->grid(0, i), this->grid(1, i), this->grid(2, i));
 					if (hitValues != nullptr)hitValues->emplace_back(gridCenterHitValue[i]);
@@ -406,6 +423,7 @@ int test_sdf()
 
 
 	sdf::VolumeDat a(static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()*0.01), x_strat, y_strat, z_strat-0.2*(z_end- z_strat), x_end, y_end, z_end);
+	sdf::VolumeDat b(a);
 
 	std::vector<std::filesystem::path> maskPaths;
 	std::vector<std::filesystem::path> imgPaths;
@@ -454,11 +472,8 @@ int test_sdf()
 						Eigen::Matrix4Xf gridInCamera = p.cast<float>() * a.grid;
 						int gridCnt = gridInCamera.cols();
 
-						cv::Mat contorMap;
-						cv::erode(mask, contorMap, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)));
-						contorMap ^= mask;
-						cv::dilate(contorMap, contorMap, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)));
-						cv::dilate(mask, mask, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5)));
+						cv::Mat mask2;
+						cv::erode(mask, mask2, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(13, 13))); 
 
 
 
@@ -467,31 +482,44 @@ int test_sdf()
 							int u = static_cast<int>(gridInCamera(0, i) / gridInCamera(2, i));
 							int v = static_cast<int>(gridInCamera(1, i) / gridInCamera(2, i));
 							if (u >= 0 && v >= 0 && u < mask.cols && v < mask.rows)
-							{
-								if (contorMap.ptr<uchar>(v)[u] != 0)
+							{  
+								if (mask.ptr<uchar>(v)[u] > 0)
 								{
 									a.gridCenterHitValue[i] += 1;
 								}
-								if (mask.ptr<uchar>(v)[u] == 0)
+								else
 								{
 									a.gridCenterHitValue[i] = 0;
 								}
-								 
+								if (mask2.ptr<uchar>(v)[u] > 0)
+								{
+									b.gridCenterHitValue[i] += 1;
+								}
+								else
+								{
+									b.gridCenterHitValue[i] = 0;
+								}
 							}
-						}
+						} 
 					}
 				}
 
 			}
 		}
 	}
-
+	for (int i = 0; i < b.gridCenterHitValue.size(); i++)
+	{
+		if (b.gridCenterHitValue[i]>10)
+		{
+			a.gridCenterHitValue[i] = 0;
+		}
+	}
 	//a.emptyShellPts(0);
 	std::vector<float> hitValues;
-	Eigen::Matrix3Xf pts = a.getCloud(1, &hitValues);
-	//std::vector<std::uint8_t> colors = sdf::fuseColor(pts, imgPaths, cameraPs);
-	//sdf::saveCloud("../data/a/result/c.ply", pts, colors);
+	Eigen::Matrix3Xf pts = a.getCloud(10, 100, &hitValues);
 	sdf::saveCloud("../data/a/result/c.ply", pts, hitValues);
+	//Eigen::Matrix3Xf pts2 = b.getCloud(10, 100, &hitValues);
+	//sdf::saveCloud("../data/a/result/d.ply", pts2, hitValues);
 	//mc::Mesh mesh = mc::marchcube(a.grid, a.gridCenterHitValue, a.x_size, a.y_size, a.z_size, a.unit, 0);
 	//mesh.saveMesh("../data/a/result/dense.obj");
 	return 0;

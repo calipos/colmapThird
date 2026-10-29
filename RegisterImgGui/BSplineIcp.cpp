@@ -502,11 +502,11 @@ int test_bsIcp()
     }
 
     // meshdraw::utils::savePts(mvsResultDir / "V.txt", V);
-    // meshdraw::utils::savePtsMat(mvsResultDir / "carveV.txt", ptsCarve,&intensityTgt);
+     meshdraw::utils::savePtsMat(mvsResultDir / "carveV.txt", ptsCarve,&intensityTgt);
 
-    for (int iter = 0; iter < 10; iter++)
+    for (int iter = 0; iter < 6; iter++)
     {
-        bs::FFD<float> ffd(4 + 0.5 * iter, 4 + 0.5 * iter, 4 + 0.5 * iter, 3);
+        bs::FFD<float> ffd(4 + 0.3 * iter, 4 + 0.3 * iter, 4 + 0.3 * iter, 3);
         //bs::FFD<float> ffd(4, 4, 4, 3);
         ffd.grid.initUnitCube();
 

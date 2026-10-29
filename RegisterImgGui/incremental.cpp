@@ -705,7 +705,7 @@ int register_incremental_loop(const std::string& folder)
     return 0;
 }
 int register_incremental_base_hint(const std::string& folder, const std::vector<std::string>&initViewName, const std::vector<std::string>&discardViewName, const bool& optimCameraIntr,const bool&saveResult)
-{ 
+{
     std::map<Camera, std::vector<Image>> dataset = loadImageData(folder, ImageIntrType::SHARED_ALL);
     std::vector<Camera>cameraList;
     std::vector<Image> imageList;
@@ -1184,5 +1184,10 @@ int register_incremental_base_hint(const std::string& folder, const std::vector<
 }
 int test_incremental()
 {
+    Bitmap distorted_bitmap;
+    distorted_bitmap.Read("D:/repo/colmapThird/data/a/00000.jpg");
+    distorted_bitmap.circle(250, 120, 3,BitmapColor<uint8_t>(255,128,0));
+    distorted_bitmap.Write("D:/repo/colmapThird/data/a/x.png");
+    
     return 0;
 }

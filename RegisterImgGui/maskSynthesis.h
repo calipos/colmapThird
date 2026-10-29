@@ -29,8 +29,9 @@ namespace sdf
 	Eigen::MatrixX3d readPoint3d(const std::filesystem::path& path);
 	struct VolumeDat
 	{
+		VolumeDat(const VolumeDat& other);
 		VolumeDat(const std::uint32_t& indexMax, const double& startX, const double& startY, const double& startZ, const double& endX, const double& endY, const double& endZ);
-		Eigen::Matrix3Xf getCloud(const int& thre, std::vector<float>* hitValues = nullptr)const;
+		Eigen::Matrix3Xf getCloud(const int& thre1, const int& thre2, std::vector<float>* hitValues = nullptr)const;
 		bool emptyShellPts(const int& thre = 1);
 		std::uint64_t maxIndex;
 		double unit;

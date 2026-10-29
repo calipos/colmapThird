@@ -1,6 +1,6 @@
 #ifndef _BITMAP_H_
 #define _BITMAP_H_
-
+#include <random>
 #include "colString.h"
 #include <algorithm>
 #include <cmath>
@@ -30,8 +30,32 @@ struct BitmapColor {
     T r;
     T g;
     T b;
-};
+    static BitmapColor randColor() {
+        static std::mt19937 gen(std::random_device{}());
+        static std::uniform_real_distribution<float> dist(0.0, 360.0); 
+        float h = dist(gen);
+        float s = 0.7, v = 0.9;
 
+
+
+        float c = v * s;
+        float hp = h / 60.0;
+        float x = c * (1 - std::fabs(std::fmod(hp, 2.0) - 1));
+        float m = v - c;
+        float r = 0, g = 0, b = 0;
+
+        if (hp < 1) { r = c; g = x; b = 0; }
+        else if (hp < 2) { r = x; g = c; b = 0; }
+        else if (hp < 3) { r = 0; g = c; b = x; }
+        else if (hp < 4) { r = 0; g = x; b = c; }
+        else if (hp < 5) { r = x; g = 0; b = c; }
+        else { r = c; g = 0; b = x; }
+
+        return BitmapColor{ static_cast<T>((r + m) * 255 + 0.5),
+                 static_cast<T>((g + m) * 255 + 0.5),
+                 static_cast<T>((b + m) * 255 + 0.5) };
+    }
+};
 // Wrapper class around FreeImage bitmaps.
 class Bitmap {
 public:
@@ -93,7 +117,7 @@ public:
     // of the RGB color is used.
     bool GetPixel(int x, int y, BitmapColor<uint8_t>* color) const;
     bool SetPixel(int x, int y, const BitmapColor<uint8_t>& color);
-
+    bool circle(const int x, const int y, int radius, const BitmapColor<uint8_t>& color);
     // Get pointer to y-th scanline, where the 0-th scanline is at the top.
     const uint8_t* GetScanline(int y) const;
 
