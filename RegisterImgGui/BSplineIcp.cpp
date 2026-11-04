@@ -390,28 +390,58 @@ int readplyXyzi(const std::filesystem::path &path, cv::Mat &pts, std::vector<flo
     }
     {
         std::fstream fin(path, std::ios::in | std::ios::binary);
+
+        int ptsCnt = -1;
+        int property_float_CNT = 0;
         std::string aline;
-        std::getline(fin, aline);
-        std::getline(fin, aline);
-        std::getline(fin, aline);
-        std::vector<std::string> segs;
+        while (std::getline(fin,aline))
         {
-            std::stringstream ss(aline);
-            std::string token;
-            while (ss >> token)
+            if (aline.find("comment") == 0)
             {
-                segs.push_back(token);
+                continue;
+            }
+            if (aline.find("obj_info") == 0)
+            {
+                continue;
+            }
+            if (aline.find("element vertex") == 0)
+            {
+                std::vector<std::string> segs;
+                {
+                    std::stringstream ss(aline);
+                    std::string token;
+                    while (ss >> token)
+                    {
+                        segs.push_back(token);
+                    }
+                }
+                if (segs.size() != 3)
+                {
+                    LOG_ERR_OUT << "file format error! : " << path;
+                    return -1;
+                }
+                std::stringstream ss;
+                ss << segs[2];
+                ss >> ptsCnt;
+                if (ptsCnt < 10)
+                {
+                    LOG_ERR_OUT << "file format error! : " << path;
+                    return -1;
+                }
+                continue;
+            }
+            if (aline.find("property float") == 0)
+            {
+                property_float_CNT++;
+                continue;
+            }
+            if (aline.find("end_header") == 0)
+            {
+                break;
             }
         }
-        if (segs.size() != 3)
-        {
-            LOG_ERR_OUT << "file format error! : " << path;
-            return -1;
-        }
-        int ptsCnt = -1;
-        std::stringstream ss;
-        ss << segs[2];
-        ss >> ptsCnt;
+        
+
         if (ptsCnt < 10)
         {
             LOG_ERR_OUT << "file format error! : " << path;
@@ -419,11 +449,6 @@ int readplyXyzi(const std::filesystem::path &path, cv::Mat &pts, std::vector<flo
         }
         pts = cv::Mat(ptsCnt, 3, CV_32FC1);
         intensity.resize(ptsCnt);
-        std::getline(fin, aline);
-        std::getline(fin, aline);
-        std::getline(fin, aline);
-        std::getline(fin, aline);
-        std::getline(fin, aline);
         for (int i = 0; i < ptsCnt; i++)
         {
             fin.read((char *)&pts.ptr<float>(i)[0], sizeof(float));
@@ -468,15 +493,9 @@ int test_bsIcp()
         {
             Eigen::Matrix3Xf ptsTgt(3, 3);
             Eigen::Matrix3Xf ptsSrc(3, 3);
-            ptsSrc(0, 0) = -0.026656504137979587;
-            ptsSrc(1, 0) = -0.043014894341780643;
-            ptsSrc(2, 0) = 1.0267763105463232;
-            ptsSrc(0, 1) = -0.11071509463256694;
-            ptsSrc(1, 1) = -0.043265088116702488;
-            ptsSrc(2, 1) = 1.0368117383245794;
-            ptsSrc(0, 2) = -0.070484715500162845;
-            ptsSrc(1, 2) = 0.092090697929671381;
-            ptsSrc(2, 2) = 0.98627442545928867;
+            ptsSrc(0, 0) = -0.025313770196799638;            ptsSrc(1, 0) = -0.040435362781149294;            ptsSrc(2, 0) = .96194670997716725;
+            ptsSrc(0, 1) = -0.10389021228122662;            ptsSrc(1, 1) = -0.040700842254034121;            ptsSrc(2, 1) = .970645221700995214;
+            ptsSrc(0, 2) = -0.065814072294830009;            ptsSrc(1, 2) = 0.085653388717698287;            ptsSrc(2, 2) = 0.92267564561033422;
             ptsTgt.col(0) = V.row(9440);
             ptsTgt.col(1) = V.row(22884);
             ptsTgt.col(2) = V.row(26877);

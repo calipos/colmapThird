@@ -710,6 +710,28 @@ bool annotationFrame(bool* show_regist_window)
 				{
 					ImGui::BeginDisabled();
 				}
+				if (ImGui::Button("addOne"))
+				{
+					LOG_OUT << "tag = " << tagStr;
+					LOG_OUT << "track from " << AnnotationManger::imgPickIdx;
+					annotationManger->tempTrackImgPaths.clear();
+					annotationManger->tempTrackImgPaths.insert(annotationManger->tempTrackImgPaths.end(), annotationManger->imgPaths.begin() + AnnotationManger::imgPickIdx, annotationManger->imgPaths.end());
+					annotationManger->tempHint = std::vector<cv::Point2f>{ {0, 0} };
+					if (labelControlPtr->ptsData.tempPt.x >= 0)
+					{
+						annotationManger->tempHint[0].x = labelControlPtr->ptsData.tempPt.x;
+						annotationManger->tempHint[0].y = labelControlPtr->ptsData.tempPt.y;
+					}
+					if (labelControlPtr->ptsData.tempPt2.x >= 0)
+					{
+						annotationManger->tempHint[0].x = labelControlPtr->ptsData.tempPt2.x;
+						annotationManger->tempHint[0].y = labelControlPtr->ptsData.tempPt2.y;
+					}
+					annotationManger->trajs.clear();
+					annotationManger->trajs.emplace_back(annotationManger->tempHint);
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				}
+				ImGui::SameLine();
 				if (ImGui::Button("track"))
 				{
 					LOG_OUT << "tag = " << tagStr;
@@ -841,6 +863,10 @@ bool annotationFrame(bool* show_regist_window)
 				std::string tagStr = std::string(label::ImageLabel::tarStr);
 				for (int i = AnnotationManger::imgPickIdx; i < labelControlPtr->ptsData.picShortNameForlist.size(); i++)
 				{
+					if (AnnotationManger::trajs.size()<= i - AnnotationManger::imgPickIdx)
+					{
+						break;
+					}
 					const cv::Point2f pt = AnnotationManger::trajs[i - AnnotationManger::imgPickIdx][0];
 					labelControlPtr->ptsData.controlPtsAndTag[i][tagStr].x = pt.x;
 					labelControlPtr->ptsData.controlPtsAndTag[i][tagStr].y = pt.y;

@@ -818,7 +818,7 @@ int register_incremental_base_hint(const std::string& folder, const std::vector<
                 objPtsPnp.emplace_back(objPts[ptId][0], objPts[ptId][1], objPts[ptId][2]);
             }
         }
-        if (objPtsPnp.size() < 6)
+        if (objPtsPnp.size() < 4)
         {
             LOG_ERR_OUT << "not enough match.";
             for (const auto& d : objPts)
@@ -830,7 +830,7 @@ int register_incremental_base_hint(const std::string& folder, const std::vector<
         }
         cv::Mat intrMat = utils::intrConvert(camera0.CalibrationMatrix());
         cv::Mat rvec, tvec;
-        cv::solvePnP(objPtsPnp, imgPtsPnp, intrMat, cv::Mat(), rvec, tvec);
+        cv::solvePnP(objPtsPnp, imgPtsPnp, intrMat, cv::Mat(), rvec, tvec,false,1);
         Eigen::AngleAxisd eulerAngle(cv::norm(rvec), Eigen::Vector3d(rvec.ptr<double>(0)[0] / cv::norm(rvec), rvec.ptr<double>(1)[0] / cv::norm(rvec), rvec.ptr<double>(2)[0] / cv::norm(rvec)));
         Rigid3d pnpRt(Eigen::Quaterniond(eulerAngle), Eigen::Vector3d(tvec.ptr<double>(0)[0], tvec.ptr<double>(1)[0], rvec.ptr<double>(2)[0]));
         image2.SetCamFromWorld(pnpRt);
@@ -963,7 +963,7 @@ int register_incremental_base_hint(const std::string& folder, const std::vector<
                     LOG_OUT << imgPt1.first << " - " << imgPt1.second.transpose() << " , " << image1.featPts.at(featId).transpose();
                     if (imgPt0.first == false || imgPt1.first == false)
                     {
-                        LOG_ERR_OUT << "TriangulatePoint error.";
+                        LOG_ERR_OUT << "TriangulatePoint error. @ "<< img0Id<<" & "<< img1Id;
                         return -1;
                     }
                     newObjPts[featId] = xyz;
@@ -1127,6 +1127,7 @@ int register_incremental_base_hint(const std::string& folder, const std::vector<
             image2.SetCamFromWorld(pnpRt);
             addImgId = nextImgId;
             pickedImgs.insert(nextImgId);
+            LOG_OUT << "pickedImgs insert new : " << nextImgId;
         }
         
         if (addImgId<0)

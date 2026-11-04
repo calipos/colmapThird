@@ -76,10 +76,10 @@ def extrcat_skin(folder_path):
                         base_name = os.path.splitext(os.path.basename(file_path))[0]
                         save_path = f"{dir+'/mask_'+base_name}.dat"
                         with open(save_path, 'wb') as f:              
-                            f.write(struct.pack('<i', masks.shape[0]))     
-                            f.write(struct.pack('<i', masks.shape[1]))   
-                            f.write(struct.pack('<i', masks.shape[0]*masks.shape[1]))     
-                            f.write(masks.tobytes()) 
+                            f.write(struct.pack('<i', mask.shape[0]))     
+                            f.write(struct.pack('<i', mask.shape[1]))   
+                            f.write(struct.pack('<i', mask.shape[0]*mask.shape[1]))     
+                            f.write(mask.tobytes()) 
     
 def recheck_skin(folder_path):
     with ImageSegmenter.create_from_options(options) as segmenter:    
@@ -151,5 +151,5 @@ def recheck_skin(folder_path):
 
 if __name__ == "__main__":
     folder = "D:/repo/colmapThird/data/a/result"
-    # extrcat_skin(folder)
-    recheck_skin(folder)
+    extrcat_skin(folder)
+    # recheck_skin(folder)

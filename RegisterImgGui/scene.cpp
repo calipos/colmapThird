@@ -144,6 +144,74 @@ bool convertDataset(std::map<Camera, std::vector<Image>>& d, std::vector<Camera>
 	}
 	return true;
 }
+std::vector<Eigen::Vector4f> getCameraCloudPoint(const struct Rigid3d& pose, const int& height, const int& width,const float& cameraScale,const float&cameraId)
+{
+	Eigen::Quaternionf q(pose.rotation.w(), pose.rotation.x(), pose.rotation.y(), pose.rotation.z());
+	Eigen::Matrix3f R = q.matrix();
+	Eigen::Vector3f t(pose.translation.x(), pose.translation.y(), pose.translation.z());
+	int cameraBack = sqrt(height * height + width * width)*2;
+	int interval = 100;
+	std::vector<Eigen::Vector4f> cloud;
+	cloud.reserve(1024);
+	int edge = (std::max)(height, width);
+	float cameraScale2 = cameraScale / edge;
+	for (int z = 0; z >= -cameraBack; z -= interval)
+	{
+		float scale = 1.f*(z + cameraBack) / cameraBack; 
+		int Y = (height >> 1) * scale;
+		int X = (width >> 1) * scale;
+		int endY = 2 * Y / interval * interval - Y;
+		int endX = 2 * X / interval * interval - X;
+		for (int y = -Y; y <= endY; y += interval)
+		{
+			for (int x = -X; x <= endX; x += interval)
+			{
+				if (y != -Y && y != endY && x != -X && x != endX)
+				{
+					continue;
+				}
+				Eigen::Vector3f p= t + R * Eigen::Vector3f(x,y,z) * cameraScale2;
+				cloud.emplace_back(p[0], p[1] , p[2] , cameraId);
+			}
+		}
+	}
+	return cloud;
+}
+
+bool saveTargetAndCameras(const std::filesystem::path& path, const std::vector<Eigen::Vector4f>& scene)
+{
+	if (scene.size()<1)
+	{
+		LOG_ERR_OUT << "scene.size()<1";
+		return false;
+	}
+	{
+		std::fstream fout(path, std::ios::out);
+		fout << "ply" << std::endl;
+		fout << "format binary_little_endian 1.0" << std::endl;
+		fout << "element vertex " << scene.size() << std::endl;//可以容纳32位数
+		fout << "property float x" << std::endl;
+		fout << "property float y" << std::endl;
+		fout << "property float z" << std::endl;
+		fout << "property float intensity" << std::endl; 
+		fout << "end_header" << std::endl;
+		fout.close();
+	}
+	{
+		std::fstream fout(path, std::ios::app | std::ios::binary);
+		for (int i = 0; i < scene.size(); i++)
+		{
+			int i3 = 3 * i;
+			fout.write((const char*)&(scene[i][0]), sizeof(float));
+			fout.write((const char*)&(scene[i][1]), sizeof(float));
+			fout.write((const char*)&(scene[i][2]), sizeof(float));
+			fout.write((const char*)&(scene[i][3]), sizeof(float)); 
+		}
+		fout.close();
+	}
+	return true;
+}
+
 bool writeResult(const std::filesystem::path& dataDir,
 	const std::vector<Camera>& cameraList,
 	const std::vector<Image>& imageList,
@@ -155,10 +223,37 @@ bool writeResult(const std::filesystem::path& dataDir,
 		removeDirRecursive(dataDir);
 	}
 	std::filesystem::create_directories(dataDir); 
-
+	std::vector<Eigen::Vector4f> scene;
 	UndistortCameraOptions undistortion_options;
 	std::unordered_map<camera_t, Camera>undistortedCameraMap;
 	std::unordered_map<std::string, BitmapColor<std::uint8_t>>labelColors;
+	 
+	std::fstream fPtsTxt(dataDir / "pts.txt", std::ios::out);
+	Json::Value labelRoot;
+	std::filesystem::path ptsJsonPath = dataDir / "pts.json";
+	Eigen::Vector3f objPtsRegionMax(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max());
+	Eigen::Vector3f objPtsRegionMin(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+	for (const auto& [ptId, pt] : objPts)
+	{
+		Json::Value ptNode;
+		const std::string& ptName = Image::keypointIndexToName.at(ptId);
+		ptNode["idx"] = Json::Value(ptId);
+		ptNode["name"] = Json::Value(ptName);
+		ptNode["xyz"] = Json::Value();
+		ptNode["xyz"].append(pt.x());
+		ptNode["xyz"].append(pt.y());
+		ptNode["xyz"].append(pt.z());
+		labelRoot.append(ptNode);
+		fPtsTxt << pt.x() << " " << pt.y() << " " << pt.z() << std::endl;
+		scene.emplace_back(pt.x(), pt.y(), pt.z(), 2);
+		if (objPtsRegionMin.x() > pt.x())objPtsRegionMin.x() = pt.x();
+		if (objPtsRegionMin.y() > pt.y())objPtsRegionMin.y() = pt.y();
+		if (objPtsRegionMin.z() > pt.z())objPtsRegionMin.z() = pt.z();
+		if (objPtsRegionMax.x() < pt.x())objPtsRegionMax.x() = pt.x();
+		if (objPtsRegionMax.y() < pt.y())objPtsRegionMax.y() = pt.y();
+		if (objPtsRegionMax.z() < pt.z())objPtsRegionMax.z() = pt.z();
+	}
+	float cameraScale =  (objPtsRegionMax - objPtsRegionMin).maxCoeff()/20;
 	for (const auto&[imgId,Rt]: poses)
 	{
 		const Image& image1 = imageList[imgId];
@@ -224,6 +319,10 @@ bool writeResult(const std::filesystem::path& dataDir,
 			undistorted_camera.params[0], undistorted_camera.params[1], undistorted_camera.params[2], undistorted_camera.params[3],
 			undistorted_camera.height, undistorted_camera.width, Rt, source_to_target_x_map, source_to_target_y_map);
 
+		std::vector<Eigen::Vector4f> cameraCloudPoint = getCameraCloudPoint(Rt, undistorted_camera.height, undistorted_camera.width, cameraScale, imgId);
+		scene.reserve(scene.size() + cameraCloudPoint.size());
+		scene.insert(scene.end(), cameraCloudPoint.begin(), cameraCloudPoint.end());
+
 
 		Eigen::MatrixXd pts3d(4, objPts.size());
 		Eigen::MatrixXd pts2d(2, objPts.size());
@@ -250,26 +349,12 @@ bool writeResult(const std::filesystem::path& dataDir,
 		LOG_OUT<<"=======================================================";
 	}
 
-	std::fstream fPtsTxt(dataDir / "pts.txt", std::ios::out);
-	Json::Value labelRoot;	 
-	std::filesystem::path ptsJsonPath = dataDir / "pts.json";
-	for (const auto&[ptId,pt]: objPts)
-	{
-		Json::Value ptNode;
-		const std::string& ptName = Image::keypointIndexToName.at(ptId);
-		ptNode["idx"] = Json::Value(ptId);
-		ptNode["name"] = Json::Value(ptName);
-		ptNode["xyz"] = Json::Value();
-		ptNode["xyz"].append(pt.x());
-		ptNode["xyz"].append(pt.y());
-		ptNode["xyz"].append(pt.z());
-		labelRoot.append(ptNode);
-		fPtsTxt << pt.x() << " " << pt.y() << " " << pt.z() << std::endl;
-	}
+
 	Json::StyledWriter sw;
 	std::fstream fout(ptsJsonPath.string(), std::ios::out);
 	fout << sw.write(labelRoot);
 	fout.close();
 	fPtsTxt.close();
+	saveTargetAndCameras(dataDir / "scene.ply", scene);
 	return true;
 }
