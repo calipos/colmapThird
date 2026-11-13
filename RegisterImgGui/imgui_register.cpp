@@ -14,7 +14,9 @@
 #include "imgui_tools.h"
 static bool showImgDirBrowser = false;
 static std::filesystem::path imgDirPath;
+static std::filesystem::path initFilePath;
 static browser::Browser* imgDirPicker = nullptr;
+static browser::Browser* initFilePicker = nullptr;
 
 std::vector<std::string>listPicName(const std::filesystem::path& imgDir_)
 { 
@@ -168,6 +170,14 @@ bool registFrame(bool* show_regist_window)
 				imgDirPicker = new browser::Browser(browser::BrowserPick::PICK_DIR);
 			}
 		}
+		if (ImGui::Button("pick initFile"))
+		{  
+			initFilePath = "";
+			if (initFilePicker == nullptr)
+			{
+				initFilePicker = new browser::Browser(browser::BrowserPick::PICK_FILE);
+			}
+		}
 		if (imgDirPicker != nullptr && imgDirPath.string().length() == 0)
 		{
 			if (imgDirPicker->pick(imgDirPath))
@@ -178,6 +188,15 @@ bool registFrame(bool* show_regist_window)
 				}
 				delete imgDirPicker;
 				imgDirPicker = nullptr;
+			}
+		}
+		if (initFilePicker != nullptr && initFilePath.string().length() == 0)
+		{
+			if (initFilePicker->pick(initFilePath))
+			{
+				LOG_OUT << initFilePath;
+				delete initFilePicker;
+				initFilePicker = nullptr;
 			}
 		}
 		if (std::filesystem::exists(imgDirPath) && picNames.size() == 0 && imgpicks == nullptr)

@@ -230,6 +230,7 @@ bool writeResult(const std::filesystem::path& dataDir,
 	 
 	std::fstream fPtsTxt(dataDir / "pts.txt", std::ios::out);
 	Json::Value labelRoot;
+	Json::Value viewRoot;
 	std::filesystem::path ptsJsonPath = dataDir / "pts.json";
 	Eigen::Vector3f objPtsRegionMax(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max());
 	Eigen::Vector3f objPtsRegionMin(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
@@ -347,12 +348,29 @@ bool writeResult(const std::filesystem::path& dataDir,
 		}
 		LOG_OUT << pts2d;
 		LOG_OUT<<"=======================================================";
+
+		Json::Value viewNode;
+		viewNode["picPath"] = Json::Value(newImgPath.string());
+		viewNode["Qt"] = Json::Value();
+		viewNode["Qt"].append(Rt.rotation.w());
+		viewNode["Qt"].append(Rt.rotation.x());
+		viewNode["Qt"].append(Rt.rotation.y());
+		viewNode["Qt"].append(Rt.rotation.z());
+		viewNode["Qt"].append(Rt.translation.x());
+		viewNode["Qt"].append(Rt.translation.y());
+		viewNode["Qt"].append(Rt.translation.z());
+		viewRoot.append(viewNode);
 	}
 
 
 	Json::StyledWriter sw;
 	std::fstream fout(ptsJsonPath.string(), std::ios::out);
-	fout << sw.write(labelRoot);
+	{
+		Json::Value rootNode;
+		rootNode["view"] = viewRoot;
+		rootNode["obj"] = labelRoot;
+		fout << sw.write(rootNode);
+	}
 	fout.close();
 	fPtsTxt.close();
 	saveTargetAndCameras(dataDir / "scene.ply", scene);
