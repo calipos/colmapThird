@@ -10,6 +10,7 @@
 #include "undistortion.h"
 #include "misc.h"
 #include "warp.h"
+#include "bitmap.h"
 #include "opencv2/opencv.hpp"
 std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& dir, const ImageIntrType& type)
 {
@@ -144,14 +145,15 @@ bool convertDataset(std::map<Camera, std::vector<Image>>& d, std::vector<Camera>
 	}
 	return true;
 }
-std::vector<Eigen::Vector4f> getCameraCloudPoint(const struct Rigid3d& pose, const int& height, const int& width,const float& cameraScale,const float&cameraId)
+std::vector<SceneData> getCameraCloudPoint(const struct Rigid3d& pose, const int& height, const int& width,const float& cameraScale,const float&cameraId)
 {
+	auto randColor = BitmapColor<std::uint8_t>::randColor();
 	Eigen::Quaternionf q(pose.rotation.w(), pose.rotation.x(), pose.rotation.y(), pose.rotation.z());
 	Eigen::Matrix3f R = q.matrix();
 	Eigen::Vector3f t(pose.translation.x(), pose.translation.y(), pose.translation.z());
 	int cameraBack = sqrt(height * height + width * width)*2;
 	int interval = 100;
-	std::vector<Eigen::Vector4f> cloud;
+	std::vector<SceneData> cloud;
 	cloud.reserve(1024);
 	int edge = (std::max)(height, width);
 	float cameraScale2 = cameraScale / edge;
@@ -171,14 +173,60 @@ std::vector<Eigen::Vector4f> getCameraCloudPoint(const struct Rigid3d& pose, con
 					continue;
 				}
 				Eigen::Vector3f p= t + R * Eigen::Vector3f(x,y,z) * cameraScale2;
-				cloud.emplace_back(p[0], p[1] , p[2] , cameraId);
+				cloud.emplace_back(p[0], p[1], p[2], randColor.r, randColor.g, randColor.b, cameraId);
 			}
 		}
 	}
 	return cloud;
 }
-
-bool saveTargetAndCameras(const std::filesystem::path& path, const std::vector<Eigen::Vector4f>& scene)
+std::vector<SceneData> getCameraTrajectories(const std::vector<Eigen::Vector3d>&cameraTs)
+{
+	std::vector<SceneData> ret;
+	if (cameraTs.size()<2)
+	{
+		return ret;
+	}
+	std::vector<float>dists(cameraTs.size() - 1);
+	std::vector<float>accDists(cameraTs.size(),0);
+	for (size_t i = 0; i < cameraTs.size() - 1; i++)
+	{
+		dists[i] = (cameraTs[i] - cameraTs[i + 1]).norm();
+		accDists[i+1] = accDists[i] + dists[i];
+	}
+	float min_dist = *std::min_element(dists.begin(), dists.end())+1e-9;
+	float step = min_dist / 20;
+	int totalStep = std::ceil(accDists.back() / step);
+	LOG_OUT << "totalStep = "<< totalStep;
+	ret.reserve(totalStep);
+	for (int i = 0; i < totalStep; i++)
+	{
+		float currentPos = step * i;
+		float currentPosRatio = currentPos / accDists.back();
+		if (currentPos> accDists.back())
+		{
+			break;
+		}
+		std::uint8_t r = JetColormap::Red(currentPosRatio) * 255;
+		std::uint8_t g = JetColormap::Green(currentPosRatio) * 255;
+		std::uint8_t b = JetColormap::Blue(currentPosRatio) * 255;
+		float x = 0, y = 0, z = 0;
+		for (size_t j = 0; j < accDists.size()-1; j++)
+		{
+			if (accDists[j]<= currentPos && (accDists[j+1]+1e-3)>= currentPos)
+			{
+				double beta = (currentPos - accDists[j]) / dists[j];
+				double alpha = 1 - beta;
+				x = alpha * cameraTs[j].x() + beta * cameraTs[j + 1].x();
+				y = alpha * cameraTs[j].y() + beta * cameraTs[j + 1].y();
+				z = alpha * cameraTs[j].z() + beta * cameraTs[j + 1].z();
+				ret.emplace_back(x, y, z, r, g, b, 254);
+				break;
+			}
+		}
+	}
+	return ret;
+}
+bool saveTargetAndCameras(const std::filesystem::path& path, const std::vector<SceneData>& scene)
 {
 	if (scene.size()<1)
 	{
@@ -193,7 +241,10 @@ bool saveTargetAndCameras(const std::filesystem::path& path, const std::vector<E
 		fout << "property float x" << std::endl;
 		fout << "property float y" << std::endl;
 		fout << "property float z" << std::endl;
-		fout << "property float intensity" << std::endl; 
+		fout << "property uchar red" << std::endl;
+		fout << "property uchar green" << std::endl;
+		fout << "property uchar blue" << std::endl;
+		fout << "property uint32 info" << std::endl;
 		fout << "end_header" << std::endl;
 		fout.close();
 	}
@@ -201,17 +252,27 @@ bool saveTargetAndCameras(const std::filesystem::path& path, const std::vector<E
 		std::fstream fout(path, std::ios::app | std::ios::binary);
 		for (int i = 0; i < scene.size(); i++)
 		{
-			int i3 = 3 * i;
-			fout.write((const char*)&(scene[i][0]), sizeof(float));
-			fout.write((const char*)&(scene[i][1]), sizeof(float));
-			fout.write((const char*)&(scene[i][2]), sizeof(float));
-			fout.write((const char*)&(scene[i][3]), sizeof(float)); 
+			fout.write((const char*)&(scene[i].x), sizeof(float));
+			fout.write((const char*)&(scene[i].y), sizeof(float));
+			fout.write((const char*)&(scene[i].z), sizeof(float));
+			fout.write((const char*)&(scene[i].r), sizeof(std::uint8_t));
+			fout.write((const char*)&(scene[i].g), sizeof(std::uint8_t));
+			fout.write((const char*)&(scene[i].b), sizeof(std::uint8_t));
+			fout.write((const char*)&(scene[i].i), sizeof(std::uint32_t));
+			 
 		}
 		fout.close();
 	}
 	return true;
 }
-
+template <typename T>
+Json::Value vectorToJson(const std::vector<T>& vec) {
+	Json::Value arr(Json::arrayValue);
+	for (const auto& item : vec) {
+		arr.append(item);
+	}
+	return arr;
+}
 bool writeResult(const std::filesystem::path& dataDir,
 	const std::vector<Camera>& cameraList,
 	const std::vector<Image>& imageList,
@@ -223,7 +284,7 @@ bool writeResult(const std::filesystem::path& dataDir,
 		removeDirRecursive(dataDir);
 	}
 	std::filesystem::create_directories(dataDir); 
-	std::vector<Eigen::Vector4f> scene;
+	std::vector<SceneData> scene;
 	UndistortCameraOptions undistortion_options;
 	std::unordered_map<camera_t, Camera>undistortedCameraMap;
 	std::unordered_map<std::string, BitmapColor<std::uint8_t>>labelColors;
@@ -231,6 +292,17 @@ bool writeResult(const std::filesystem::path& dataDir,
 	std::fstream fPtsTxt(dataDir / "pts.txt", std::ios::out);
 	Json::Value labelRoot;
 	Json::Value viewRoot;
+	Json::Value camerasRoot;
+	{
+		for (int i = 0; i < cameraList.size(); i++)
+		{ 
+			Json::Value camRoot;
+			camRoot["cameraId"] = cameraList[i].camera_id;
+			camRoot["model_id"] = static_cast<int>(cameraList[i].model_id);
+			camRoot["params"] = vectorToJson(cameraList[i].params);
+			camerasRoot.append(camRoot);
+		}
+	}
 	std::filesystem::path ptsJsonPath = dataDir / "pts.json";
 	Eigen::Vector3f objPtsRegionMax(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max());
 	Eigen::Vector3f objPtsRegionMin(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
@@ -246,7 +318,7 @@ bool writeResult(const std::filesystem::path& dataDir,
 		ptNode["xyz"].append(pt.z());
 		labelRoot.append(ptNode);
 		fPtsTxt << pt.x() << " " << pt.y() << " " << pt.z() << std::endl;
-		scene.emplace_back(pt.x(), pt.y(), pt.z(), 2);
+		scene.emplace_back(pt.x(), pt.y(), pt.z(), 255,255,255,255);
 		if (objPtsRegionMin.x() > pt.x())objPtsRegionMin.x() = pt.x();
 		if (objPtsRegionMin.y() > pt.y())objPtsRegionMin.y() = pt.y();
 		if (objPtsRegionMin.z() > pt.z())objPtsRegionMin.z() = pt.z();
@@ -255,6 +327,8 @@ bool writeResult(const std::filesystem::path& dataDir,
 		if (objPtsRegionMax.z() < pt.z())objPtsRegionMax.z() = pt.z();
 	}
 	float cameraScale =  (objPtsRegionMax - objPtsRegionMin).maxCoeff()/20;
+	std::vector<Eigen::Vector3d>cameraTs;
+	cameraTs.reserve(poses.size());
 	for (const auto&[imgId,Rt]: poses)
 	{
 		const Image& image1 = imageList[imgId];
@@ -272,7 +346,7 @@ bool writeResult(const std::filesystem::path& dataDir,
 
 		const Camera& distorted_camera = cameraList[cameraId];
 		const Camera& undistorted_camera = undistortedCameraMap[cameraId];
-
+		cameraTs.emplace_back(Rt.translation);
 		Bitmap distorted_bitmap;
 		distorted_bitmap.Read(image1.Name());
 		Bitmap  undistorted_bitmap;//
@@ -320,7 +394,7 @@ bool writeResult(const std::filesystem::path& dataDir,
 			undistorted_camera.params[0], undistorted_camera.params[1], undistorted_camera.params[2], undistorted_camera.params[3],
 			undistorted_camera.height, undistorted_camera.width, Rt, source_to_target_x_map, source_to_target_y_map);
 
-		std::vector<Eigen::Vector4f> cameraCloudPoint = getCameraCloudPoint(Rt, undistorted_camera.height, undistorted_camera.width, cameraScale, imgId);
+		std::vector<SceneData> cameraCloudPoint = getCameraCloudPoint(Rt, undistorted_camera.height, undistorted_camera.width, cameraScale, imgId);
 		scene.reserve(scene.size() + cameraCloudPoint.size());
 		scene.insert(scene.end(), cameraCloudPoint.begin(), cameraCloudPoint.end());
 
@@ -350,7 +424,8 @@ bool writeResult(const std::filesystem::path& dataDir,
 		LOG_OUT<<"=======================================================";
 
 		Json::Value viewNode;
-		viewNode["picPath"] = Json::Value(newImgPath.string());
+		viewNode["picPath"] = Json::Value(newImgPath.generic_string());
+		viewNode["cameraId"] = cameraId;
 		viewNode["Qt"] = Json::Value();
 		viewNode["Qt"].append(Rt.rotation.w());
 		viewNode["Qt"].append(Rt.rotation.x());
@@ -361,14 +436,16 @@ bool writeResult(const std::filesystem::path& dataDir,
 		viewNode["Qt"].append(Rt.translation.z());
 		viewRoot.append(viewNode);
 	}
-
-
+	std::vector<SceneData>cameraTrajectories = getCameraTrajectories(cameraTs);
+	scene.reserve(scene.size() + cameraTrajectories.size());
+	scene.insert(scene.end(), cameraTrajectories.begin(), cameraTrajectories.end());
 	Json::StyledWriter sw;
 	std::fstream fout(ptsJsonPath.string(), std::ios::out);
 	{
 		Json::Value rootNode;
-		rootNode["view"] = viewRoot;
 		rootNode["obj"] = labelRoot;
+		rootNode["cam"] = camerasRoot;
+		rootNode["view"] = viewRoot;
 		fout << sw.write(rootNode);
 	}
 	fout.close();
@@ -376,3 +453,5 @@ bool writeResult(const std::filesystem::path& dataDir,
 	saveTargetAndCameras(dataDir / "scene.ply", scene);
 	return true;
 }
+
+

@@ -154,6 +154,10 @@ bool registFrame(bool* show_regist_window)
 	static std::vector<std::string>picNames;
 	static std::vector<std::string>initView;
 	static std::vector<std::string>discardView;
+	const int QT_DATA_LENGTH_MAX = 512;
+	static char qt1Data[QT_DATA_LENGTH_MAX] = "0\0";
+	static char qt2Data[QT_DATA_LENGTH_MAX] = "0\0";
+	static char qtRatio[4] = "0\0";
 	while (isProcRunning == 0)
 	{
 		if (ImGui::Button("pick image dir"))
@@ -176,6 +180,32 @@ bool registFrame(bool* show_regist_window)
 			if (initFilePicker == nullptr)
 			{
 				initFilePicker = new browser::Browser(browser::BrowserPick::PICK_FILE);
+			}
+		}
+		{
+			ImGui::InputTextMultiline("qt1", qt1Data, QT_DATA_LENGTH_MAX, ImVec2(160, ImGui::GetTextLineHeight() * 7), ImGuiInputTextFlags_AllowTabInput| ImGuiInputTextFlags_EnterReturnsTrue| ImGuiInputTextFlags_CharsNoBlank);
+			ImGui::SameLine();
+			ImGui::InputTextMultiline("qt2", qt2Data, QT_DATA_LENGTH_MAX, ImVec2(160, ImGui::GetTextLineHeight() * 7), ImGuiInputTextFlags_AllowTabInput | ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsNoBlank);
+			ImGui::SameLine();
+			ImGui::InputTextMultiline("qtRatio", qtRatio, 4, ImVec2(100, ImGui::GetTextLineHeight()), ImGuiInputTextFlags_AllowTabInput);
+			ImGui::SameLine();
+			if (ImGui::Button("R"))
+			{
+				for (int i = 0; i < QT_DATA_LENGTH_MAX; i++)
+				{
+					if ((qt1Data[i] < '0' || qt1Data[i] > '9') && qt1Data[i] != '.')
+					{
+						qt1Data[i] = ' ';
+					}
+					if ((qt2Data[i] < '0' || qt2Data[i] > '9') && qt2Data[i] != '.')
+					{
+						qt2Data[i] = ' ';
+					}
+					qt1Data[QT_DATA_LENGTH_MAX - 1] = '\0';
+					qt2Data[QT_DATA_LENGTH_MAX - 1] = '\0';
+				}
+				LOG_OUT << qt1Data;
+				LOG_OUT << qt2Data;
 			}
 		}
 		if (imgDirPicker != nullptr && imgDirPath.string().length() == 0)

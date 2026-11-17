@@ -44,7 +44,7 @@ extern int test_bsIcp();
 int main(int, char**)
 {
     //return test_bsIcp();
-    return test_sdf();
+    //return test_sdf();
     //return test_pips2_iter();
     //return test_iter_d();
     //return test_curve_fit();
