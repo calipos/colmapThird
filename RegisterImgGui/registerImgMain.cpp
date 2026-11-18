@@ -41,8 +41,10 @@ extern int test_curve_fit();
 extern int test_iter_d();
 extern int test_pips2_iter();
 extern int test_bsIcp();
+extern int test_optiFile();
 int main(int, char**)
 {
+    return test_optiFile();
     //return test_bsIcp();
     //return test_sdf();
     //return test_pips2_iter();

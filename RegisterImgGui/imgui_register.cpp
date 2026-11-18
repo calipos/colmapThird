@@ -9,9 +9,11 @@
 #include "log.h"
 #include "browser.h"
 #include "labelme.h"
+#include "colString.h"
 #include "registerFrame.h"
 #include "sam2.h"
 #include "imgui_tools.h"
+#include <Eigen/Geometry>
 static bool showImgDirBrowser = false;
 static std::filesystem::path imgDirPath;
 static std::filesystem::path initFilePath;
@@ -157,7 +159,7 @@ bool registFrame(bool* show_regist_window)
 	const int QT_DATA_LENGTH_MAX = 512;
 	static char qt1Data[QT_DATA_LENGTH_MAX] = "0\0";
 	static char qt2Data[QT_DATA_LENGTH_MAX] = "0\0";
-	static char qtRatio[4] = "0\0";
+	static float qtRatio = 0.5;
 	while (isProcRunning == 0)
 	{
 		if (ImGui::Button("pick image dir"))
@@ -183,29 +185,63 @@ bool registFrame(bool* show_regist_window)
 			}
 		}
 		{
-			ImGui::InputTextMultiline("qt1", qt1Data, QT_DATA_LENGTH_MAX, ImVec2(160, ImGui::GetTextLineHeight() * 7), ImGuiInputTextFlags_AllowTabInput| ImGuiInputTextFlags_EnterReturnsTrue| ImGuiInputTextFlags_CharsNoBlank);
+			ImGui::InputTextMultiline("qt1", qt1Data, QT_DATA_LENGTH_MAX, ImVec2(180, ImGui::GetTextLineHeight() * 7), ImGuiInputTextFlags_AllowTabInput| ImGuiInputTextFlags_EnterReturnsTrue| ImGuiInputTextFlags_CharsNoBlank);
 			ImGui::SameLine();
-			ImGui::InputTextMultiline("qt2", qt2Data, QT_DATA_LENGTH_MAX, ImVec2(160, ImGui::GetTextLineHeight() * 7), ImGuiInputTextFlags_AllowTabInput | ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsNoBlank);
-			ImGui::SameLine();
-			ImGui::InputTextMultiline("qtRatio", qtRatio, 4, ImVec2(100, ImGui::GetTextLineHeight()), ImGuiInputTextFlags_AllowTabInput);
+			ImGui::InputTextMultiline("qt2", qt2Data, QT_DATA_LENGTH_MAX, ImVec2(180, ImGui::GetTextLineHeight() * 7), ImGuiInputTextFlags_AllowTabInput | ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsNoBlank);
+			ImGui::PushItemWidth(300);
+			ImGui::SliderFloat("qtRatio", &qtRatio, 0.01f, 0.99f, "%.1f", ImGuiSliderFlags_Logarithmic);
+			ImGui::PopItemWidth();
 			ImGui::SameLine();
 			if (ImGui::Button("R"))
 			{
 				for (int i = 0; i < QT_DATA_LENGTH_MAX; i++)
 				{
-					if ((qt1Data[i] < '0' || qt1Data[i] > '9') && qt1Data[i] != '.')
+					if ((qt1Data[i] < '0' || qt1Data[i] > '9') && qt1Data[i] != '.' && qt1Data[i] != '\r' && qt1Data[i] != '\n')
 					{
 						qt1Data[i] = ' ';
 					}
-					if ((qt2Data[i] < '0' || qt2Data[i] > '9') && qt2Data[i] != '.')
+					if ((qt2Data[i] < '0' || qt2Data[i] > '9') && qt2Data[i] != '.' && qt2Data[i] != '\r' && qt2Data[i] != '\n')
 					{
 						qt2Data[i] = ' ';
 					}
 					qt1Data[QT_DATA_LENGTH_MAX - 1] = '\0';
 					qt2Data[QT_DATA_LENGTH_MAX - 1] = '\0';
 				}
-				LOG_OUT << qt1Data;
-				LOG_OUT << qt2Data;
+				std::vector<std::string>segs1 = splitString(std::string(qt1Data), " \n\r", true);
+				std::vector<std::string>segs2 = splitString(std::string(qt2Data), " \n\r", true);
+				if (segs1.size()>=7 && segs2.size() >= 7)
+				{
+					Eigen::Quaterniond q1, q2;
+					Eigen::Vector3d t1, t2;
+					try
+					{
+						q1.w() = std::stod(segs1[0]);
+						q1.x() = std::stod(segs1[1]);
+						q1.y() = std::stod(segs1[2]);
+						q1.z() = std::stod(segs1[3]);
+						t1.x() = std::stod(segs1[4]);
+						t1.y() = std::stod(segs1[5]);
+						t1.z() = std::stod(segs1[6]);
+						q2.w() = std::stod(segs2[0]);
+						q2.x() = std::stod(segs2[1]);
+						q2.y() = std::stod(segs2[2]);
+						q2.z() = std::stod(segs2[3]);
+						t2.x() = std::stod(segs2[4]);
+						t2.y() = std::stod(segs2[5]);
+						t2.z() = std::stod(segs2[6]);
+						LOG_OUT << q1;
+						LOG_OUT << q2;
+						LOG_OUT << qtRatio;
+						auto interpQ = q1.slerp(qtRatio, q2);
+						auto interpT = t1 * (1 - qtRatio) + t2 * qtRatio;
+						LOG_OUT << interpQ.w() << "," << interpQ.x() << "," << interpQ.y() << "," << interpQ.z() << ","
+							<< interpT.x() << "," << interpT.y() << "," << interpT.z();
+					}
+					catch (...)
+					{
+
+					}
+				}
 			}
 		}
 		if (imgDirPicker != nullptr && imgDirPath.string().length() == 0)

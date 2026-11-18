@@ -16,6 +16,7 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 {
 	std::map<std::filesystem::path, std::map<std::string, Eigen::Vector2d>>corners;
 	std::map<std::filesystem::path, std::filesystem::path>picPath;
+	std::map<std::filesystem::path, std::filesystem::path>jsonPath;
 	std::map<std::filesystem::path, Eigen::Vector2i>imgSizeWHs;
 	std::map<std::filesystem::path, camera_t>dirFlags;
 	camera_t dirFlag = 0;
@@ -45,6 +46,7 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 				{
 					corners[thisFilename] = cornerInfo;
 					picPath[thisFilename] = thisFilename.parent_path() / imgPath;
+					jsonPath[thisFilename] = thisFilename;
 					imgSizeWHs[thisFilename] = imgSizeWH;
 					auto parentDir = thisFilename.parent_path();
 					if (dirFlags.count(parentDir)==0)
@@ -80,7 +82,7 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 		Image::picNameToIndx[imgName] = image_id;
 		Image::picIndexTopicName[image_id] = imgName;
 		thisImg.SetImageId(image_id++);
-		thisImg.SetName(picPath[path].string());
+		thisImg.SetName(jsonPath[path].string());
 		for (const auto&feat: cornerInfo)
 		{
 			const auto& featName = feat.first;
@@ -273,23 +275,24 @@ Json::Value vectorToJson(const std::vector<T>& vec) {
 	}
 	return arr;
 }
-bool writeResult(const std::filesystem::path& dataDir,
+bool writeResult(
+	const std::filesystem::path& resultDir,
 	const std::vector<Camera>& cameraList,
 	const std::vector<Image>& imageList,
 	const std::unordered_map<point3D_t, Eigen::Vector3d>& objPts,
 	const std::unordered_map < image_t, struct Rigid3d>& poses)
 {
-	if (std::filesystem::exists(dataDir))
+	if (std::filesystem::exists(resultDir))
 	{
-		removeDirRecursive(dataDir);
+		removeDirRecursive(resultDir);
 	}
-	std::filesystem::create_directories(dataDir); 
+	std::filesystem::create_directories(resultDir);
 	std::vector<SceneData> scene;
 	UndistortCameraOptions undistortion_options;
 	std::unordered_map<camera_t, Camera>undistortedCameraMap;
 	std::unordered_map<std::string, BitmapColor<std::uint8_t>>labelColors;
 	 
-	std::fstream fPtsTxt(dataDir / "pts.txt", std::ios::out);
+	std::fstream fPtsTxt(resultDir / "pts.txt", std::ios::out);
 	Json::Value labelRoot;
 	Json::Value viewRoot;
 	Json::Value camerasRoot;
@@ -299,11 +302,13 @@ bool writeResult(const std::filesystem::path& dataDir,
 			Json::Value camRoot;
 			camRoot["cameraId"] = cameraList[i].camera_id;
 			camRoot["model_id"] = static_cast<int>(cameraList[i].model_id);
+			camRoot["height"] = cameraList[i].height;
+			camRoot["width"] = cameraList[i].width;
 			camRoot["params"] = vectorToJson(cameraList[i].params);
 			camerasRoot.append(camRoot);
 		}
 	}
-	std::filesystem::path ptsJsonPath = dataDir / "pts.json";
+	std::filesystem::path ptsJsonPath = resultDir / "pts.json";
 	Eigen::Vector3f objPtsRegionMax(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max(), -std::numeric_limits<float>::max());
 	Eigen::Vector3f objPtsRegionMin(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
 	for (const auto& [ptId, pt] : objPts)
@@ -336,8 +341,8 @@ bool writeResult(const std::filesystem::path& dataDir,
 		std::filesystem::path originalPath(image1.Name());
 		auto subDirName = originalPath.parent_path().filename().string();
 		auto fileName = originalPath.filename().stem().string();
-		auto newImgPath = dataDir / (subDirName + "@" + fileName + ".jpg");
-		auto imgJsonPath = dataDir / (subDirName + "@" + fileName + ".json");
+		auto newImgPath = resultDir / (subDirName + "@" + fileName + ".jpg");
+		auto imgJsonPath = resultDir / (subDirName + "@" + fileName + ".json");
 		if (undistortedCameraMap.count(cameraId)==0)
 		{
 			const Camera& camera1 = cameraList[cameraId];
@@ -424,8 +429,9 @@ bool writeResult(const std::filesystem::path& dataDir,
 		LOG_OUT<<"=======================================================";
 
 		Json::Value viewNode;
-		viewNode["picPath"] = Json::Value(newImgPath.generic_string());
+		viewNode["jsonPath"] = Json::Value(image1.Name());
 		viewNode["cameraId"] = cameraId;
+		viewNode["imgId"] = imgId;
 		viewNode["Qt"] = Json::Value();
 		viewNode["Qt"].append(Rt.rotation.w());
 		viewNode["Qt"].append(Rt.rotation.x());
@@ -450,7 +456,7 @@ bool writeResult(const std::filesystem::path& dataDir,
 	}
 	fout.close();
 	fPtsTxt.close();
-	saveTargetAndCameras(dataDir / "scene.ply", scene);
+	saveTargetAndCameras(resultDir / "scene.ply", scene);
 	return true;
 }
 
