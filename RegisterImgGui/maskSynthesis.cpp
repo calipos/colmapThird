@@ -411,223 +411,11 @@ cv::Mat findAndFillFirstLevelContours(const cv::Mat& binaryImage) {
 	return result;
 }
 
-
-
-namespace cv
-{
-
-	class MergeMertens2 : public MergeExposures
-	{
-	public:
-		virtual void process(InputArrayOfArrays src, OutputArray dst,
-			InputArray times, InputArray response) CV_OVERRIDE = 0;
-		virtual void process(InputArrayOfArrays src, OutputArray dst) = 0;
-		virtual float getContrastWeight() const = 0;
-		virtual void setContrastWeight(float contrast_weiht) = 0;
-		virtual float getSaturationWeight() const = 0;
-		virtual void setSaturationWeight(float saturation_weight) = 0;
-		virtual float getExposureWeight() const = 0;
-		virtual void setExposureWeight(float exposure_weight) = 0;
-	};
-
-	class MergeMertensImpl2 CV_FINAL : public MergeMertens2
-	{
-	public:
-		MergeMertensImpl2(float _wcon, float _wsat, float _wexp) :
-			name("MergeMertens"),
-			wcon(_wcon),
-			wsat(_wsat),
-			wexp(_wexp)
-		{
-		}
-
-		void process(InputArrayOfArrays src, OutputArrayOfArrays dst, InputArray, InputArray) CV_OVERRIDE
-		{
-			process(src, dst);
-		}
-
-		void process(InputArrayOfArrays src, OutputArray dst) CV_OVERRIDE
-		{
-			std::vector<Mat> images;
-			src.getMatVector(images);
-
-			int channels = images[0].channels();
-			CV_Assert(channels == 1 || channels == 3);
-			Size size = images[0].size();
-			int CV_32FCC = CV_MAKETYPE(CV_32F, channels);
-
-			std::vector<Mat> weights(images.size());
-			Mat weight_sum = Mat::zeros(size, CV_32F);
-			Mutex weight_sum_mutex;
-
-			parallel_for_(Range(0, static_cast<int>(images.size())), [&](const Range& range) {
-				for (int i = range.start; i < range.end; i++) {
-					Mat img, gray, contrast, saturation, wellexp;
-					std::vector<Mat> splitted(channels);
-
-					images[i].convertTo(img, CV_32F, 1.0f / 255.0f);
-					if (channels == 3) {
-						cvtColor(img, gray, COLOR_RGB2GRAY);
-					}
-					else {
-						img.copyTo(gray);
-					}
-					images[i] = img;
-					split(img, splitted);
-
-					Laplacian(gray, contrast, CV_32F);
-					contrast = abs(contrast);
-
-					Mat mean = Mat::zeros(size, CV_32F);
-					for (int c = 0; c < channels; c++) {
-						mean += splitted[c];
-					}
-					mean /= channels;
-
-					saturation = Mat::zeros(size, CV_32F);
-					for (int c = 0; c < channels; c++) {
-						Mat deviation = splitted[c] - mean;
-						pow(deviation, 2.0f, deviation);
-						saturation += deviation;
-					}
-					sqrt(saturation, saturation);
-
-					wellexp = Mat::ones(size, CV_32F);
-					for (int c = 0; c < channels; c++) {
-						Mat expo = splitted[c] - 0.5f;
-						pow(expo, 2.0f, expo);
-						expo = -expo / 0.08f;
-						exp(expo, expo);
-						wellexp = wellexp.mul(expo);
-					}
-
-					pow(contrast, wcon, contrast);
-					pow(saturation, wsat, saturation);
-					pow(wellexp, wexp, wellexp);
-
-					weights[i] = contrast;
-					if (channels == 3) {
-						weights[i] = weights[i].mul(saturation);
-					}
-					weights[i] = weights[i].mul(wellexp);
-					AutoLock lock(weight_sum_mutex);
-					weight_sum += weights[i];
-				}
-				});
-
-			int maxlevel = static_cast<int>(logf(static_cast<float>(min(size.width, size.height))) / logf(2.0f));
-			std::vector<Mat> res_pyr(maxlevel + 1);
-			std::vector<Mutex> res_pyr_mutexes(maxlevel + 1);
-			cv::Mat weight_sum_zero;
-			cv::threshold(weight_sum, weight_sum_zero, 1e-12, 1, cv::THRESH_BINARY_INV);
-			weights[0] += weight_sum_zero;
-			weight_sum += weight_sum_zero;
-			parallel_for_(Range(0, static_cast<int>(images.size())), [&](const Range& range) {
-				for (int i = range.start; i < range.end; i++) {
-					weights[i] /= weight_sum;
-
-
-					std::vector<Mat> img_pyr, weight_pyr;
-					buildPyramid(images[i], img_pyr, maxlevel);
-					buildPyramid(weights[i], weight_pyr, maxlevel);
-
-					for (int lvl = 0; lvl < maxlevel; lvl++) {
-						Mat up;
-						pyrUp(img_pyr[lvl + 1], up, img_pyr[lvl].size());
-						img_pyr[lvl] -= up;
-					}
-					for (int lvl = 0; lvl <= maxlevel; lvl++) {
-						std::vector<Mat> splitted(channels);
-						split(img_pyr[lvl], splitted);
-						for (int c = 0; c < channels; c++) {
-							splitted[c] = splitted[c].mul(weight_pyr[lvl]);
-						}
-						merge(splitted, img_pyr[lvl]);
-
-						AutoLock lock(res_pyr_mutexes[lvl]);
-						if (res_pyr[lvl].empty()) {
-							res_pyr[lvl] = img_pyr[lvl];
-						}
-						else {
-							res_pyr[lvl] += img_pyr[lvl];
-						}
-					}
-				}
-				});
-			for (int lvl = maxlevel; lvl > 0; lvl--) {
-				Mat up;
-				pyrUp(res_pyr[lvl], up, res_pyr[lvl - 1].size());
-				res_pyr[lvl - 1] += up;
-			}
-			dst.create(size, CV_32FCC);
-			res_pyr[0].copyTo(dst);
-		}
-
-		float getContrastWeight() const CV_OVERRIDE { return wcon; }
-		void setContrastWeight(float val) CV_OVERRIDE { wcon = val; }
-
-		float getSaturationWeight() const CV_OVERRIDE { return wsat; }
-		void setSaturationWeight(float val) CV_OVERRIDE { wsat = val; }
-
-		float getExposureWeight() const CV_OVERRIDE { return wexp; }
-		void setExposureWeight(float val) CV_OVERRIDE { wexp = val; }
-
-		void write(FileStorage& fs) const CV_OVERRIDE
-		{
-			writeFormat(fs);
-			fs << "name" << name
-				<< "contrast_weight" << wcon
-				<< "saturation_weight" << wsat
-				<< "exposure_weight" << wexp;
-		}
-
-		void read(const FileNode& fn) CV_OVERRIDE
-		{
-			FileNode n = fn["name"];
-			CV_Assert(n.isString() && String(n) == name);
-			wcon = fn["contrast_weight"];
-			wsat = fn["saturation_weight"];
-			wexp = fn["exposure_weight"];
-		}
-
-	protected:
-		String name;
-		float wcon, wsat, wexp;
-	};
-
-	Ptr<MergeMertens2> createMergeMertens2(float contrast_weight = 1.0f, float saturation_weight = 1.0f, float exposure_weight = 0.0f)
-	{
-		return makePtr<MergeMertensImpl2>(contrast_weight, saturation_weight, exposure_weight);
-	}
-}
-
-namespace hdrfisheye
-{
-	void Hdr(const std::vector<cv::Mat>& imagelist, cv::Mat& hdrRet)
-	{
-		cv::Mat fusion;
-		cv::Ptr<cv::MergeMertens2> merge_mertens2 = cv::createMergeMertens2();
-		merge_mertens2->process(imagelist, fusion);
-		hdrRet = fusion * 255;
-	}
-}
 int test_sdf()
 {
-	{
-		cv::Mat img1 = cv::imread("g:/z.1.ad.375.bmp");
-		cv::Mat img2 = cv::imread("g:/z.1.ae.624.bmp");
-		cv::Mat img3 = cv::imread("g:/z.1.af.934.bmp");
-		cv::Mat img4 = cv::imread("g:/z.1.ag.1305.bmp");
-
-		cv::Mat out;
-		hdrfisheye::Hdr({ img1 ,img2,img4}, out);
-
-
-		return 0;
-	}
 
 	//return test_undistortFoxImg();
-	Eigen::MatrixX3d landmarkPts = sdf::readPoint3d("../data/a/result/pts.txt");
+	Eigen::MatrixX3d landmarkPts = sdf::readPoint3d("../data/a/result2/pts.txt");
 	double x_strat = landmarkPts.col(0).minCoeff();
 	double y_strat = landmarkPts.col(1).minCoeff();
 	double z_strat = landmarkPts.col(2).minCoeff();
@@ -643,7 +431,7 @@ int test_sdf()
 	std::vector<std::filesystem::path> imgPaths;
 	std::vector<std::filesystem::path> jsonPaths;
 	std::vector<Eigen::Matrix4d> cameraPs;
-	for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ "../data/a/result" })
+	for (auto const& dir_entry : std::filesystem::recursive_directory_iterator{ "../data/a/result2" })
 	{
 		const auto& thisFilename = dir_entry.path();
 		if (thisFilename.has_extension())
@@ -731,7 +519,7 @@ int test_sdf()
 	//a.emptyShellPts(0);
 	std::vector<float> hitValues;
 	Eigen::Matrix3Xf pts = a.getCloud(10, 100, &hitValues);
-	sdf::saveCloud("../data/a/result/c.ply", pts, hitValues);
+	sdf::saveCloud("../data/a/result2/c.ply", pts, hitValues);
 	//Eigen::Matrix3Xf pts2 = b.getCloud(10, 100, &hitValues);
 	//sdf::saveCloud("../data/a/result/d.ply", pts2, hitValues);
 	//mc::Mesh mesh = mc::marchcube(a.grid, a.gridCenterHitValue, a.x_size, a.y_size, a.z_size, a.unit, 0);

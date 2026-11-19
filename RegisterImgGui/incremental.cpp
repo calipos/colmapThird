@@ -1196,6 +1196,16 @@ int test_incremental()
 int test_optiFile()
 {
 	std::filesystem::path filepath = "D:/repo/colmapThird/data/a/result/pts.json";
+	std::filesystem::path parentDir = filepath.parent_path().parent_path();
+	std::filesystem::path newResultDir;
+	for (int i = 0; i < 1000; i++)
+	{
+		if (!std::filesystem::exists(parentDir /("result"+std::to_string(i))))
+		{
+			newResultDir = parentDir / ("result" + std::to_string(i));
+			break;
+		}
+	}
 	std::ifstream file(filepath);
 	if (!file.is_open()) {
 		LOG_ERR_OUT << "cannot open : " << filepath;
@@ -1292,23 +1302,21 @@ int test_optiFile()
 			LOG_ERR_OUT << "error imageId";
 			return 1;
 		}
-		std::filesystem::path picPath(thisView["picPath"].asString());
-		auto subDirName = picPath.filename().stem().string();
-		std::filesystem::path imgJsonPath = thisView["picPath"].asString();
-		if (!std::filesystem::exists(imgJsonPath))
+		std::string imgPath;
+		std::filesystem::path jsonPath(thisView["jsonPath"].asString()); 
+		if (!std::filesystem::exists(jsonPath))
 		{
-			LOG_ERR_OUT << "cannot open : " << imgJsonPath;
+			LOG_ERR_OUT << "cannot open : " << jsonPath;
 			return 1;
 		}
 		else
 		{
 			std::map<std::string, Eigen::Vector2d> cornerInfo;
 			Eigen::Vector2i imgSizeWH;
-			std::string imgPath;
-			bool readret = labelme::readPtsFromLabelMeJson(imgJsonPath, cornerInfo, imgSizeWH, &imgPath);
+			bool readret = labelme::readPtsFromLabelMeJson(jsonPath, cornerInfo, imgSizeWH, &imgPath);
 			if (!readret)
 			{
-				LOG_ERR_OUT << "cannot open : " << imgJsonPath;
+				LOG_ERR_OUT << "cannot open : " << jsonPath;
 				return 1;
 			}
 			else
@@ -1317,7 +1325,7 @@ int test_optiFile()
 				{ 
 					if (objPtsNamesToIdx.count(d.first)==0)
 					{
-						LOG_ERR_OUT << "missing feat : " << imgJsonPath;
+						LOG_ERR_OUT << "missing feat : " << jsonPath;
 						return -1;
 					}
 					imageList[imageId].featPts[objPtsNamesToIdx.at(d.first)] = d.second;
@@ -1327,7 +1335,9 @@ int test_optiFile()
 			}
 		}
 		imageList[imageId].SetCameraId(cameraId);
-		imageList[imageId].SetName(std::to_string(imageId));
+		imageList[imageId].SetName(jsonPath.filename().stem().string());
+		imageList[imageId].SetJsonPath(jsonPath.string());
+		imageList[imageId].SetPicPath((jsonPath.parent_path()/ imgPath).string());
 		imageList[imageId].SetImageId(imageId);
 		imageList[imageId].SetCameraPtr(&cameraList[cameraId]);
 		Rigid3d Rt;
@@ -1396,7 +1406,6 @@ int test_optiFile()
 				LOG_OUT << d << "qt" << qs[d] << ", " << ts[d] << "    " << imag.CamFromWorld().rotation << ", " << imag.CamFromWorld().translation.transpose();
 			}
 		}
-		return 0;
 	};
 	{
 		std::unordered_map < image_t, struct Rigid3d>poses;
@@ -1404,13 +1413,9 @@ int test_optiFile()
 		{
 			const image_t& imageId = imageList[i].ImageId();  
 			poses[imageId] = imageList[i].CamFromWorld(); 
-		}
-		if (std::filesystem::exists("D:/repo/colmapThird/data/a/result"))
-		{
-			removeDirRecursive("D:/repo/colmapThird/data/a/result");
-		}
-		std::filesystem::create_directories("D:/repo/colmapThird/data/a/result");
-		writeResult("D:/repo/colmapThird/data/a/result", cameraList, imageList, objPts, poses);
+		} 
+		std::filesystem::create_directories(newResultDir);
+		writeResult(newResultDir, cameraList, imageList, objPts, poses);
 	}
 	return 0;
 }

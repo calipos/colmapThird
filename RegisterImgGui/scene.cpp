@@ -24,7 +24,7 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 	{
 		const auto& thisFilename = dir_entry.path();
 		auto parentName = thisFilename.parent_path().filename().string();
-		if (parentName.compare("result") == 0)
+		if (parentName.find("result") == 0)
 		{
 			continue;
 		}
@@ -82,7 +82,9 @@ std::map<Camera, std::vector<Image>> loadImageData(const std::filesystem::path& 
 		Image::picNameToIndx[imgName] = image_id;
 		Image::picIndexTopicName[image_id] = imgName;
 		thisImg.SetImageId(image_id++);
-		thisImg.SetName(jsonPath[path].string());
+		thisImg.SetName(imgName);
+		thisImg.SetPicPath(picPath[path].string());
+		thisImg.SetJsonPath(jsonPath[path].string());
 		for (const auto&feat: cornerInfo)
 		{
 			const auto& featName = feat.first;
@@ -353,7 +355,7 @@ bool writeResult(
 		const Camera& undistorted_camera = undistortedCameraMap[cameraId];
 		cameraTs.emplace_back(Rt.translation);
 		Bitmap distorted_bitmap;
-		distorted_bitmap.Read(image1.Name());
+		distorted_bitmap.Read(image1.PicPath());
 		Bitmap  undistorted_bitmap;//
 		//WarpImageBetweenCameras(distorted_camera,
 		//	undistorted_camera,
@@ -429,7 +431,9 @@ bool writeResult(
 		LOG_OUT<<"=======================================================";
 
 		Json::Value viewNode;
-		viewNode["jsonPath"] = Json::Value(image1.Name());
+		viewNode["picPath"] = Json::Value(image1.PicPath());
+		viewNode["jsonPath"] = Json::Value(image1.JsonPath());
+		viewNode["name"] = Json::Value(fileName);
 		viewNode["cameraId"] = cameraId;
 		viewNode["imgId"] = imgId;
 		viewNode["Qt"] = Json::Value();

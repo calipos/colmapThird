@@ -28,6 +28,14 @@ public:
     inline const std::string& Name() const;
     inline std::string& Name();
     inline void SetName(const std::string& name);
+    // Access the path of the image.
+    inline const std::string& PicPath() const;
+    inline std::string& PicPath();
+    inline void SetPicPath(const std::string& name);
+    // Access the json of the image corners.
+    inline const std::string& JsonPath() const;
+    inline std::string& JsonPath();
+    inline void SetJsonPath(const std::string& name);
 
     // Access the unique identifier of the camera. Note that multiple images
     // might share the same camera.
@@ -108,6 +116,10 @@ private:
 
     // The name of the image, i.e. the relative path.
     std::string name_;
+    //picture path
+    std::string picPath_;
+    //json corners
+    std::string jsonPath_;
 
     // The identifier of the associated camera. Note that multiple images might
     // share the same camera. If not specified `kInvalidCameraId`.
@@ -136,6 +148,14 @@ const std::string& Image::Name() const { return name_; }
 std::string& Image::Name() { return name_; }
 
 void Image::SetName(const std::string& name) { name_ = name; }
+
+const std::string& Image::PicPath() const { return picPath_; }
+std::string& Image::PicPath() { return picPath_; }
+void Image::SetPicPath(const std::string& picPath) { picPath_ = picPath; }
+
+const std::string& Image::JsonPath() const { return jsonPath_; }
+std::string& Image::JsonPath() { return jsonPath_; }
+void Image::SetJsonPath(const std::string& jsonPath) { jsonPath_ = jsonPath; }
 
 inline camera_t Image::CameraId() const { return camera_id_; }
 

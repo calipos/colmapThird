@@ -7,7 +7,7 @@
 #include "Eigen/Geometry"
 namespace labelme
 {
-	bool readPtsFromLabelMeJson(const std::filesystem::path& jsonPath,
+	bool readPtsFromLabelMeJson(const std::filesystem::path& jsonPath, 
 		std::map<std::string, Eigen::Vector2d>& cornerInfo, Eigen::Vector2i& imgSizeWH,std::string*imgpath)
 	{
 		cornerInfo.clear();
